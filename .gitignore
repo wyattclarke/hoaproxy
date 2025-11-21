@@ -1,0 +1,17 @@
+__pycache__/
+.python-version
+.env
+.venv/
+*.db
+data/
+!data/.gitkeep
+
+# Local configs and secrets
+settings.env
+*.json
+
+# docs (PDFs)
+casnc_hoa_docs/
+
+# macOS
+.DS_Store
