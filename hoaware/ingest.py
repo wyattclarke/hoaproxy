@@ -15,7 +15,13 @@ from .chunker import chunk_pages
 from .config import Settings, load_settings, normalize_hoa_name
 from .embeddings import batch_embeddings
 from .pdf_utils import compute_checksum, extract_pages
-from .vector_store import build_client, delete_points, ensure_collection, upsert_chunks
+from .vector_store import (
+    build_client,
+    delete_points,
+    ensure_collection,
+    points_exist,
+    upsert_chunks,
+)
 
 logger = logging.getLogger(__name__)
 console = Console()
@@ -47,8 +53,18 @@ def _ingest_pdf(
     rel_path = pdf_path.relative_to(settings.docs_root).as_posix()
     checksum = compute_checksum(pdf_path)
     existing = db.get_document_record(conn, hoa_id, rel_path)
+    force_reindex = False
     if existing is not None and str(existing["checksum"]) == checksum:
-        return False
+        existing_doc_id = int(existing["id"])
+        existing_point_ids = db.list_chunk_point_ids(conn, existing_doc_id)
+        if existing_point_ids and points_exist(qdrant_client, collection, existing_point_ids):
+            return False
+        logger.info(
+            "Reindexing unchanged document %s because vector points are missing in %s",
+            rel_path,
+            collection,
+        )
+        force_reindex = True
 
     byte_size = pdf_path.stat().st_size
     pages = extract_pages(
@@ -71,7 +87,7 @@ def _ingest_pdf(
         byte_size,
         page_count,
     )
-    if not changed:
+    if not changed and not force_reindex:
         return False
 
     old_point_ids = db.list_chunk_point_ids(conn, doc_id)

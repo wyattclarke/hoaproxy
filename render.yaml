@@ -1,0 +1,37 @@
+services:
+  - type: web
+    name: hoaware-app
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter
+    autoDeploy: true
+    healthCheckPath: /healthz
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: HOA_DOCS_ROOT
+        value: /var/data/casnc_hoa_docs
+      - key: HOA_DB_PATH
+        value: /var/data/hoa_index.db
+      - key: HOA_QDRANT_LOCAL_PATH
+        value: /var/data/qdrant_local
+      - key: QDRANT_URL
+        value: ""
+      - key: QDRANT_API_KEY
+        value: ""
+      - key: HOA_ENABLE_DOCAI
+        value: "1"
+      - key: HOA_DOCAI_PROJECT_ID
+        sync: false
+      - key: HOA_DOCAI_LOCATION
+        value: us
+      - key: HOA_DOCAI_PROCESSOR_ID
+        sync: false
+      - key: HOA_DOCAI_ENDPOINT
+        value: ""
+      - key: GOOGLE_APPLICATION_CREDENTIALS
+        value: /etc/secrets/gcp-service-account.json
+    disk:
+      name: hoaware-data
+      mountPath: /var/data
+      sizeGB: 20

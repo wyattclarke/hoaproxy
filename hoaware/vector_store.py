@@ -123,3 +123,23 @@ def search(
             }
         )
     return matches
+
+
+def points_exist(
+    client: QdrantClient,
+    collection_name: str,
+    point_ids: Sequence[str],
+) -> bool:
+    """Check whether all given point ids exist in the target collection."""
+    if not point_ids:
+        return False
+    try:
+        points = client.retrieve(
+            collection_name=collection_name,
+            ids=list(point_ids),
+            with_payload=False,
+            with_vectors=False,
+        )
+    except Exception:
+        return False
+    return len(points) == len(point_ids)

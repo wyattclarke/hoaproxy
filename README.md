@@ -135,6 +135,47 @@ Defaults expect docs in `casnc_hoa_docs/` and `settings.env` containing your key
 
 Chunks are batched, embedded, and upserted into the Qdrant collection `hoa_<slug>`. SQLite retains chunk text plus the Qdrant point ids so we can refresh individual documents when files change.
 
+## Hosting (Render + GoDaddy)
+
+Recommended production setup:
+
+- Deploy this repo to a Render **Web Service** (Docker runtime).
+- Attach a Render persistent disk for docs + SQLite + local Qdrant fallback data.
+- Point `app.wyattclarke.com` (GoDaddy DNS) to the Render service.
+
+This repo includes `render.yaml` for a starter blueprint.
+
+### 1) Create service in Render
+
+1. Push this repo to GitHub.
+2. In Render, create a new service from the repo.
+3. Render should detect `render.yaml`; use that configuration.
+4. Create a secret file in Render named `gcp-service-account.json` (if using Document AI).
+
+### 2) Required environment settings
+
+Set these in Render (the blueprint already defines most of them):
+
+- `OPENAI_API_KEY` (required)
+- `HOA_DOCS_ROOT=/var/data/casnc_hoa_docs`
+- `HOA_DB_PATH=/var/data/hoa_index.db`
+- `HOA_QDRANT_LOCAL_PATH=/var/data/qdrant_local`
+- `QDRANT_URL=` (blank to use embedded local Qdrant)
+- `GOOGLE_APPLICATION_CREDENTIALS=/etc/secrets/gcp-service-account.json` (if using Document AI)
+- `HOA_ENABLE_DOCAI=1` plus Document AI project/location/processor values (if using Document AI)
+
+### 3) GoDaddy DNS
+
+In Render, add custom domain `app.wyattclarke.com`, then copy the DNS values Render provides.
+In GoDaddy DNS for `wyattclarke.com`, create the exact records Render asks for (usually CNAME or A record).
+
+After DNS propagates, Render will provision TLS automatically.
+
+### 4) Verify deployment
+
+- Open `https://app.wyattclarke.com/healthz` and confirm `{"status":"ok"}`.
+- Open `https://app.wyattclarke.com/` and test upload/search/QA.
+
 ## Working in Codex Web
 
 To work in Codex Web against this repo:

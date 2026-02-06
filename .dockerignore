@@ -1,0 +1,17 @@
+.git
+.gitignore
+.venv
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Local secrets and generated data
+settings.env
+.env
+*.json
+data/
+casnc_hoa_docs/
+
+# OS/editor
+.DS_Store
