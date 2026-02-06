@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import logging
 import re
 import shutil
 from pathlib import Path
 from typing import List
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -18,6 +19,7 @@ from hoaware.qa import get_answer, retrieve_context
 app = FastAPI(title="HOA QA API", version="0.2.0")
 _FILENAME_RE = re.compile(r"[^A-Za-z0-9._ -]+")
 STATIC_DIR = Path(__file__).resolve().parent / "static"
+logger = logging.getLogger(__name__)
 
 if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
@@ -58,6 +60,7 @@ class UploadResponse(BaseModel):
     indexed: int
     skipped: int
     failed: int
+    queued: bool = False
 
 
 class DocumentSummary(BaseModel):
@@ -102,6 +105,21 @@ def _safe_pdf_filename(raw_name: str | None) -> str:
     return safe
 
 
+def _ingest_uploaded_files(hoa_name: str, saved_paths: list[Path]) -> None:
+    settings = load_settings()
+    try:
+        stats = ingest_pdf_paths(hoa_name, saved_paths, settings=settings, show_progress=False)
+        logger.info(
+            "Background ingest complete for %s: indexed=%s skipped=%s failed=%s",
+            hoa_name,
+            stats.indexed,
+            stats.skipped,
+            stats.failed,
+        )
+    except Exception:
+        logger.exception("Background ingest failed for HOA %s", hoa_name)
+
+
 @app.get("/", include_in_schema=False)
 def index() -> FileResponse:
     if not STATIC_DIR.exists():
@@ -136,6 +154,7 @@ def list_documents(hoa_name: str) -> List[DocumentSummary]:
 
 @app.post("/upload", response_model=UploadResponse)
 async def upload_documents(
+    background_tasks: BackgroundTasks,
     hoa: str = Form(...),
     files: List[UploadFile] = File(...),
 ) -> UploadResponse:
@@ -161,13 +180,14 @@ async def upload_documents(
         saved_files.append(filename)
         await upload.close()
 
-    stats = ingest_pdf_paths(resolved_hoa, saved_paths, settings=settings, show_progress=False)
+    background_tasks.add_task(_ingest_uploaded_files, resolved_hoa, saved_paths)
     return UploadResponse(
         hoa=resolved_hoa,
         saved_files=saved_files,
-        indexed=stats.indexed,
-        skipped=stats.skipped,
-        failed=stats.failed,
+        indexed=0,
+        skipped=0,
+        failed=0,
+        queued=True,
     )
 
 

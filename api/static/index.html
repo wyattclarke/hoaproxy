@@ -333,7 +333,7 @@
         }
 
         uploadBtn.disabled = true;
-        setStatus(uploadStatus, "Uploading and indexing documents...");
+        setStatus(uploadStatus, "Uploading documents...");
         try {
           const res = await fetch("/upload", { method: "POST", body: formData });
           if (!res.ok) {
@@ -345,11 +345,19 @@
             throw new Error(detail);
           }
           const body = await res.json();
-          setStatus(
-            uploadStatus,
-            `Uploaded ${body.saved_files.length} file(s): indexed ${body.indexed}, skipped ${body.skipped}, failed ${body.failed}.`,
-            "ok"
-          );
+          if (body.queued) {
+            setStatus(
+              uploadStatus,
+              `Uploaded ${body.saved_files.length} file(s). Indexing is running in the background; click Reload Docs in 30-60 seconds.`,
+              "ok"
+            );
+          } else {
+            setStatus(
+              uploadStatus,
+              `Uploaded ${body.saved_files.length} file(s): indexed ${body.indexed}, skipped ${body.skipped}, failed ${body.failed}.`,
+              "ok"
+            );
+          }
           uploadFiles.value = "";
           await loadHoas();
           await loadDocuments();
