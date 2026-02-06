@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
-from typing import Iterable, Sequence
+from typing import Sequence
 
 
 SCHEMA = """
@@ -116,5 +116,69 @@ def replace_chunks(
         VALUES (?, ?, ?, ?, ?, ?)
         """,
         [(document_id, *row) for row in rows],
+    )
+    conn.commit()
+
+
+def list_hoa_names(conn: sqlite3.Connection) -> list[str]:
+    cur = conn.execute("SELECT name FROM hoas ORDER BY name COLLATE NOCASE")
+    return [str(row["name"]) for row in cur.fetchall()]
+
+
+def list_documents_for_hoa(conn: sqlite3.Connection, hoa_name: str) -> list[dict]:
+    cur = conn.execute(
+        """
+        SELECT
+            d.relative_path,
+            d.bytes,
+            d.page_count,
+            d.last_ingested,
+            COUNT(c.id) AS chunk_count
+        FROM documents d
+        JOIN hoas h ON h.id = d.hoa_id
+        LEFT JOIN chunks c ON c.document_id = d.id
+        WHERE h.name = ?
+        GROUP BY d.id
+        ORDER BY d.relative_path COLLATE NOCASE
+        """,
+        (hoa_name,),
+    )
+    rows = cur.fetchall()
+    return [
+        {
+            "relative_path": str(row["relative_path"]),
+            "bytes": int(row["bytes"]),
+            "page_count": int(row["page_count"]) if row["page_count"] is not None else None,
+            "chunk_count": int(row["chunk_count"]),
+            "last_ingested": str(row["last_ingested"]),
+        }
+        for row in rows
+    ]
+
+
+def list_chunk_point_ids(conn: sqlite3.Connection, document_id: int) -> list[str]:
+    cur = conn.execute(
+        """
+        SELECT qdrant_point_id
+        FROM chunks
+        WHERE document_id = ? AND qdrant_point_id IS NOT NULL
+        """,
+        (document_id,),
+    )
+    return [str(row["qdrant_point_id"]) for row in cur.fetchall()]
+
+
+def mark_document_for_reindex(
+    conn: sqlite3.Connection,
+    hoa_id: int,
+    relative_path: str,
+) -> None:
+    conn.execute(
+        """
+        UPDATE documents
+        SET checksum = '__FAILED__', last_ingested = CURRENT_TIMESTAMP
+        WHERE hoa_id = ? AND relative_path = ?
+        """,
+        (hoa_id, relative_path),
     )
     conn.commit()

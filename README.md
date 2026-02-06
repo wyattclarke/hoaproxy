@@ -1,11 +1,17 @@
-# HOA Document Ingestion MVP
+# HOAware "Understand" MVP
 
-This repo now includes a Python CLI that ingests HOA PDF documents into:
+This repo now includes a backend + frontend for the "Understand" phase:
+
+- Residents upload HOA PDF documents per community.
+- Documents are OCR'd/chunked and indexed into semantic search.
+- Residents run grounded search and ask an LLM questions with citations.
+
+Data is stored in:
 
 - **SQLite** – stores HOAs, documents, chunk metadata, and the Qdrant point ids.
 - **Qdrant** – holds semantic vectors per HOA (one collection per association).
 
-The CLI is powered by Typer and uses OpenAI `text-embedding-3-small` for embeddings.
+The ingestion/retrieval pipeline uses OpenAI `text-embedding-3-small` for embeddings.
 
 ## Setup
 
@@ -26,6 +32,7 @@ pip install -r requirements.txt
 | `HOA_DB_PATH` | SQLite DB path | `data/hoa_index.db` |
 | `QDRANT_URL` | Qdrant endpoint | `http://localhost:6333` |
 | `QDRANT_API_KEY` | Optional auth token | – |
+| `HOA_QDRANT_LOCAL_PATH` | Embedded Qdrant path used as fallback when `QDRANT_URL` is unavailable | `data/qdrant_local` |
 | `HOA_ENABLE_OCR` | `1` to OCR blank pages with Tesseract | `1` |
 | `HOA_OCR_DPI` | DPI used when rasterizing PDFs for OCR | `300` |
 | `HOA_ENABLE_DOCAI` | `1` to use Google Document AI for OCR | `0` |
@@ -34,6 +41,8 @@ pip install -r requirements.txt
 | `HOA_DOCAI_PROCESSOR_ID` | Processor ID from Document AI | – |
 | `HOA_DOCAI_ENDPOINT` | (Optional) Custom API endpoint | computed |
 | `HOA_DOCAI_CHUNK_PAGES` | Split PDFs into chunks (default 10 pages) | `10` |
+
+The app auto-loads `settings.env` (and `.env` if present), so you can run `uvicorn` without manually exporting variables.
 
 ### OCR prerequisites
 
@@ -68,6 +77,8 @@ When `HOA_ENABLE_DOCAI=1`, ingestion asks Document AI for text on pages that PyP
 docker run -p 6333:6333 -p 6334:6334 -d --name qdrant qdrant/qdrant
 ```
 
+If Qdrant is not reachable, the app automatically falls back to embedded local storage at `HOA_QDRANT_LOCAL_PATH`.
+
 ## CLI Usage
 
 List available HOAs:
@@ -98,8 +109,12 @@ python -m hoaware.cli qa "Do I need ARC approval to add a fence?" --hoa "Park Gr
 
 A FastAPI service (`api/main.py`) exposes:
 
+- `GET /` – single-page web UI
 - `GET /healthz` – health check
-- `GET /hoas` – list HOA folders
+- `GET /hoas` – list HOA workspaces
+- `GET /hoas/{hoa_name}/documents` – list indexed docs and metadata for an HOA
+- `POST /upload` – multipart upload (`hoa`, `files[]`) and immediate ingestion
+- `POST /search` – semantic chunk search (`hoa`, `query`, `k`)
 - `POST /qa` – body `{ "hoa": "Park Grove", "question": "...", "k": 6, "model": "gpt-4o-mini" }`
 
 Run locally:
@@ -107,6 +122,8 @@ Run locally:
 ```bash
 uvicorn api.main:app --reload
 ```
+
+Open the UI at `http://127.0.0.1:8000`.
 
 Run with Docker Compose (includes Qdrant):
 
@@ -118,8 +135,34 @@ Defaults expect docs in `casnc_hoa_docs/` and `settings.env` containing your key
 
 Chunks are batched, embedded, and upserted into the Qdrant collection `hoa_<slug>`. SQLite retains chunk text plus the Qdrant point ids so we can refresh individual documents when files change.
 
+## Working in Codex Web
+
+To work in Codex Web against this repo:
+
+1. Push this repository to GitHub and open it in Codex Web.
+2. Create a branch for each task using the prefix `codex/` (for example: `codex/upload-error-handling`).
+3. Use `settings.env` or `.env` for local config; do not commit secrets.
+4. Run the API from the repo root:
+   ```bash
+   uvicorn api.main:app --reload
+   ```
+5. For full local stack validation (API + Qdrant), run:
+   ```bash
+   docker compose up --build
+   ```
+
+Recommended workflow in Codex Web:
+
+- Start tasks with a quick repo scan (`README.md`, `api/main.py`, `hoaware/`).
+- Keep commits scoped (one feature/fix per commit).
+- Run a lightweight check before pushing:
+  ```bash
+  python -m compileall -q api hoaware
+  ```
+- Open a PR from your `codex/*` branch into `master`.
+
 ## Next Steps
 
-- Add OCR fallback (Tesseract or cloud OCR) for image-only PDFs.
-- Automate ingestion for all HOAs, plus change detection/watchers.
-- Expose a thin API that wraps semantic search + LLM responses per HOA.
+- Add auth + tenant boundaries (resident accounts and HOA-level permissions).
+- Add async ingestion jobs with background worker + progress tracking.
+- Add source-link UX (jump from answer citation to exact document chunk/page).

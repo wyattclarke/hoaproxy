@@ -1,0 +1,452 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HOAware Understand</title>
+    <style>
+      :root {
+        --bg: #f2f3ed;
+        --ink: #14281d;
+        --panel: #fffcf4;
+        --accent: #1d7874;
+        --accent-2: #f4c95d;
+        --danger: #a44200;
+        --border: #d8d8cf;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Avenir Next", "Segoe UI", "Trebuchet MS", sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at 80% 0%, #cbe6e4 0%, transparent 45%),
+          radial-gradient(circle at 10% 100%, #f8e6b6 0%, transparent 35%),
+          var(--bg);
+      }
+      .shell {
+        width: min(1100px, 95vw);
+        margin: 28px auto 40px;
+      }
+      h1 {
+        margin: 0;
+        letter-spacing: 0.02em;
+        font-size: clamp(1.9rem, 4vw, 2.6rem);
+      }
+      .subtitle {
+        margin: 6px 0 0;
+        font-size: 1rem;
+      }
+      .grid {
+        margin-top: 18px;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        gap: 14px;
+      }
+      .card {
+        background: color-mix(in oklab, var(--panel), white 16%);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 14px;
+        box-shadow: 0 10px 30px rgb(20 40 29 / 6%);
+      }
+      h2 {
+        margin: 2px 0 10px;
+        font-size: 1.12rem;
+      }
+      label {
+        display: block;
+        margin: 7px 0 5px;
+        font-weight: 600;
+        font-size: 0.92rem;
+      }
+      input,
+      textarea,
+      select,
+      button {
+        width: 100%;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        padding: 9px 10px;
+        font: inherit;
+      }
+      textarea {
+        min-height: 100px;
+        resize: vertical;
+      }
+      button {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #fff;
+        cursor: pointer;
+        font-weight: 700;
+      }
+      button.secondary {
+        background: #fff;
+        color: var(--ink);
+        border-color: var(--border);
+      }
+      button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+      .row {
+        display: flex;
+        gap: 8px;
+      }
+      .row > * {
+        flex: 1;
+      }
+      .status {
+        margin-top: 9px;
+        font-size: 0.92rem;
+        min-height: 1.3em;
+      }
+      .status.error {
+        color: var(--danger);
+      }
+      .status.ok {
+        color: #1f7a3d;
+      }
+      .results,
+      .sources,
+      .docs {
+        margin-top: 10px;
+        max-height: 350px;
+        overflow: auto;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 10px;
+        background: #fff;
+      }
+      .match {
+        padding: 9px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        margin-bottom: 8px;
+      }
+      .match:last-child {
+        margin-bottom: 0;
+      }
+      .meta {
+        font-size: 0.82rem;
+        color: #335;
+      }
+      .answer {
+        white-space: pre-wrap;
+        line-height: 1.4;
+        background: #fff;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 10px;
+        margin-top: 10px;
+      }
+      .source-item,
+      .doc-item {
+        font-size: 0.92rem;
+        padding: 5px 0;
+        border-bottom: 1px dashed var(--border);
+      }
+      .source-item:last-child,
+      .doc-item:last-child {
+        border-bottom: 0;
+      }
+      .chip {
+        display: inline-block;
+        padding: 2px 7px;
+        border-radius: 999px;
+        background: var(--accent-2);
+        font-size: 0.78rem;
+        margin-left: 6px;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <h1>HOAware Understand</h1>
+      <p class="subtitle">Upload HOA documents, build searchable context, and ask grounded questions.</p>
+
+      <section class="card">
+        <h2>Workspace</h2>
+        <label for="hoaInput">HOA Name</label>
+        <div class="row">
+          <input id="hoaInput" list="hoaList" placeholder="Example: Park Grove" />
+          <button id="refreshHoas" class="secondary" type="button">Refresh</button>
+        </div>
+        <datalist id="hoaList"></datalist>
+        <div id="workspaceStatus" class="status"></div>
+      </section>
+
+      <section class="grid">
+        <article class="card">
+          <h2>Upload PDFs</h2>
+          <label for="uploadFiles">Documents</label>
+          <input id="uploadFiles" type="file" accept=".pdf,application/pdf" multiple />
+          <div class="row" style="margin-top: 10px">
+            <button id="uploadBtn" type="button">Upload & Index</button>
+            <button id="refreshDocsBtn" class="secondary" type="button">Reload Docs</button>
+          </div>
+          <div id="uploadStatus" class="status"></div>
+          <div id="docs" class="docs"></div>
+        </article>
+
+        <article class="card">
+          <h2>Semantic Search</h2>
+          <label for="searchQuery">Query</label>
+          <textarea id="searchQuery" placeholder="What are the guest parking rules?"></textarea>
+          <button id="searchBtn" type="button" style="margin-top: 10px">Search</button>
+          <div id="searchStatus" class="status"></div>
+          <div id="searchResults" class="results"></div>
+        </article>
+
+        <article class="card" style="grid-column: 1 / -1">
+          <h2>Ask the HOA Assistant</h2>
+          <label for="qaQuestion">Question</label>
+          <textarea id="qaQuestion" placeholder="Do I need ARC approval to add a fence?"></textarea>
+          <div class="row" style="margin-top: 10px">
+            <button id="qaBtn" type="button">Ask</button>
+            <select id="qaModel" aria-label="Model">
+              <option value="gpt-4o-mini">gpt-4o-mini</option>
+              <option value="gpt-4.1-mini">gpt-4.1-mini</option>
+            </select>
+          </div>
+          <div id="qaStatus" class="status"></div>
+          <div id="qaAnswer" class="answer"></div>
+          <div id="qaSources" class="sources"></div>
+        </article>
+      </section>
+    </main>
+
+    <script>
+      const hoaInput = document.getElementById("hoaInput");
+      const hoaList = document.getElementById("hoaList");
+      const uploadFiles = document.getElementById("uploadFiles");
+      const uploadBtn = document.getElementById("uploadBtn");
+      const refreshDocsBtn = document.getElementById("refreshDocsBtn");
+      const refreshHoasBtn = document.getElementById("refreshHoas");
+      const uploadStatus = document.getElementById("uploadStatus");
+      const workspaceStatus = document.getElementById("workspaceStatus");
+      const docsEl = document.getElementById("docs");
+      const searchBtn = document.getElementById("searchBtn");
+      const searchQuery = document.getElementById("searchQuery");
+      const searchStatus = document.getElementById("searchStatus");
+      const searchResults = document.getElementById("searchResults");
+      const qaBtn = document.getElementById("qaBtn");
+      const qaQuestion = document.getElementById("qaQuestion");
+      const qaStatus = document.getElementById("qaStatus");
+      const qaModel = document.getElementById("qaModel");
+      const qaAnswer = document.getElementById("qaAnswer");
+      const qaSources = document.getElementById("qaSources");
+
+      function setStatus(el, message, kind = "") {
+        el.className = `status ${kind}`.trim();
+        el.textContent = message || "";
+      }
+
+      function escapeHtml(text) {
+        return String(text)
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;");
+      }
+
+      function currentHoa() {
+        return hoaInput.value.trim();
+      }
+
+      async function fetchJson(path, options = {}) {
+        const res = await fetch(path, {
+          headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+          ...options,
+        });
+        if (!res.ok) {
+          let detail = `${res.status} ${res.statusText}`;
+          try {
+            const body = await res.json();
+            if (body.detail) detail = body.detail;
+          } catch (_) {}
+          throw new Error(detail);
+        }
+        return res.json();
+      }
+
+      async function loadHoas() {
+        try {
+          const hoas = await fetchJson("/hoas", { method: "GET" });
+          hoaList.innerHTML = hoas.map((name) => `<option value="${escapeHtml(name)}"></option>`).join("");
+          if (!hoaInput.value && hoas.length) {
+            hoaInput.value = hoas[0];
+          }
+          setStatus(workspaceStatus, `${hoas.length} HOA workspace(s) available.`, "ok");
+        } catch (err) {
+          setStatus(workspaceStatus, String(err.message || err), "error");
+        }
+      }
+
+      async function loadDocuments() {
+        const hoa = currentHoa();
+        if (!hoa) {
+          setStatus(uploadStatus, "Enter an HOA name first.", "error");
+          return;
+        }
+        setStatus(uploadStatus, "Loading indexed documents...");
+        try {
+          const docs = await fetchJson(`/hoas/${encodeURIComponent(hoa)}/documents`, { method: "GET" });
+          if (!docs.length) {
+            docsEl.innerHTML = "No indexed documents yet.";
+          } else {
+            docsEl.innerHTML = docs
+              .map(
+                (doc) =>
+                  `<div class="doc-item"><strong>${escapeHtml(doc.relative_path)}</strong>` +
+                  `<span class="chip">${doc.chunk_count} chunks</span><br>` +
+                  `<span class="meta">${doc.page_count ?? "?"} pages, ${doc.bytes} bytes, indexed ${escapeHtml(doc.last_ingested)}</span></div>`
+              )
+              .join("");
+          }
+          setStatus(uploadStatus, "Document index loaded.", "ok");
+        } catch (err) {
+          docsEl.innerHTML = "";
+          setStatus(uploadStatus, String(err.message || err), "error");
+        }
+      }
+
+      async function handleUpload() {
+        const hoa = currentHoa();
+        if (!hoa) {
+          setStatus(uploadStatus, "Enter an HOA name first.", "error");
+          return;
+        }
+        if (!uploadFiles.files.length) {
+          setStatus(uploadStatus, "Choose one or more PDF files.", "error");
+          return;
+        }
+
+        const formData = new FormData();
+        formData.append("hoa", hoa);
+        for (const file of uploadFiles.files) {
+          formData.append("files", file);
+        }
+
+        uploadBtn.disabled = true;
+        setStatus(uploadStatus, "Uploading and indexing documents...");
+        try {
+          const res = await fetch("/upload", { method: "POST", body: formData });
+          if (!res.ok) {
+            let detail = `${res.status} ${res.statusText}`;
+            try {
+              const body = await res.json();
+              if (body.detail) detail = body.detail;
+            } catch (_) {}
+            throw new Error(detail);
+          }
+          const body = await res.json();
+          setStatus(
+            uploadStatus,
+            `Uploaded ${body.saved_files.length} file(s): indexed ${body.indexed}, skipped ${body.skipped}, failed ${body.failed}.`,
+            "ok"
+          );
+          uploadFiles.value = "";
+          await loadHoas();
+          await loadDocuments();
+        } catch (err) {
+          setStatus(uploadStatus, String(err.message || err), "error");
+        } finally {
+          uploadBtn.disabled = false;
+        }
+      }
+
+      async function handleSearch() {
+        const hoa = currentHoa();
+        const query = searchQuery.value.trim();
+        if (!hoa) {
+          setStatus(searchStatus, "Enter an HOA name first.", "error");
+          return;
+        }
+        if (!query) {
+          setStatus(searchStatus, "Enter a search query.", "error");
+          return;
+        }
+
+        searchBtn.disabled = true;
+        setStatus(searchStatus, "Searching...");
+        searchResults.innerHTML = "";
+        try {
+          const body = await fetchJson("/search", {
+            method: "POST",
+            body: JSON.stringify({ hoa, query, k: 6 }),
+          });
+          if (!body.results.length) {
+            searchResults.textContent = "No matching chunks found.";
+            setStatus(searchStatus, "No results.");
+            return;
+          }
+          searchResults.innerHTML = body.results
+            .map(
+              (item) =>
+                `<div class="match"><div><strong>${escapeHtml(item.document)}</strong> <span class="meta">(pages ${escapeHtml(item.pages)}, score ${Number(item.score).toFixed(3)})</span></div>` +
+                `<div>${escapeHtml(item.excerpt)}</div></div>`
+            )
+            .join("");
+          setStatus(searchStatus, `Found ${body.results.length} results.`, "ok");
+        } catch (err) {
+          setStatus(searchStatus, String(err.message || err), "error");
+        } finally {
+          searchBtn.disabled = false;
+        }
+      }
+
+      async function handleQa() {
+        const hoa = currentHoa();
+        const question = qaQuestion.value.trim();
+        if (!hoa) {
+          setStatus(qaStatus, "Enter an HOA name first.", "error");
+          return;
+        }
+        if (!question) {
+          setStatus(qaStatus, "Enter a question.", "error");
+          return;
+        }
+
+        qaBtn.disabled = true;
+        setStatus(qaStatus, "Generating answer...");
+        qaAnswer.textContent = "";
+        qaSources.innerHTML = "";
+
+        try {
+          const body = await fetchJson("/qa", {
+            method: "POST",
+            body: JSON.stringify({
+              hoa,
+              question,
+              k: 6,
+              model: qaModel.value,
+            }),
+          });
+          qaAnswer.textContent = body.answer || "";
+          qaSources.innerHTML = (body.sources || [])
+            .map((s) => `<div class="source-item">${escapeHtml(s.document)} (pages ${escapeHtml(s.pages)})</div>`)
+            .join("");
+          setStatus(qaStatus, "Answer ready.", "ok");
+        } catch (err) {
+          setStatus(qaStatus, String(err.message || err), "error");
+        } finally {
+          qaBtn.disabled = false;
+        }
+      }
+
+      refreshHoasBtn.addEventListener("click", loadHoas);
+      refreshDocsBtn.addEventListener("click", loadDocuments);
+      uploadBtn.addEventListener("click", handleUpload);
+      searchBtn.addEventListener("click", handleSearch);
+      qaBtn.addEventListener("click", handleQa);
+      hoaInput.addEventListener("change", loadDocuments);
+
+      loadHoas().then(loadDocuments);
+    </script>
+  </body>
+</html>

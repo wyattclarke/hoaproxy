@@ -15,7 +15,11 @@ def search_cli(query: str, hoa_name: str, limit: int = 5, settings: Settings | N
     settings = settings or load_settings()
     openai_client = OpenAI(api_key=settings.openai_api_key)
     embedding = batch_embeddings([query], openai_client, settings.embedding_model)[0]
-    qdrant_client = build_client(settings.qdrant_url, settings.qdrant_api_key)
+    qdrant_client = build_client(
+        settings.qdrant_url,
+        settings.qdrant_api_key,
+        local_path=settings.qdrant_local_path,
+    )
     collection = f"{settings.collection_prefix}_{normalize_hoa_name(hoa_name)}"
     ensure_collection(qdrant_client, collection)
     results = qdrant_search(

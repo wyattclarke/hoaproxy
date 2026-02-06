@@ -4,6 +4,13 @@ from dataclasses import dataclass
 from pathlib import Path
 import os
 
+from dotenv import load_dotenv
+
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+load_dotenv(_REPO_ROOT / "settings.env", override=False)
+load_dotenv(_REPO_ROOT / ".env", override=False)
+
 
 @dataclass
 class Settings:
@@ -11,6 +18,7 @@ class Settings:
     db_path: Path
     qdrant_url: str
     qdrant_api_key: str | None
+    qdrant_local_path: Path
     openai_api_key: str | None
     embedding_model: str
     chunk_char_limit: int
@@ -34,6 +42,7 @@ def load_settings() -> Settings:
         db_path=db_path,
         qdrant_url=os.environ.get("QDRANT_URL", "http://localhost:6333"),
         qdrant_api_key=os.environ.get("QDRANT_API_KEY"),
+        qdrant_local_path=Path(os.environ.get("HOA_QDRANT_LOCAL_PATH", "data/qdrant_local")),
         openai_api_key=os.environ.get("OPENAI_API_KEY"),
         embedding_model=os.environ.get("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small"),
         chunk_char_limit=int(os.environ.get("HOA_CHUNK_CHAR_LIMIT", "1800")),
