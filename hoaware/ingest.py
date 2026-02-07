@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 import logging
+from time import perf_counter
 
 from openai import OpenAI
 from rich.console import Console
@@ -50,7 +51,9 @@ def _ingest_pdf(
     qdrant_client,
     collection: str,
 ) -> bool:
+    ingest_start = perf_counter()
     rel_path = pdf_path.relative_to(settings.docs_root).as_posix()
+    logger.info("Ingest start for %s (hoa=%s)", rel_path, hoa_name)
     checksum = compute_checksum(pdf_path)
     existing = db.get_document_record(conn, hoa_id, rel_path)
     force_reindex = False
@@ -58,6 +61,7 @@ def _ingest_pdf(
         existing_doc_id = int(existing["id"])
         existing_point_ids = db.list_chunk_point_ids(conn, existing_doc_id)
         if existing_point_ids and points_exist(qdrant_client, collection, existing_point_ids):
+            logger.info("Ingest skip for %s (checksum unchanged and points present)", rel_path)
             return False
         logger.info(
             "Reindexing unchanged document %s because vector points are missing in %s",
@@ -67,6 +71,7 @@ def _ingest_pdf(
         force_reindex = True
 
     byte_size = pdf_path.stat().st_size
+    extract_start = perf_counter()
     pages = extract_pages(
         pdf_path,
         enable_ocr=settings.enable_ocr,
@@ -78,6 +83,12 @@ def _ingest_pdf(
         docai_endpoint=settings.docai_endpoint,
         docai_chunk_pages=settings.docai_chunk_pages,
     )
+    logger.info(
+        "Text extraction complete for %s (pages=%s, elapsed_s=%.2f)",
+        rel_path,
+        len(pages),
+        perf_counter() - extract_start,
+    )
     page_count = len(pages)
     doc_id, changed = db.upsert_document(
         conn,
@@ -88,13 +99,21 @@ def _ingest_pdf(
         page_count,
     )
     if not changed and not force_reindex:
+        logger.info("Ingest skip for %s (document metadata unchanged)", rel_path)
         return False
 
     old_point_ids = db.list_chunk_point_ids(conn, doc_id)
+    chunk_start = perf_counter()
     chunks = chunk_pages(
         pages,
         max_chars=settings.chunk_char_limit,
         overlap_chars=settings.chunk_overlap,
+    )
+    logger.info(
+        "Chunking complete for %s (chunks=%s, elapsed_s=%.2f)",
+        rel_path,
+        len(chunks),
+        perf_counter() - chunk_start,
     )
     if not chunks:
         logger.warning("No chunks extracted from %s", rel_path)
@@ -107,6 +126,7 @@ def _ingest_pdf(
         client=openai_client,
         model=settings.embedding_model,
     )
+    logger.info("Embeddings complete for %s (chunks=%s)", rel_path, len(embeddings))
     payloads = []
     for chunk, vector in zip(chunks, embeddings, strict=True):
         payloads.append(
@@ -139,6 +159,13 @@ def _ingest_pdf(
             )
             for chunk, point_id in zip(chunks, point_ids, strict=True)
         ],
+    )
+    logger.info(
+        "Ingest end for %s (bytes=%s, chunks=%s, elapsed_s=%.2f)",
+        rel_path,
+        byte_size,
+        len(chunks),
+        perf_counter() - ingest_start,
     )
     return True
 

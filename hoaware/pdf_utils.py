@@ -5,6 +5,7 @@ from pathlib import Path
 import hashlib
 import logging
 import shutil
+from time import perf_counter
 from typing import Iterable
 
 from pypdf import PdfReader
@@ -45,9 +46,18 @@ def extract_pages(
     docai_endpoint: str | None = None,
     docai_chunk_pages: int = 10,
 ) -> list[PageContent]:
+    start_time = perf_counter()
     reader = PdfReader(str(path))
     pages: list[PageContent] = []
     missing: list[int] = []
+    total_pages = len(reader.pages)
+    logger.info(
+        "OCR pipeline start for %s (pages=%s, docai=%s, fallback_ocr=%s)",
+        path,
+        total_pages,
+        enable_docai,
+        enable_ocr,
+    )
     for idx, page in enumerate(reader.pages, start=1):
         try:
             text = page.extract_text() or ""
@@ -57,8 +67,16 @@ def extract_pages(
         if not text.strip():
             missing.append(idx)
         pages.append(PageContent(number=idx, text=text))
+    logger.info(
+        "PyPDF extraction complete for %s (blank_pages=%s/%s)",
+        path,
+        len(missing),
+        total_pages,
+    )
 
     if enable_docai and docai_project_id and docai_processor_id:
+        docai_start = perf_counter()
+        before_docai_missing = len(missing)
         try:
             docai_pages = extract_with_document_ai(
                 path,
@@ -72,22 +90,52 @@ def extract_pages(
                 if item.text.strip():
                     pages[item.number - 1] = item
             missing = [p.number for p in pages if not p.text.strip()]
+            logger.info(
+                "Document AI pass complete for %s (input_blank=%s, output_blank=%s, pages_returned=%s, elapsed_s=%.2f)",
+                path,
+                before_docai_missing,
+                len(missing),
+                len(docai_pages),
+                perf_counter() - docai_start,
+            )
         except Exception:
             logger.exception("Document AI OCR failed for %s", path)
 
     if enable_ocr and missing:
+        ocr_start = perf_counter()
+        ocr_success = 0
         if not _tesseract_available():
             logger.warning("Tesseract not found; cannot OCR pages %s in %s", missing, path)
             return pages
+        logger.info("Fallback OCR start for %s (pages=%s)", path, len(missing))
         for page_number in missing:
             try:
                 ocr_text = _ocr_page(path, page_number, dpi=ocr_dpi)
                 if ocr_text.strip():
                     pages[page_number - 1] = PageContent(number=page_number, text=ocr_text)
+                    ocr_success += 1
                 else:
                     logger.warning("OCR produced no text for %s page %s", path, page_number)
             except Exception:
                 logger.exception("OCR failed for %s page %s", path, page_number)
+        final_missing = len([p for p in pages if not p.text.strip()])
+        logger.info(
+            "Fallback OCR complete for %s (filled=%s, remaining_blank=%s, elapsed_s=%.2f)",
+            path,
+            ocr_success,
+            final_missing,
+            perf_counter() - ocr_start,
+        )
+    else:
+        final_missing = len(missing)
+
+    logger.info(
+        "OCR pipeline end for %s (final_blank=%s/%s, elapsed_s=%.2f)",
+        path,
+        final_missing,
+        total_pages,
+        perf_counter() - start_time,
+    )
     return pages
 
 

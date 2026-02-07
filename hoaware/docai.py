@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import logging
 from pathlib import Path
+from time import perf_counter
 from typing import List
 
 from google.api_core.client_options import ClientOptions
@@ -53,6 +54,7 @@ def extract_with_document_ai(
     endpoint: str | None = None,
     max_pages_per_call: int = 10,
 ) -> List[PageContent]:
+    overall_start = perf_counter()
     reader = PdfReader(str(path))
     total_pages = len(reader.pages)
     if total_pages == 0:
@@ -63,9 +65,17 @@ def extract_with_document_ai(
     processor_name = client.processor_path(project_id, location, processor_id)
 
     all_pages: list[PageContent] = []
+    logger.info(
+        "Document AI OCR start for %s (total_pages=%s, chunk_pages=%s, location=%s)",
+        path,
+        total_pages,
+        max_pages_per_call,
+        location,
+    )
 
     for start in range(1, total_pages + 1, max_pages_per_call):
         end = min(start + max_pages_per_call - 1, total_pages)
+        chunk_start = perf_counter()
         pdf_bytes = _build_pdf_chunk(reader, start, end)
         raw_document = documentai.RawDocument(content=pdf_bytes, mime_type="application/pdf")
         request = documentai.ProcessRequest(name=processor_name, raw_document=raw_document)
@@ -76,10 +86,26 @@ def extract_with_document_ai(
             continue
 
         document = result.document
+        chunk_pages_count = 0
         for page in document.pages:
             number = start + (page.page_number - 1)
             text = _page_text(document, page)
             all_pages.append(PageContent(number=number, text=text))
+            chunk_pages_count += 1
+        logger.info(
+            "Document AI chunk complete for %s (pages=%s-%s, returned_pages=%s, elapsed_s=%.2f)",
+            path,
+            start,
+            end,
+            chunk_pages_count,
+            perf_counter() - chunk_start,
+        )
 
     all_pages.sort(key=lambda p: p.number)
+    logger.info(
+        "Document AI OCR end for %s (pages_returned=%s, elapsed_s=%.2f)",
+        path,
+        len(all_pages),
+        perf_counter() - overall_start,
+    )
     return all_pages
