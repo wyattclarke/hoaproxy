@@ -21,6 +21,8 @@ services:
         value: ""
       - key: HOA_ENABLE_DOCAI
         value: "1"
+      - key: HOA_ENABLE_OCR
+        value: "0"
       - key: HOA_DOCAI_PROJECT_ID
         sync: false
       - key: HOA_DOCAI_LOCATION
