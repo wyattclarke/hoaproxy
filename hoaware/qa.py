@@ -89,11 +89,14 @@ def get_answer(
         return "No context retrieved; cannot answer.", [], []
 
     messages = _build_prompt(question, results, hoa_name)
-    completion = openai_client.chat.completions.create(
-        model=model,
-        messages=messages,
-        temperature=0.2,
-    )
+    # GPT-5 models currently require default temperature handling.
+    completion_kwargs = {
+        "model": model,
+        "messages": messages,
+    }
+    if not model.startswith("gpt-5"):
+        completion_kwargs["temperature"] = 0.2
+    completion = openai_client.chat.completions.create(**completion_kwargs)
     answer = completion.choices[0].message.content or ""
     citations = build_citations(results)
     return answer.strip(), citations, results
@@ -103,7 +106,7 @@ def answer_question(
     question: str,
     hoa_name: str,
     k: int = 6,
-    model: str = "gpt-4o-mini",
+    model: str = "gpt-5-mini",
     settings: Settings | None = None,
 ) -> None:
     settings = settings or load_settings()

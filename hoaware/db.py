@@ -36,6 +36,21 @@ CREATE TABLE IF NOT EXISTS chunks (
 );
 
 CREATE INDEX IF NOT EXISTS idx_chunks_document ON chunks(document_id);
+
+CREATE TABLE IF NOT EXISTS hoa_locations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    hoa_id INTEGER NOT NULL UNIQUE REFERENCES hoas(id) ON DELETE CASCADE,
+    display_name TEXT,
+    street TEXT,
+    city TEXT,
+    state TEXT,
+    postal_code TEXT,
+    country TEXT DEFAULT 'US',
+    latitude REAL,
+    longitude REAL,
+    source TEXT DEFAULT 'manual',
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 """
 
 
@@ -56,6 +71,14 @@ def get_or_create_hoa(conn: sqlite3.Connection, name: str) -> int:
     cur = conn.execute("INSERT INTO hoas (name) VALUES (?)", (name,))
     conn.commit()
     return int(cur.lastrowid)
+
+
+def get_hoa_id(conn: sqlite3.Connection, name: str) -> int | None:
+    cur = conn.execute("SELECT id FROM hoas WHERE name = ?", (name,))
+    row = cur.fetchone()
+    if not row:
+        return None
+    return int(row["id"])
 
 
 def get_document_record(
@@ -137,6 +160,245 @@ def list_hoa_names_with_documents(conn: sqlite3.Connection) -> list[str]:
     return [str(row["name"]) for row in cur.fetchall()]
 
 
+def list_hoa_summaries(conn: sqlite3.Connection) -> list[dict]:
+    cur = conn.execute(
+        """
+        WITH doc_stats AS (
+            SELECT
+                hoa_id,
+                COUNT(*) AS doc_count,
+                COALESCE(SUM(bytes), 0) AS total_bytes,
+                MAX(last_ingested) AS last_ingested
+            FROM documents
+            GROUP BY hoa_id
+        ),
+        chunk_stats AS (
+            SELECT
+                d.hoa_id AS hoa_id,
+                COUNT(c.id) AS chunk_count
+            FROM documents d
+            LEFT JOIN chunks c ON c.document_id = d.id
+            GROUP BY d.hoa_id
+        )
+        SELECT
+            h.name AS hoa,
+            ds.doc_count,
+            ds.total_bytes,
+            ds.last_ingested,
+            COALESCE(cs.chunk_count, 0) AS chunk_count,
+            l.city,
+            l.state,
+            l.latitude,
+            l.longitude
+        FROM hoas h
+        JOIN doc_stats ds ON ds.hoa_id = h.id
+        LEFT JOIN chunk_stats cs ON cs.hoa_id = h.id
+        LEFT JOIN hoa_locations l ON l.hoa_id = h.id
+        ORDER BY h.name COLLATE NOCASE
+        """
+    )
+    rows = cur.fetchall()
+    return [
+        {
+            "hoa": str(row["hoa"]),
+            "doc_count": int(row["doc_count"]),
+            "chunk_count": int(row["chunk_count"]),
+            "total_bytes": int(row["total_bytes"]),
+            "last_ingested": str(row["last_ingested"]) if row["last_ingested"] is not None else None,
+            "city": str(row["city"]) if row["city"] is not None else None,
+            "state": str(row["state"]) if row["state"] is not None else None,
+            "latitude": float(row["latitude"]) if row["latitude"] is not None else None,
+            "longitude": float(row["longitude"]) if row["longitude"] is not None else None,
+        }
+        for row in rows
+    ]
+
+
+def get_hoa_location(conn: sqlite3.Connection, hoa_name: str) -> dict | None:
+    cur = conn.execute(
+        """
+        SELECT
+            h.name AS hoa,
+            l.display_name,
+            l.street,
+            l.city,
+            l.state,
+            l.postal_code,
+            l.country,
+            l.latitude,
+            l.longitude,
+            l.source,
+            l.updated_at
+        FROM hoas h
+        LEFT JOIN hoa_locations l ON l.hoa_id = h.id
+        WHERE h.name = ?
+        """,
+        (hoa_name,),
+    )
+    row = cur.fetchone()
+    if not row:
+        return None
+    if row["latitude"] is None and row["longitude"] is None and row["city"] is None and row["street"] is None:
+        return {
+            "hoa": str(row["hoa"]),
+            "display_name": None,
+            "street": None,
+            "city": None,
+            "state": None,
+            "postal_code": None,
+            "country": None,
+            "latitude": None,
+            "longitude": None,
+            "source": None,
+            "updated_at": None,
+        }
+    return {
+        "hoa": str(row["hoa"]),
+        "display_name": str(row["display_name"]) if row["display_name"] is not None else None,
+        "street": str(row["street"]) if row["street"] is not None else None,
+        "city": str(row["city"]) if row["city"] is not None else None,
+        "state": str(row["state"]) if row["state"] is not None else None,
+        "postal_code": str(row["postal_code"]) if row["postal_code"] is not None else None,
+        "country": str(row["country"]) if row["country"] is not None else None,
+        "latitude": float(row["latitude"]) if row["latitude"] is not None else None,
+        "longitude": float(row["longitude"]) if row["longitude"] is not None else None,
+        "source": str(row["source"]) if row["source"] is not None else None,
+        "updated_at": str(row["updated_at"]) if row["updated_at"] is not None else None,
+    }
+
+
+def upsert_hoa_location(
+    conn: sqlite3.Connection,
+    hoa_name: str,
+    *,
+    display_name: str | None = None,
+    street: str | None = None,
+    city: str | None = None,
+    state: str | None = None,
+    postal_code: str | None = None,
+    country: str | None = None,
+    latitude: float | None = None,
+    longitude: float | None = None,
+    source: str | None = None,
+) -> None:
+    hoa_id = get_or_create_hoa(conn, hoa_name)
+    existing = conn.execute(
+        "SELECT id FROM hoa_locations WHERE hoa_id = ?",
+        (hoa_id,),
+    ).fetchone()
+
+    if existing is None:
+        conn.execute(
+            """
+            INSERT INTO hoa_locations
+                (hoa_id, display_name, street, city, state, postal_code, country, latitude, longitude, source)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                hoa_id,
+                display_name,
+                street,
+                city,
+                state,
+                postal_code,
+                country or "US",
+                latitude,
+                longitude,
+                source or "manual",
+            ),
+        )
+        conn.commit()
+        return
+
+    conn.execute(
+        """
+        UPDATE hoa_locations
+        SET
+            display_name = COALESCE(?, display_name),
+            street = COALESCE(?, street),
+            city = COALESCE(?, city),
+            state = COALESCE(?, state),
+            postal_code = COALESCE(?, postal_code),
+            country = COALESCE(?, country),
+            latitude = COALESCE(?, latitude),
+            longitude = COALESCE(?, longitude),
+            source = COALESCE(?, source),
+            updated_at = CURRENT_TIMESTAMP
+        WHERE hoa_id = ?
+        """,
+        (
+            display_name,
+            street,
+            city,
+            state,
+            postal_code,
+            country,
+            latitude,
+            longitude,
+            source,
+            hoa_id,
+        ),
+    )
+    conn.commit()
+
+
+def list_hoa_locations(conn: sqlite3.Connection) -> list[dict]:
+    cur = conn.execute(
+        """
+        SELECT
+            h.name AS hoa,
+            l.display_name,
+            l.street,
+            l.city,
+            l.state,
+            l.postal_code,
+            l.country,
+            l.latitude,
+            l.longitude,
+            l.source,
+            l.updated_at
+        FROM hoas h
+        JOIN documents d ON d.hoa_id = h.id
+        LEFT JOIN hoa_locations l ON l.hoa_id = h.id
+        GROUP BY h.id
+        ORDER BY h.name COLLATE NOCASE
+        """
+    )
+    rows = cur.fetchall()
+    return [
+        {
+            "hoa": str(row["hoa"]),
+            "display_name": str(row["display_name"]) if row["display_name"] is not None else None,
+            "street": str(row["street"]) if row["street"] is not None else None,
+            "city": str(row["city"]) if row["city"] is not None else None,
+            "state": str(row["state"]) if row["state"] is not None else None,
+            "postal_code": str(row["postal_code"]) if row["postal_code"] is not None else None,
+            "country": str(row["country"]) if row["country"] is not None else None,
+            "latitude": float(row["latitude"]) if row["latitude"] is not None else None,
+            "longitude": float(row["longitude"]) if row["longitude"] is not None else None,
+            "source": str(row["source"]) if row["source"] is not None else None,
+            "updated_at": str(row["updated_at"]) if row["updated_at"] is not None else None,
+        }
+        for row in rows
+    ]
+
+
+def get_chunk_text_for_hoa(conn: sqlite3.Connection, hoa_name: str, limit: int = 200) -> list[str]:
+    cur = conn.execute(
+        """
+        SELECT c.text
+        FROM chunks c
+        JOIN documents d ON d.id = c.document_id
+        JOIN hoas h ON h.id = d.hoa_id
+        WHERE h.name = ?
+        ORDER BY LENGTH(c.text) DESC
+        LIMIT ?
+        """,
+        (hoa_name, limit),
+    )
+    return [str(row["text"]) for row in cur.fetchall() if row["text"]]
+
+
 def list_documents_for_hoa(conn: sqlite3.Connection, hoa_name: str) -> list[dict]:
     cur = conn.execute(
         """
@@ -163,6 +425,38 @@ def list_documents_for_hoa(conn: sqlite3.Connection, hoa_name: str) -> list[dict
             "page_count": int(row["page_count"]) if row["page_count"] is not None else None,
             "chunk_count": int(row["chunk_count"]),
             "last_ingested": str(row["last_ingested"]),
+        }
+        for row in rows
+    ]
+
+
+def list_document_chunks_for_hoa(
+    conn: sqlite3.Connection,
+    hoa_name: str,
+    relative_path: str,
+) -> list[dict]:
+    cur = conn.execute(
+        """
+        SELECT
+            c.chunk_index,
+            c.start_page,
+            c.end_page,
+            c.text
+        FROM chunks c
+        JOIN documents d ON d.id = c.document_id
+        JOIN hoas h ON h.id = d.hoa_id
+        WHERE h.name = ? AND d.relative_path = ?
+        ORDER BY c.chunk_index ASC
+        """,
+        (hoa_name, relative_path),
+    )
+    rows = cur.fetchall()
+    return [
+        {
+            "chunk_index": int(row["chunk_index"]),
+            "start_page": int(row["start_page"]) if row["start_page"] is not None else None,
+            "end_page": int(row["end_page"]) if row["end_page"] is not None else None,
+            "text": str(row["text"]),
         }
         for row in rows
     ]

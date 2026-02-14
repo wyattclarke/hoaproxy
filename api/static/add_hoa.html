@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HOAware | Add HOA</title>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Space+Grotesk:wght@600;700&display=swap");
+
+      :root {
+        --bg: #eef4ff;
+        --ink: #16243a;
+        --muted: #597091;
+        --line: #d1def2;
+        --panel: #fff;
+        --accent: #175fee;
+        --accent-strong: #0a45bc;
+        --ok: #158246;
+        --danger: #b62929;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Manrope", "Segoe UI", sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(75rem 45rem at 8% -20%, rgba(18, 95, 238, 0.22), transparent 58%),
+          radial-gradient(60rem 40rem at 100% -10%, rgba(24, 181, 146, 0.14), transparent 52%),
+          linear-gradient(180deg, #f7faff 0%, var(--bg) 50%, #edf3fe 100%);
+      }
+
+      .shell {
+        width: min(920px, 94vw);
+        margin: 34px auto 50px;
+      }
+
+      .card {
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        background: rgba(255, 255, 255, 0.95);
+        padding: 20px;
+        box-shadow: 0 16px 40px rgba(15, 35, 66, 0.12);
+      }
+
+      h1 {
+        margin: 0;
+        font-family: "Space Grotesk", "Manrope", sans-serif;
+        font-size: clamp(1.6rem, 3.6vw, 2.3rem);
+      }
+
+      .brand {
+        display: inline-flex;
+        align-items: baseline;
+        gap: 0.12em;
+      }
+
+      .brand-mark {
+        position: relative;
+        width: 0.9em;
+        height: 0.9em;
+        margin-right: 0.12em;
+        transform: translateY(0.03em);
+      }
+
+      .brand-mark::before {
+        content: "";
+        position: absolute;
+        left: 0.08em;
+        top: 0.08em;
+        width: 0.72em;
+        height: 0.52em;
+        border-radius: 0.08em;
+        background: linear-gradient(180deg, #cfe0ff, #a9c5f6);
+        border: 1px solid #89aee8;
+      }
+
+      .brand-mark::after {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 0;
+        height: 0;
+        border-left: 0.44em solid transparent;
+        border-right: 0.44em solid transparent;
+        border-bottom: 0.34em solid #1e5fcf;
+      }
+
+      .brand-hoa {
+        color: #0f2f6d;
+        letter-spacing: 0.03em;
+      }
+
+      .brand-aware {
+        color: #1a66ff;
+      }
+
+      .subtitle {
+        margin: 8px 0 0;
+        color: var(--muted);
+      }
+
+      .actions {
+        margin-top: 14px;
+      }
+
+      .link-btn {
+        display: inline-block;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: #f9fbff;
+        color: #213d68;
+        padding: 9px 12px;
+        text-decoration: none;
+        font-weight: 700;
+      }
+
+      .form-grid {
+        margin-top: 14px;
+        display: grid;
+        gap: 10px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .full {
+        grid-column: 1 / -1;
+      }
+
+      label {
+        display: block;
+        margin: 6px 0 4px;
+        font-size: 0.88rem;
+        font-weight: 700;
+      }
+
+      input,
+      button {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 10px 12px;
+        font: inherit;
+      }
+
+      input:focus,
+      button:focus {
+        outline: none;
+        border-color: #8ab3ff;
+        box-shadow: 0 0 0 4px rgba(23, 95, 238, 0.14);
+      }
+
+      button {
+        border-color: var(--accent);
+        background: linear-gradient(180deg, var(--accent), var(--accent-strong));
+        color: #fff;
+        font-weight: 800;
+        cursor: pointer;
+      }
+
+      #map {
+        height: 300px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+      }
+
+      .hint {
+        margin-top: 6px;
+        font-size: 0.84rem;
+        color: var(--muted);
+      }
+
+      .status {
+        margin-top: 10px;
+        min-height: 1.2em;
+        color: var(--muted);
+      }
+
+      .status.ok {
+        color: var(--ok);
+      }
+
+      .status.error {
+        color: var(--danger);
+      }
+
+      @media (max-width: 760px) {
+        .form-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <section class="card">
+        <h1 class="brand"><span class="brand-mark" aria-hidden="true"></span><span class="brand-hoa">HOA</span><span class="brand-aware">ware</span></h1>
+        <p class="subtitle">Create a new HOA workspace by uploading documents and providing location data for the map.</p>
+        <div class="actions"><a class="link-btn" href="/">Back to Dashboard</a> <a class="link-btn" href="/about">About</a></div>
+
+        <div class="form-grid">
+          <div class="full">
+            <label for="hoaName">HOA Name</label>
+            <input id="hoaName" placeholder="Example: Grove at Fallon Park" />
+          </div>
+
+          <div class="full">
+            <label for="files">PDF Documents</label>
+            <input id="files" type="file" accept=".pdf,application/pdf" multiple />
+          </div>
+
+          <div>
+            <label for="street">Street</label>
+            <input id="street" placeholder="123 Main St" />
+          </div>
+          <div>
+            <label for="city">City</label>
+            <input id="city" placeholder="Raleigh" />
+          </div>
+          <div>
+            <label for="state">State</label>
+            <input id="state" placeholder="NC" maxlength="2" />
+          </div>
+          <div>
+            <label for="postal">ZIP</label>
+            <input id="postal" placeholder="27601" />
+          </div>
+          <div>
+            <label for="lat">Latitude</label>
+            <input id="lat" placeholder="35.7796" />
+          </div>
+          <div>
+            <label for="lon">Longitude</label>
+            <input id="lon" placeholder="-78.6382" />
+          </div>
+
+          <div class="full">
+            <div id="map"></div>
+            <div class="hint">Tip: click on map to autofill latitude/longitude.</div>
+          </div>
+
+          <div class="full">
+            <button id="submitBtn" type="button">Create HOA and Upload</button>
+          </div>
+        </div>
+
+        <div id="status" class="status"></div>
+      </section>
+    </main>
+
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
+    <script>
+      const hoaName = document.getElementById("hoaName");
+      const files = document.getElementById("files");
+      const street = document.getElementById("street");
+      const city = document.getElementById("city");
+      const state = document.getElementById("state");
+      const postal = document.getElementById("postal");
+      const lat = document.getElementById("lat");
+      const lon = document.getElementById("lon");
+      const submitBtn = document.getElementById("submitBtn");
+      const statusEl = document.getElementById("status");
+
+      function setStatus(msg, kind = "") {
+        statusEl.className = `status ${kind}`.trim();
+        statusEl.textContent = msg || "";
+      }
+
+      function hasLocation() {
+        return Boolean(
+          lat.value.trim() ||
+            lon.value.trim() ||
+            city.value.trim() ||
+            state.value.trim() ||
+            street.value.trim() ||
+            postal.value.trim()
+        );
+      }
+
+      async function createHoa() {
+        const hoa = hoaName.value.trim();
+        if (!hoa) {
+          setStatus("Enter HOA name.", "error");
+          return;
+        }
+        if (!files.files.length) {
+          setStatus("Choose at least one PDF file.", "error");
+          return;
+        }
+        if (!hasLocation()) {
+          setStatus("Add location info (address and/or coordinates).", "error");
+          return;
+        }
+
+        submitBtn.disabled = true;
+        setStatus("Uploading documents and creating HOA...", "");
+
+        try {
+          const form = new FormData();
+          form.append("hoa", hoa);
+          for (const file of files.files) {
+            form.append("files", file);
+          }
+          if (street.value.trim()) form.append("street", street.value.trim());
+          if (city.value.trim()) form.append("city", city.value.trim());
+          if (state.value.trim()) form.append("state", state.value.trim());
+          if (postal.value.trim()) form.append("postal_code", postal.value.trim());
+          if (lat.value.trim()) form.append("latitude", lat.value.trim());
+          if (lon.value.trim()) form.append("longitude", lon.value.trim());
+
+          const res = await fetch("/upload", { method: "POST", body: form });
+          if (!res.ok) {
+            let detail = `${res.status} ${res.statusText}`;
+            try {
+              const body = await res.json();
+              if (body.detail) detail = body.detail;
+            } catch (_) {}
+            throw new Error(detail);
+          }
+          await res.json();
+          setStatus("HOA created and upload queued. Redirecting to dashboard...", "ok");
+          const redirect = `/hoa/${encodeURIComponent(hoa)}`;
+          setTimeout(() => {
+            window.location.href = redirect;
+          }, 700);
+        } catch (err) {
+          setStatus(String(err.message || err), "error");
+        } finally {
+          submitBtn.disabled = false;
+        }
+      }
+
+      submitBtn.addEventListener("click", createHoa);
+
+      if (window.L) {
+        const map = L.map("map", { zoomControl: true }).setView([35.78, -78.64], 7);
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          maxZoom: 19,
+          attribution: "&copy; OpenStreetMap contributors",
+        }).addTo(map);
+        let marker = null;
+        map.on("click", (e) => {
+          lat.value = e.latlng.lat.toFixed(6);
+          lon.value = e.latlng.lng.toFixed(6);
+          if (marker) marker.remove();
+          marker = L.marker([e.latlng.lat, e.latlng.lng]).addTo(map);
+          setStatus("Coordinates picked from map.");
+        });
+      }
+    </script>
+  </body>
+</html>

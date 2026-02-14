@@ -1,0 +1,747 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HOAware | HOA Profile</title>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Space+Grotesk:wght@600;700&display=swap");
+
+      :root {
+        --bg: #eff4fb;
+        --ink: #152238;
+        --muted: #5d708f;
+        --panel: #ffffff;
+        --line: #d7e1f0;
+        --accent: #1768ff;
+        --accent-strong: #004ed8;
+        --mint: #c9fff2;
+        --danger: #b62525;
+        --ok: #1d8e4c;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Manrope", "Segoe UI", sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(90rem 50rem at 15% -20%, rgba(23, 104, 255, 0.18), transparent 60%),
+          radial-gradient(60rem 45rem at 95% -15%, rgba(63, 214, 175, 0.16), transparent 55%),
+          linear-gradient(180deg, #f7faff 0%, var(--bg) 50%, #edf4ff 100%);
+      }
+
+      .shell {
+        width: min(1220px, 94vw);
+        margin: 30px auto 56px;
+      }
+
+      .hero {
+        padding: 20px;
+        border-radius: 20px;
+        border: 1px solid #cfe0ff;
+        background: linear-gradient(118deg, rgba(255, 255, 255, 0.94) 0%, rgba(228, 241, 255, 0.96) 100%);
+        box-shadow: 0 14px 40px rgba(16, 35, 64, 0.13);
+      }
+
+      .top-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+
+      .brand {
+        display: inline-flex;
+        align-items: baseline;
+        gap: 0.12em;
+        font-family: "Space Grotesk", "Manrope", sans-serif;
+        font-size: clamp(1.45rem, 3vw, 2.1rem);
+        font-weight: 700;
+        margin: 0;
+      }
+
+      .brand-mark {
+        position: relative;
+        width: 0.9em;
+        height: 0.9em;
+        margin-right: 0.12em;
+        transform: translateY(0.03em);
+      }
+
+      .brand-mark::before {
+        content: "";
+        position: absolute;
+        left: 0.08em;
+        top: 0.08em;
+        width: 0.72em;
+        height: 0.52em;
+        border-radius: 0.08em;
+        background: linear-gradient(180deg, #cfe0ff, #a9c5f6);
+        border: 1px solid #89aee8;
+      }
+
+      .brand-mark::after {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 0;
+        height: 0;
+        border-left: 0.44em solid transparent;
+        border-right: 0.44em solid transparent;
+        border-bottom: 0.34em solid #1e5fcf;
+      }
+
+      .brand-hoa {
+        color: #0f2f6d;
+        letter-spacing: 0.03em;
+      }
+
+      .brand-aware {
+        color: #1a66ff;
+      }
+
+      .nav {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 10px;
+        border: 1px solid var(--line);
+        background: #fff;
+        color: #1b355c;
+        padding: 9px 12px;
+        font-weight: 800;
+        text-decoration: none;
+      }
+
+      .btn.primary {
+        border-color: var(--accent);
+        background: linear-gradient(180deg, var(--accent), var(--accent-strong));
+        color: #fff;
+      }
+
+      .hoa-title {
+        margin: 12px 0 2px;
+        font-family: "Space Grotesk", "Manrope", sans-serif;
+        font-size: clamp(1.35rem, 3vw, 2.1rem);
+      }
+
+      .hoa-meta {
+        color: var(--muted);
+        font-size: 0.92rem;
+      }
+
+      .status {
+        margin-top: 8px;
+        min-height: 1.2em;
+        font-size: 0.9rem;
+        color: var(--muted);
+      }
+
+      .status.ok {
+        color: var(--ok);
+      }
+
+      .status.error {
+        color: var(--danger);
+      }
+
+      .grid {
+        margin-top: 14px;
+        display: grid;
+        gap: 14px;
+        grid-template-columns: minmax(380px, 1fr) minmax(420px, 1.2fr);
+      }
+
+      .left-col,
+      .right-col {
+        display: grid;
+        gap: 14px;
+      }
+
+      .card {
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.92);
+        box-shadow: 0 10px 30px rgba(17, 36, 62, 0.08);
+        padding: 14px;
+      }
+
+      h2 {
+        margin: 0 0 10px;
+        font-family: "Space Grotesk", "Manrope", sans-serif;
+        font-size: 1.08rem;
+      }
+
+      .section-caption {
+        font-size: 0.88rem;
+        color: var(--muted);
+        margin-bottom: 10px;
+      }
+
+      label {
+        display: block;
+        margin: 8px 0 5px;
+        font-size: 0.88rem;
+        font-weight: 700;
+      }
+
+      input,
+      textarea,
+      button {
+        width: 100%;
+        border-radius: 10px;
+        border: 1px solid var(--line);
+        font: inherit;
+        padding: 10px 12px;
+        background: #fff;
+      }
+
+      textarea {
+        min-height: 112px;
+        resize: vertical;
+      }
+
+      button {
+        border-color: var(--accent);
+        background: linear-gradient(180deg, var(--accent), var(--accent-strong));
+        color: #fff;
+        font-weight: 800;
+        cursor: pointer;
+      }
+
+      button.secondary {
+        background: #fff;
+        color: var(--ink);
+        border-color: var(--line);
+      }
+
+      button.ghost {
+        background: #f8fbff;
+        color: #365078;
+        border-color: #c7d9f7;
+      }
+
+      .row {
+        display: flex;
+        gap: 8px;
+      }
+
+      .row > * {
+        flex: 1;
+      }
+
+      .docs,
+      .result-panel,
+      .sources {
+        margin-top: 10px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: #fff;
+        max-height: 360px;
+        overflow: auto;
+      }
+
+      .doc-item,
+      .match,
+      .source-item {
+        padding: 10px 12px;
+        border-bottom: 1px solid #ebf1fb;
+      }
+
+      .doc-item:last-child,
+      .match:last-child,
+      .source-item:last-child {
+        border-bottom: 0;
+      }
+
+      .chip {
+        display: inline-block;
+        margin-left: 8px;
+        font-size: 0.74rem;
+        border-radius: 999px;
+        padding: 3px 8px;
+        background: var(--mint);
+        border: 1px solid #9de6d5;
+      }
+
+      .meta {
+        color: var(--muted);
+        font-size: 0.8rem;
+      }
+
+      .doc-link {
+        color: #0f4fcd;
+        font-size: 0.84rem;
+        font-weight: 700;
+        text-decoration: none;
+      }
+
+      .doc-link:hover {
+        text-decoration: underline;
+      }
+
+      .mode-toggle {
+        display: inline-flex;
+        gap: 8px;
+        margin-bottom: 8px;
+      }
+
+      .mode-toggle button {
+        width: auto;
+        padding: 8px 12px;
+        border-radius: 999px;
+        font-size: 0.86rem;
+      }
+
+      .mode-toggle button.active {
+        background: linear-gradient(180deg, #112d68, #0d2555);
+        border-color: #112d68;
+      }
+
+      .answer {
+        white-space: pre-wrap;
+        line-height: 1.5;
+        padding: 12px;
+      }
+
+      #map {
+        height: 280px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+      }
+
+      @media (max-width: 980px) {
+        .grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <div class="top-row">
+          <h1 class="brand"><span class="brand-mark" aria-hidden="true"></span><span class="brand-hoa">HOA</span><span class="brand-aware">ware</span></h1>
+          <div class="nav">
+            <a class="btn" href="/">Home</a>
+            <a class="btn" href="/about">About</a>
+            <a class="btn primary" href="/add-hoa">Add New HOA</a>
+          </div>
+        </div>
+        <h2 class="hoa-title" id="hoaTitle">Loading HOA...</h2>
+        <div class="hoa-meta" id="hoaMeta"></div>
+        <div id="pageStatus" class="status"></div>
+      </section>
+
+      <section class="grid">
+        <div class="left-col">
+          <article class="card">
+            <h2>Document Browser</h2>
+            <p class="section-caption">Open searchable OCR view or raw PDF.</p>
+            <button id="refreshDocsBtn" class="secondary" type="button">Reload Docs</button>
+            <div id="docs" class="docs"></div>
+          </article>
+
+          <article class="card">
+            <h2>Upload Documents</h2>
+            <p class="section-caption">Upload additional PDFs into this HOA workspace.</p>
+            <label for="uploadFiles">PDF files</label>
+            <input id="uploadFiles" type="file" accept=".pdf,application/pdf" multiple />
+            <div class="row" style="margin-top: 10px">
+              <button id="uploadBtn" type="button">Upload and Index</button>
+            </div>
+            <div id="uploadStatus" class="status"></div>
+          </article>
+        </div>
+
+        <div class="right-col">
+          <article class="card">
+            <h2>Assistant</h2>
+            <div class="mode-toggle">
+              <button id="modeQa" class="active" type="button">Chatbot</button>
+              <button id="modeSearch" class="secondary" type="button">Semantic Search</button>
+            </div>
+            <label for="assistantInput" id="assistantLabel">Question</label>
+            <textarea id="assistantInput" placeholder="Do I need ARC approval to add a fence?"></textarea>
+            <button id="assistantBtn" type="button" style="margin-top: 10px">Ask</button>
+            <div id="assistantStatus" class="status"></div>
+            <div id="assistantOutput" class="result-panel"></div>
+            <div id="assistantSources" class="sources"></div>
+          </article>
+
+          <article class="card">
+            <h2>HOA Location</h2>
+            <div id="map"></div>
+            <div class="row" style="margin-top: 10px">
+              <button id="inferBtn" class="ghost" type="button">Infer Location</button>
+            </div>
+            <div id="mapStatus" class="status"></div>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
+    <script>
+      const state = {
+        hoaIdentifier: "",
+        hoaName: "",
+        mode: "qa",
+        map: null,
+        marker: null,
+      };
+
+      const hoaTitle = document.getElementById("hoaTitle");
+      const hoaMeta = document.getElementById("hoaMeta");
+      const pageStatus = document.getElementById("pageStatus");
+
+      const refreshDocsBtn = document.getElementById("refreshDocsBtn");
+      const docsEl = document.getElementById("docs");
+      const uploadFiles = document.getElementById("uploadFiles");
+      const uploadBtn = document.getElementById("uploadBtn");
+      const uploadStatus = document.getElementById("uploadStatus");
+
+      const modeQaBtn = document.getElementById("modeQa");
+      const modeSearchBtn = document.getElementById("modeSearch");
+      const assistantLabel = document.getElementById("assistantLabel");
+      const assistantInput = document.getElementById("assistantInput");
+      const assistantBtn = document.getElementById("assistantBtn");
+      const assistantStatus = document.getElementById("assistantStatus");
+      const assistantOutput = document.getElementById("assistantOutput");
+      const assistantSources = document.getElementById("assistantSources");
+
+      const inferBtn = document.getElementById("inferBtn");
+      const mapStatus = document.getElementById("mapStatus");
+
+      function setStatus(el, message, kind = "") {
+        el.className = `status ${kind}`.trim();
+        el.textContent = message || "";
+      }
+
+      function escapeHtml(text) {
+        return String(text)
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;");
+      }
+
+      function citationHref(documentPath) {
+        return `/hoas/${encodeURIComponent(state.hoaName)}/documents/searchable?path=${encodeURIComponent(documentPath)}`;
+      }
+
+      function renderCitations(items) {
+        const byKey = new Map();
+        for (const item of items || []) {
+          if (!item || !item.document) continue;
+          const key = `${item.document}||${item.pages || ""}`;
+          if (!byKey.has(key)) byKey.set(key, item);
+        }
+        const citations = [...byKey.values()];
+        if (!citations.length) {
+          assistantSources.innerHTML = '<div class="source-item">No citations available.</div>';
+          return;
+        }
+        assistantSources.innerHTML =
+          `<div class="source-item"><strong>Citations</strong></div>` +
+          citations
+            .map((s) => {
+              const href = citationHref(s.document);
+              return `<div class="source-item"><a class="doc-link" href="${href}" target="_blank" rel="noopener noreferrer">${escapeHtml(s.document)}</a> <span class="meta">(pages ${escapeHtml(s.pages || "?")})</span></div>`;
+            })
+            .join("");
+      }
+
+      function slugify(name) {
+        return String(name || "")
+          .trim()
+          .toLowerCase()
+          .replace(/\s+/g, "_")
+          .replace(/[^a-z0-9_-]/g, "");
+      }
+
+      function parseIdentifier() {
+        const prefix = "/hoa/";
+        const p = window.location.pathname;
+        if (!p.startsWith(prefix)) return "";
+        return decodeURIComponent(p.slice(prefix.length)).trim();
+      }
+
+      async function fetchJson(path, options = {}) {
+        const isFormData = options.body instanceof FormData;
+        const headers = isFormData
+          ? { ...(options.headers || {}) }
+          : { "Content-Type": "application/json", ...(options.headers || {}) };
+        const res = await fetch(path, { ...options, headers });
+        if (!res.ok) {
+          let detail = `${res.status} ${res.statusText}`;
+          try {
+            const body = await res.json();
+            if (body.detail) detail = body.detail;
+          } catch (_) {}
+          throw new Error(detail);
+        }
+        return res.json();
+      }
+
+      async function resolveHoaName() {
+        state.hoaIdentifier = parseIdentifier();
+        if (!state.hoaIdentifier) {
+          throw new Error("Missing HOA identifier in URL.");
+        }
+
+        const hoas = await fetchJson("/hoas");
+        const ident = state.hoaIdentifier.toLowerCase();
+
+        let resolved = hoas.find((name) => name.toLowerCase() === ident);
+        if (!resolved) {
+          resolved = hoas.find((name) => {
+            const slug = slugify(name);
+            return slug === ident || slug.replaceAll("_", "-") === ident;
+          });
+        }
+
+        if (!resolved) {
+          resolved = state.hoaIdentifier.replace(/[-_]+/g, " ");
+        }
+
+        state.hoaName = resolved;
+        hoaTitle.textContent = resolved;
+      }
+
+      function setMode(mode) {
+        state.mode = mode;
+        if (mode === "qa") {
+          modeQaBtn.classList.add("active");
+          modeQaBtn.classList.remove("secondary");
+          modeSearchBtn.classList.remove("active");
+          modeSearchBtn.classList.add("secondary");
+          assistantLabel.textContent = "Question";
+          assistantInput.placeholder = "Do I need ARC approval to add a fence?";
+          assistantBtn.textContent = "Ask";
+        } else {
+          modeSearchBtn.classList.add("active");
+          modeSearchBtn.classList.remove("secondary");
+          modeQaBtn.classList.remove("active");
+          modeQaBtn.classList.add("secondary");
+          assistantLabel.textContent = "Search Query";
+          assistantInput.placeholder = "Guest parking rules";
+          assistantBtn.textContent = "Search";
+        }
+      }
+
+      async function loadHoaMeta() {
+        const rows = await fetchJson("/hoas/summary");
+        const item = rows.find((r) => r.hoa === state.hoaName);
+        if (!item) {
+          hoaMeta.textContent = "No summary metadata available.";
+          return;
+        }
+        const mb = (item.total_bytes / (1024 * 1024)).toFixed(1);
+        const location = [item.city, item.state].filter(Boolean).join(", ") || "Location not mapped";
+        hoaMeta.textContent = `${item.doc_count} docs · ${item.chunk_count} chunks · ${mb} MB indexed · ${location}`;
+      }
+
+      async function loadDocuments() {
+        if (!state.hoaName) return;
+        setStatus(uploadStatus, "Loading documents...");
+        try {
+          const docs = await fetchJson(`/hoas/${encodeURIComponent(state.hoaName)}/documents`);
+          if (!docs.length) {
+            docsEl.innerHTML = '<div class="doc-item">No indexed documents yet.</div>';
+            setStatus(uploadStatus, "No documents indexed yet.");
+            return;
+          }
+          docsEl.innerHTML = docs
+            .map((doc) => {
+              const rawHref = `/hoas/${encodeURIComponent(state.hoaName)}/documents/file?path=${encodeURIComponent(doc.relative_path)}`;
+              const searchableHref = `/hoas/${encodeURIComponent(state.hoaName)}/documents/searchable?path=${encodeURIComponent(doc.relative_path)}`;
+              return (
+                `<div class="doc-item"><strong>${escapeHtml(doc.relative_path)}</strong>` +
+                `<span class="chip">${doc.chunk_count} chunks</span><br>` +
+                `<span class="meta">${doc.page_count ?? "?"} pages, ${doc.bytes} bytes, indexed ${escapeHtml(doc.last_ingested)}</span><br>` +
+                `<a class="doc-link" href="${searchableHref}" target="_blank" rel="noopener noreferrer">Open Searchable OCR View</a> · ` +
+                `<a class="doc-link" href="${rawHref}" target="_blank" rel="noopener noreferrer">Open Raw PDF</a></div>`
+              );
+            })
+            .join("");
+          setStatus(uploadStatus, "Document list loaded.", "ok");
+        } catch (err) {
+          docsEl.innerHTML = "";
+          setStatus(uploadStatus, String(err.message || err), "error");
+        }
+      }
+
+      async function handleUpload() {
+        if (!state.hoaName) return;
+        if (!uploadFiles.files.length) {
+          setStatus(uploadStatus, "Choose one or more PDF files.", "error");
+          return;
+        }
+
+        uploadBtn.disabled = true;
+        setStatus(uploadStatus, "Uploading and queueing ingestion...");
+
+        try {
+          const formData = new FormData();
+          formData.append("hoa", state.hoaName);
+          for (const file of uploadFiles.files) {
+            formData.append("files", file);
+          }
+          const body = await fetchJson("/upload", { method: "POST", body: formData });
+          setStatus(uploadStatus, `Uploaded ${body.saved_files.length} file(s). Background indexing started.`, "ok");
+          uploadFiles.value = "";
+          await loadDocuments();
+          await loadHoaMeta();
+        } catch (err) {
+          setStatus(uploadStatus, String(err.message || err), "error");
+        } finally {
+          uploadBtn.disabled = false;
+        }
+      }
+
+      async function runAssistant() {
+        if (!state.hoaName) return;
+        const prompt = assistantInput.value.trim();
+        if (!prompt) {
+          setStatus(assistantStatus, state.mode === "qa" ? "Enter a question." : "Enter a search query.", "error");
+          return;
+        }
+
+        assistantBtn.disabled = true;
+        assistantOutput.innerHTML = "";
+        assistantSources.innerHTML = "";
+        setStatus(assistantStatus, state.mode === "qa" ? "Generating answer..." : "Searching...");
+
+        try {
+          if (state.mode === "qa") {
+            const body = await fetchJson("/qa", {
+              method: "POST",
+              body: JSON.stringify({ hoa: state.hoaName, question: prompt, k: 6 }),
+            });
+            assistantOutput.innerHTML = `<div class="answer">${escapeHtml(body.answer || "")}</div>`;
+            renderCitations(body.sources || []);
+            setStatus(assistantStatus, "Answer ready.", "ok");
+          } else {
+            const body = await fetchJson("/search", {
+              method: "POST",
+              body: JSON.stringify({ hoa: state.hoaName, query: prompt, k: 8 }),
+            });
+            const results = body.results || [];
+            assistantOutput.innerHTML = results.length
+              ? results
+                  .map(
+                    (item) =>
+                      `<div class="match"><span class="meta">Score ${Number(item.score).toFixed(3)} · pages ${escapeHtml(item.pages)}</span><br>${escapeHtml(item.excerpt)}</div>`
+                  )
+                  .join("")
+              : '<div class="match">No matching chunks found.</div>';
+            renderCitations(results.map((item) => ({ document: item.document, pages: item.pages })));
+            setStatus(assistantStatus, results.length ? `Found ${results.length} result(s).` : "No results.", results.length ? "ok" : "");
+          }
+        } catch (err) {
+          setStatus(assistantStatus, String(err.message || err), "error");
+        } finally {
+          assistantBtn.disabled = false;
+        }
+      }
+
+      function initMap() {
+        if (!window.L) {
+          setStatus(mapStatus, "Map library failed to load.", "error");
+          return;
+        }
+        if (state.map) return;
+
+        state.map = L.map("map", { zoomControl: true }).setView([35.78, -78.64], 8);
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          maxZoom: 19,
+          attribution: "&copy; OpenStreetMap contributors",
+        }).addTo(state.map);
+      }
+
+      async function loadHoaLocation() {
+        if (!state.hoaName || !state.map) return;
+        try {
+          const loc = await fetchJson(`/hoas/${encodeURIComponent(state.hoaName)}/location`);
+          if (state.marker) {
+            state.marker.remove();
+            state.marker = null;
+          }
+          if (loc && loc.latitude != null && loc.longitude != null) {
+            state.marker = L.marker([loc.latitude, loc.longitude]).addTo(state.map);
+            const label = [loc.street, loc.city, loc.state, loc.postal_code].filter(Boolean).join(", ") || "Mapped HOA location";
+            state.marker.bindPopup(`<strong>${escapeHtml(state.hoaName)}</strong><br>${escapeHtml(label)}`);
+            state.map.setView([loc.latitude, loc.longitude], 13);
+            setStatus(mapStatus, "Location loaded.", "ok");
+          } else {
+            state.map.setView([35.78, -78.64], 7);
+            setStatus(mapStatus, "No location mapped yet for this HOA.");
+          }
+        } catch (err) {
+          setStatus(mapStatus, String(err.message || err), "error");
+        }
+      }
+
+      async function inferLocation() {
+        inferBtn.disabled = true;
+        setStatus(mapStatus, "Inferring location from indexed documents...");
+        try {
+          await fetchJson("/hoas/locations/infer", { method: "POST" });
+          await loadHoaLocation();
+          await loadHoaMeta();
+          setStatus(mapStatus, "Inference complete.", "ok");
+        } catch (err) {
+          setStatus(mapStatus, String(err.message || err), "error");
+        } finally {
+          inferBtn.disabled = false;
+        }
+      }
+
+      refreshDocsBtn.addEventListener("click", loadDocuments);
+      uploadBtn.addEventListener("click", handleUpload);
+      assistantBtn.addEventListener("click", runAssistant);
+      modeQaBtn.addEventListener("click", () => setMode("qa"));
+      modeSearchBtn.addEventListener("click", () => setMode("search"));
+      inferBtn.addEventListener("click", inferLocation);
+
+      (async () => {
+        try {
+          setMode("qa");
+          initMap();
+          await resolveHoaName();
+          await loadHoaMeta();
+          await loadDocuments();
+          await loadHoaLocation();
+          setStatus(pageStatus, "Profile loaded.", "ok");
+        } catch (err) {
+          hoaTitle.textContent = "HOA Not Found";
+          hoaMeta.innerHTML = `<a href="/">Return to Home</a>`;
+          setStatus(pageStatus, String(err.message || err), "error");
+        }
+      })();
+    </script>
+  </body>
+</html>

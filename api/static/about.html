@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HOAware | About</title>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Space+Grotesk:wght@600;700&display=swap");
+
+      :root {
+        --bg: #eef4ff;
+        --ink: #16243a;
+        --muted: #587091;
+        --line: #d3e0f4;
+        --panel: #fff;
+        --accent: #1662f3;
+        --accent-strong: #0d49be;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Manrope", "Segoe UI", sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(90rem 50rem at 15% -20%, rgba(23, 104, 255, 0.18), transparent 60%),
+          radial-gradient(60rem 45rem at 95% -15%, rgba(63, 214, 175, 0.16), transparent 55%),
+          linear-gradient(180deg, #f7faff 0%, var(--bg) 54%, #edf3ff 100%);
+      }
+
+      .shell {
+        width: min(920px, 94vw);
+        margin: 34px auto 54px;
+      }
+
+      .card {
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        background: rgba(255, 255, 255, 0.95);
+        box-shadow: 0 16px 42px rgba(17, 40, 74, 0.13);
+        padding: 22px;
+      }
+
+      .top-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+
+      .brand {
+        display: inline-flex;
+        align-items: baseline;
+        gap: 0.12em;
+        font-family: "Space Grotesk", "Manrope", sans-serif;
+        font-size: clamp(1.5rem, 3.2vw, 2.2rem);
+        font-weight: 700;
+        margin: 0;
+      }
+
+      .brand-mark {
+        position: relative;
+        width: 0.9em;
+        height: 0.9em;
+        margin-right: 0.12em;
+        transform: translateY(0.03em);
+      }
+
+      .brand-mark::before {
+        content: "";
+        position: absolute;
+        left: 0.08em;
+        top: 0.08em;
+        width: 0.72em;
+        height: 0.52em;
+        border-radius: 0.08em;
+        background: linear-gradient(180deg, #cfe0ff, #a9c5f6);
+        border: 1px solid #89aee8;
+      }
+
+      .brand-mark::after {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 0;
+        height: 0;
+        border-left: 0.44em solid transparent;
+        border-right: 0.44em solid transparent;
+        border-bottom: 0.34em solid #1e5fcf;
+      }
+
+      .brand-hoa {
+        color: #0f2f6d;
+        letter-spacing: 0.03em;
+      }
+
+      .brand-aware {
+        color: #1a66ff;
+      }
+
+      .actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 10px;
+        border: 1px solid var(--line);
+        background: #fff;
+        color: #1b355c;
+        padding: 9px 12px;
+        font-weight: 800;
+        text-decoration: none;
+      }
+
+      .btn.primary {
+        border-color: var(--accent);
+        background: linear-gradient(180deg, var(--accent), var(--accent-strong));
+        color: #fff;
+      }
+
+      h2 {
+        margin: 18px 0 8px;
+        font-family: "Space Grotesk", "Manrope", sans-serif;
+        font-size: 1.1rem;
+      }
+
+      p {
+        margin: 0;
+        line-height: 1.55;
+      }
+
+      ul {
+        margin: 8px 0 0;
+        padding-left: 20px;
+      }
+
+      li {
+        margin: 6px 0;
+      }
+
+      .tagline {
+        margin-top: 10px;
+        font-size: 1.05rem;
+        color: var(--muted);
+      }
+
+      .repo {
+        margin-top: 16px;
+        padding: 12px;
+        border: 1px dashed #aec4ea;
+        border-radius: 12px;
+        background: #f7faff;
+      }
+
+      .repo a {
+        color: #0e4fc8;
+        text-decoration: none;
+        font-weight: 800;
+      }
+
+      .repo a:hover {
+        text-decoration: underline;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <section class="card">
+        <div class="top-row">
+          <h1 class="brand"><span class="brand-mark" aria-hidden="true"></span><span class="brand-hoa">HOA</span><span class="brand-aware">ware</span></h1>
+          <div class="actions">
+            <a class="btn" href="/">Home</a>
+            <a class="btn primary" href="/add-hoa">Add New HOA</a>
+          </div>
+        </div>
+
+        <p class="tagline">A civil society platform for neighborhood government. Be a citizen, not a hostage.</p>
+
+        <h2>Why HOAware</h2>
+        <p>
+          Most HOA systems were built for administrative compliance, not resident understanding. Management company portals
+          tend to optimize for liability and operational throughput, which often means fragmented documents, weak search, and
+          limited transparency into how decisions are made. HOAware exists to rebalance that: residents should be able to
+          understand governing documents, evaluate proposals, and participate in neighborhood governance with less friction.
+        </p>
+
+        <h2>The Problems We See</h2>
+        <ul>
+          <li><strong>Poor information presentation:</strong> key documents are difficult to search, compare, and discuss.</li>
+          <li><strong>Power centralization by proxy:</strong> residents often do not get clear visibility into voting dynamics.</li>
+          <li><strong>Low governance innovation:</strong> communities inherit old structures without modern participation tools.</li>
+          <li><strong>Decision quality risk:</strong> loud minorities can dominate when broad participation is hard.</li>
+        </ul>
+
+        <h2>Our Approach</h2>
+        <ul>
+          <li><strong>Understand:</strong> upload and index governing documents, minutes, and budgets for searchable access.</li>
+          <li><strong>Debate:</strong> create shared context for constructive, evidence-linked neighborhood discussion.</li>
+          <li><strong>Evaluate:</strong> track whether better information and participation improve community outcomes over time.</li>
+        </ul>
+
+        <h2>Is This Legal?</h2>
+        <p>
+          We are building around resident records-access rights and public-document norms. We also recommend cautious handling
+          of personal data (redaction where appropriate). We are not a law firm, and communities should seek counsel for
+          jurisdiction-specific edge cases.
+        </p>
+        <ul>
+          <li>
+            North Carolina planned communities: owner inspection and copying rights in
+            <a href="https://www.ncleg.gov/EnactedLegislation/Statutes/HTML/BySection/Chapter_47F/GS_47F-3-118.html" target="_blank" rel="noopener noreferrer">N.C.G.S. 47F-3-118</a>.
+          </li>
+          <li>
+            North Carolina condominiums: owner inspection and copying rights in
+            <a href="https://www.ncleg.gov/EnactedLegislation/Statutes/HTML/BySection/Chapter_47C/GS_47C-3-118.html" target="_blank" rel="noopener noreferrer">N.C.G.S. 47C-3-118</a>.
+          </li>
+          <li>
+            Many HOAs are nonprofits: member records rights in
+            <a href="https://www.ncleg.gov/EnactedLegislation/Statutes/HTML/BySection/Chapter_55A/GS_55A-16-02.html" target="_blank" rel="noopener noreferrer">N.C.G.S. 55A-16-02</a>
+            and
+            <a href="https://www.ncleg.gov/EnactedLegislation/Statutes/HTML/BySection/Chapter_55A/GS_55A-16-03.html" target="_blank" rel="noopener noreferrer">55A-16-03</a>.
+          </li>
+          <li>
+            Governing declarations are typically recorded in county land records (planned communities:
+            <a href="https://www.ncleg.gov/EnactedLegislation/Statutes/HTML/BySection/Chapter_47F/GS_47F-2-101.html" target="_blank" rel="noopener noreferrer">47F-2-101</a>,
+            condominiums:
+            <a href="https://www.ncleg.gov/EnactedLegislation/Statutes/HTML/BySection/Chapter_47C/GS_47C-2-101.html" target="_blank" rel="noopener noreferrer">47C-2-101</a>).
+          </li>
+          <li>
+            U.S. copyright law includes fair-use analysis:
+            <a href="https://www.law.cornell.edu/uscode/text/17/107" target="_blank" rel="noopener noreferrer">17 U.S.C. § 107</a>,
+            and factual/functional material may have limited protection:
+            <a href="https://www.copyright.gov/circs/circ33.pdf" target="_blank" rel="noopener noreferrer">U.S. Copyright Office Circular 33</a>.
+          </li>
+        </ul>
+
+        <h2>Open Source</h2>
+        <p>
+          HOAware is being built as an open-source govtech project. The repository is private during active development and
+          can be made public later.
+        </p>
+
+        <div class="repo">
+          Repository: <a href="https://github.com/wyattclarke/hoaware" target="_blank" rel="noopener noreferrer">github.com/wyattclarke/hoaware</a>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
