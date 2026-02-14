@@ -125,6 +125,18 @@ def list_hoa_names(conn: sqlite3.Connection) -> list[str]:
     return [str(row["name"]) for row in cur.fetchall()]
 
 
+def list_hoa_names_with_documents(conn: sqlite3.Connection) -> list[str]:
+    cur = conn.execute(
+        """
+        SELECT DISTINCT h.name
+        FROM hoas h
+        JOIN documents d ON d.hoa_id = h.id
+        ORDER BY h.name COLLATE NOCASE
+        """
+    )
+    return [str(row["name"]) for row in cur.fetchall()]
+
+
 def list_documents_for_hoa(conn: sqlite3.Connection, hoa_name: str) -> list[dict]:
     cur = conn.execute(
         """

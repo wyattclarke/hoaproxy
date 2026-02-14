@@ -135,12 +135,8 @@ def health() -> dict:
 @app.get("/hoas")
 def list_hoas() -> list[str]:
     settings = load_settings()
-    fs_hoas: list[str] = []
-    if settings.docs_root.exists():
-        fs_hoas = [p.name for p in settings.docs_root.iterdir() if p.is_dir()]
     with db.get_connection(settings.db_path) as conn:
-        db_hoas = db.list_hoa_names(conn)
-    return sorted(set(fs_hoas + db_hoas), key=str.lower)
+        return db.list_hoa_names_with_documents(conn)
 
 
 @app.get("/hoas/{hoa_name}/documents", response_model=List[DocumentSummary])
