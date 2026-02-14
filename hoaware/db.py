@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS hoa_locations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     hoa_id INTEGER NOT NULL UNIQUE REFERENCES hoas(id) ON DELETE CASCADE,
     display_name TEXT,
+    website_url TEXT,
     street TEXT,
     city TEXT,
     state TEXT,
@@ -54,12 +55,27 @@ CREATE TABLE IF NOT EXISTS hoa_locations (
 """
 
 
+def _ensure_table_column(
+    conn: sqlite3.Connection,
+    table: str,
+    column: str,
+    column_def: str,
+) -> None:
+    cur = conn.execute(f"PRAGMA table_info({table})")
+    cols = {str(row["name"]) for row in cur.fetchall()}
+    if column in cols:
+        return
+    conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {column_def}")
+    conn.commit()
+
+
 def get_connection(db_path: Path) -> sqlite3.Connection:
     db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys=ON;")
     conn.executescript(SCHEMA)
+    _ensure_table_column(conn, "hoa_locations", "website_url", "TEXT")
     return conn
 
 
@@ -186,6 +202,7 @@ def list_hoa_summaries(conn: sqlite3.Connection) -> list[dict]:
             ds.total_bytes,
             ds.last_ingested,
             COALESCE(cs.chunk_count, 0) AS chunk_count,
+            l.website_url,
             l.city,
             l.state,
             l.latitude,
@@ -205,6 +222,7 @@ def list_hoa_summaries(conn: sqlite3.Connection) -> list[dict]:
             "chunk_count": int(row["chunk_count"]),
             "total_bytes": int(row["total_bytes"]),
             "last_ingested": str(row["last_ingested"]) if row["last_ingested"] is not None else None,
+            "website_url": str(row["website_url"]) if row["website_url"] is not None else None,
             "city": str(row["city"]) if row["city"] is not None else None,
             "state": str(row["state"]) if row["state"] is not None else None,
             "latitude": float(row["latitude"]) if row["latitude"] is not None else None,
@@ -220,6 +238,7 @@ def get_hoa_location(conn: sqlite3.Connection, hoa_name: str) -> dict | None:
         SELECT
             h.name AS hoa,
             l.display_name,
+            l.website_url,
             l.street,
             l.city,
             l.state,
@@ -238,10 +257,17 @@ def get_hoa_location(conn: sqlite3.Connection, hoa_name: str) -> dict | None:
     row = cur.fetchone()
     if not row:
         return None
-    if row["latitude"] is None and row["longitude"] is None and row["city"] is None and row["street"] is None:
+    if (
+        row["latitude"] is None
+        and row["longitude"] is None
+        and row["city"] is None
+        and row["street"] is None
+        and row["website_url"] is None
+    ):
         return {
             "hoa": str(row["hoa"]),
             "display_name": None,
+            "website_url": None,
             "street": None,
             "city": None,
             "state": None,
@@ -255,6 +281,7 @@ def get_hoa_location(conn: sqlite3.Connection, hoa_name: str) -> dict | None:
     return {
         "hoa": str(row["hoa"]),
         "display_name": str(row["display_name"]) if row["display_name"] is not None else None,
+        "website_url": str(row["website_url"]) if row["website_url"] is not None else None,
         "street": str(row["street"]) if row["street"] is not None else None,
         "city": str(row["city"]) if row["city"] is not None else None,
         "state": str(row["state"]) if row["state"] is not None else None,
@@ -272,6 +299,7 @@ def upsert_hoa_location(
     hoa_name: str,
     *,
     display_name: str | None = None,
+    website_url: str | None = None,
     street: str | None = None,
     city: str | None = None,
     state: str | None = None,
@@ -291,12 +319,13 @@ def upsert_hoa_location(
         conn.execute(
             """
             INSERT INTO hoa_locations
-                (hoa_id, display_name, street, city, state, postal_code, country, latitude, longitude, source)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (hoa_id, display_name, website_url, street, city, state, postal_code, country, latitude, longitude, source)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 hoa_id,
                 display_name,
+                website_url,
                 street,
                 city,
                 state,
@@ -315,6 +344,7 @@ def upsert_hoa_location(
         UPDATE hoa_locations
         SET
             display_name = COALESCE(?, display_name),
+            website_url = COALESCE(?, website_url),
             street = COALESCE(?, street),
             city = COALESCE(?, city),
             state = COALESCE(?, state),
@@ -328,6 +358,7 @@ def upsert_hoa_location(
         """,
         (
             display_name,
+            website_url,
             street,
             city,
             state,
@@ -348,6 +379,7 @@ def list_hoa_locations(conn: sqlite3.Connection) -> list[dict]:
         SELECT
             h.name AS hoa,
             l.display_name,
+            l.website_url,
             l.street,
             l.city,
             l.state,
@@ -369,6 +401,7 @@ def list_hoa_locations(conn: sqlite3.Connection) -> list[dict]:
         {
             "hoa": str(row["hoa"]),
             "display_name": str(row["display_name"]) if row["display_name"] is not None else None,
+            "website_url": str(row["website_url"]) if row["website_url"] is not None else None,
             "street": str(row["street"]) if row["street"] is not None else None,
             "city": str(row["city"]) if row["city"] is not None else None,
             "state": str(row["state"]) if row["state"] is not None else None,

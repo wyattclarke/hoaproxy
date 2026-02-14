@@ -71,6 +71,19 @@
         margin: 0;
       }
 
+      .brand-wrap {
+        margin: 0;
+      }
+
+      .brand-link {
+        color: inherit;
+        text-decoration: none;
+      }
+
+      .brand-link:hover {
+        text-decoration: none;
+      }
+
       .brand-mark {
         position: relative;
         width: 0.9em;
@@ -322,6 +335,16 @@
         padding: 12px;
       }
 
+      .detail-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .detail-grid .full {
+        grid-column: 1 / -1;
+      }
+
       #map {
         height: 280px;
         border: 1px solid var(--line);
@@ -332,6 +355,9 @@
         .grid {
           grid-template-columns: 1fr;
         }
+        .detail-grid {
+          grid-template-columns: 1fr;
+        }
       }
     </style>
   </head>
@@ -339,7 +365,9 @@
     <main class="shell">
       <section class="hero">
         <div class="top-row">
-          <h1 class="brand"><span class="brand-mark" aria-hidden="true"></span><span class="brand-hoa">HOA</span><span class="brand-aware">ware</span></h1>
+          <h1 class="brand-wrap">
+            <a class="brand brand-link" href="/"><span class="brand-mark" aria-hidden="true"></span><span class="brand-hoa">HOA</span><span class="brand-aware">ware</span></a>
+          </h1>
           <div class="nav">
             <a class="btn" href="/">Home</a>
             <a class="btn" href="/about">About</a>
@@ -395,6 +423,45 @@
             </div>
             <div id="mapStatus" class="status"></div>
           </article>
+
+          <article class="card">
+            <h2>HOA Details</h2>
+            <p class="section-caption">Add or edit website and location details for this HOA.</p>
+            <div class="detail-grid">
+              <div class="full">
+                <label for="detailWebsite">HOA Website (usually login page)</label>
+                <input id="detailWebsite" placeholder="https://examplehoa.com" />
+              </div>
+              <div>
+                <label for="detailStreet">Street</label>
+                <input id="detailStreet" placeholder="123 Main St" />
+              </div>
+              <div>
+                <label for="detailCity">City</label>
+                <input id="detailCity" placeholder="Raleigh" />
+              </div>
+              <div>
+                <label for="detailState">State</label>
+                <input id="detailState" placeholder="NC" maxlength="2" />
+              </div>
+              <div>
+                <label for="detailPostal">ZIP</label>
+                <input id="detailPostal" placeholder="27601" />
+              </div>
+              <div>
+                <label for="detailLat">Latitude</label>
+                <input id="detailLat" placeholder="35.7796" />
+              </div>
+              <div>
+                <label for="detailLon">Longitude</label>
+                <input id="detailLon" placeholder="-78.6382" />
+              </div>
+              <div class="full row" style="margin-top: 8px">
+                <button id="saveDetailsBtn" type="button">Save HOA Details</button>
+              </div>
+            </div>
+            <div id="detailStatus" class="status"></div>
+          </article>
         </div>
       </section>
     </main>
@@ -434,6 +501,15 @@
 
       const inferBtn = document.getElementById("inferBtn");
       const mapStatus = document.getElementById("mapStatus");
+      const detailWebsite = document.getElementById("detailWebsite");
+      const detailStreet = document.getElementById("detailStreet");
+      const detailCity = document.getElementById("detailCity");
+      const detailState = document.getElementById("detailState");
+      const detailPostal = document.getElementById("detailPostal");
+      const detailLat = document.getElementById("detailLat");
+      const detailLon = document.getElementById("detailLon");
+      const saveDetailsBtn = document.getElementById("saveDetailsBtn");
+      const detailStatus = document.getElementById("detailStatus");
 
       function setStatus(el, message, kind = "") {
         el.className = `status ${kind}`.trim();
@@ -561,7 +637,10 @@
         }
         const mb = (item.total_bytes / (1024 * 1024)).toFixed(1);
         const location = [item.city, item.state].filter(Boolean).join(", ") || "Location not mapped";
-        hoaMeta.textContent = `${item.doc_count} docs · ${item.chunk_count} chunks · ${mb} MB indexed · ${location}`;
+        const websitePart = item.website_url
+          ? ` · <a class="doc-link" href="${escapeHtml(item.website_url)}" target="_blank" rel="noopener noreferrer">HOA website</a>`
+          : "";
+        hoaMeta.innerHTML = `${item.doc_count} docs · ${item.chunk_count} chunks · ${mb} MB indexed · ${escapeHtml(location)}${websitePart}`;
       }
 
       async function loadDocuments() {
@@ -680,12 +759,24 @@
           maxZoom: 19,
           attribution: "&copy; OpenStreetMap contributors",
         }).addTo(state.map);
+        state.map.on("click", (e) => {
+          detailLat.value = e.latlng.lat.toFixed(6);
+          detailLon.value = e.latlng.lng.toFixed(6);
+          setStatus(detailStatus, "Coordinates picked from map click.", "ok");
+        });
       }
 
       async function loadHoaLocation() {
         if (!state.hoaName || !state.map) return;
         try {
           const loc = await fetchJson(`/hoas/${encodeURIComponent(state.hoaName)}/location`);
+          detailWebsite.value = (loc && loc.website_url) || "";
+          detailStreet.value = (loc && loc.street) || "";
+          detailCity.value = (loc && loc.city) || "";
+          detailState.value = (loc && loc.state) || "";
+          detailPostal.value = (loc && loc.postal_code) || "";
+          detailLat.value = loc && loc.latitude != null ? String(loc.latitude) : "";
+          detailLon.value = loc && loc.longitude != null ? String(loc.longitude) : "";
           if (state.marker) {
             state.marker.remove();
             state.marker = null;
@@ -702,6 +793,34 @@
           }
         } catch (err) {
           setStatus(mapStatus, String(err.message || err), "error");
+        }
+      }
+
+      async function saveHoaDetails() {
+        if (!state.hoaName) return;
+        saveDetailsBtn.disabled = true;
+        setStatus(detailStatus, "Saving HOA details...");
+        try {
+          const form = new FormData();
+          if (detailWebsite.value.trim()) form.append("website_url", detailWebsite.value.trim());
+          if (detailStreet.value.trim()) form.append("street", detailStreet.value.trim());
+          if (detailCity.value.trim()) form.append("city", detailCity.value.trim());
+          if (detailState.value.trim()) form.append("state", detailState.value.trim());
+          if (detailPostal.value.trim()) form.append("postal_code", detailPostal.value.trim());
+          if (detailLat.value.trim()) form.append("latitude", detailLat.value.trim());
+          if (detailLon.value.trim()) form.append("longitude", detailLon.value.trim());
+
+          await fetchJson(`/hoas/${encodeURIComponent(state.hoaName)}/location`, {
+            method: "POST",
+            body: form,
+          });
+          await loadHoaMeta();
+          await loadHoaLocation();
+          setStatus(detailStatus, "HOA details saved.", "ok");
+        } catch (err) {
+          setStatus(detailStatus, String(err.message || err), "error");
+        } finally {
+          saveDetailsBtn.disabled = false;
         }
       }
 
@@ -726,6 +845,7 @@
       modeQaBtn.addEventListener("click", () => setMode("qa"));
       modeSearchBtn.addEventListener("click", () => setMode("search"));
       inferBtn.addEventListener("click", inferLocation);
+      saveDetailsBtn.addEventListener("click", saveHoaDetails);
 
       (async () => {
         try {

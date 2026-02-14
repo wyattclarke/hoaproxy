@@ -6,7 +6,7 @@ import re
 import shutil
 from pathlib import Path
 from typing import List
-from urllib.parse import quote, unquote
+from urllib.parse import quote, unquote, urlparse
 
 import requests
 from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
@@ -86,6 +86,7 @@ class DocumentSummary(BaseModel):
 class HoaLocation(BaseModel):
     hoa: str
     display_name: str | None = None
+    website_url: str | None = None
     street: str | None = None
     city: str | None = None
     state: str | None = None
@@ -103,6 +104,7 @@ class HoaSummary(BaseModel):
     chunk_count: int
     total_bytes: int
     last_ingested: str | None = None
+    website_url: str | None = None
     city: str | None = None
     state: str | None = None
     latitude: float | None = None
@@ -141,6 +143,20 @@ def _safe_pdf_filename(raw_name: str | None) -> str:
     if not safe.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail=f"{raw_name} is not a PDF")
     return safe
+
+
+def _normalize_website_url(raw_url: str | None) -> str | None:
+    if raw_url is None:
+        return None
+    cleaned = raw_url.strip()
+    if not cleaned:
+        return None
+    if not re.match(r"^https?://", cleaned, re.IGNORECASE):
+        cleaned = f"https://{cleaned}"
+    parsed = urlparse(cleaned)
+    if not parsed.scheme or not parsed.netloc:
+        raise HTTPException(status_code=400, detail="Invalid HOA website URL")
+    return cleaned
 
 
 def _ingest_uploaded_files(hoa_name: str, saved_paths: list[Path]) -> None:
@@ -472,6 +488,7 @@ def get_hoa_location(hoa_name: str) -> HoaLocation | None:
 @app.post("/hoas/{hoa_name}/location", response_model=HoaLocation)
 def upsert_hoa_location(
     hoa_name: str,
+    website_url: str | None = Form(default=None),
     street: str | None = Form(default=None),
     city: str | None = Form(default=None),
     state: str | None = Form(default=None),
@@ -482,6 +499,7 @@ def upsert_hoa_location(
 ) -> HoaLocation:
     settings = load_settings()
     resolved_hoa = _resolve_hoa_name(hoa_name)
+    normalized_website = _normalize_website_url(website_url)
     if latitude is not None and not (-90 <= latitude <= 90):
         raise HTTPException(status_code=400, detail="latitude must be between -90 and 90")
     if longitude is not None and not (-180 <= longitude <= 180):
@@ -499,6 +517,7 @@ def upsert_hoa_location(
         db.upsert_hoa_location(
             conn,
             resolved_hoa,
+            website_url=normalized_website,
             street=(street.strip() if street else None),
             city=(city.strip() if city else None),
             state=(state.strip().upper() if state else None),
@@ -565,6 +584,7 @@ async def upload_documents(
     background_tasks: BackgroundTasks,
     hoa: str = Form(...),
     files: List[UploadFile] = File(...),
+    website_url: str | None = Form(default=None),
     street: str | None = Form(default=None),
     city: str | None = Form(default=None),
     state: str | None = Form(default=None),
@@ -595,8 +615,9 @@ async def upload_documents(
         saved_files.append(filename)
         await upload.close()
 
+    normalized_website = _normalize_website_url(website_url)
     location_saved = False
-    if any(value is not None and str(value).strip() for value in [street, city, state, postal_code, country]) or (
+    if any(value is not None and str(value).strip() for value in [normalized_website, street, city, state, postal_code, country]) or (
         latitude is not None and longitude is not None
     ):
         if latitude is not None and not (-90 <= latitude <= 90):
@@ -616,6 +637,7 @@ async def upload_documents(
             db.upsert_hoa_location(
                 conn,
                 resolved_hoa,
+                website_url=normalized_website,
                 street=(street.strip() if street else None),
                 city=(city.strip() if city else None),
                 state=(state.strip().upper() if state else None),

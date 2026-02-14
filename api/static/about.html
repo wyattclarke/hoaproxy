@@ -63,6 +63,19 @@
         margin: 0;
       }
 
+      .brand-wrap {
+        margin: 0;
+      }
+
+      .brand-link {
+        color: inherit;
+        text-decoration: none;
+      }
+
+      .brand-link:hover {
+        text-decoration: none;
+      }
+
       .brand-mark {
         position: relative;
         width: 0.9em;
@@ -178,7 +191,9 @@
     <main class="shell">
       <section class="card">
         <div class="top-row">
-          <h1 class="brand"><span class="brand-mark" aria-hidden="true"></span><span class="brand-hoa">HOA</span><span class="brand-aware">ware</span></h1>
+          <h1 class="brand-wrap">
+            <a class="brand brand-link" href="/"><span class="brand-mark" aria-hidden="true"></span><span class="brand-hoa">HOA</span><span class="brand-aware">ware</span></a>
+          </h1>
           <div class="actions">
             <a class="btn" href="/">Home</a>
             <a class="btn primary" href="/add-hoa">Add New HOA</a>

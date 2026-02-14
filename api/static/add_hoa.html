@@ -65,6 +65,19 @@
         gap: 0.12em;
       }
 
+      .brand-wrap {
+        margin: 0;
+      }
+
+      .brand-link {
+        color: inherit;
+        text-decoration: none;
+      }
+
+      .brand-link:hover {
+        text-decoration: none;
+      }
+
       .brand-mark {
         position: relative;
         width: 0.9em;
@@ -204,7 +217,9 @@
   <body>
     <main class="shell">
       <section class="card">
-        <h1 class="brand"><span class="brand-mark" aria-hidden="true"></span><span class="brand-hoa">HOA</span><span class="brand-aware">ware</span></h1>
+        <h1 class="brand-wrap">
+          <a class="brand brand-link" href="/"><span class="brand-mark" aria-hidden="true"></span><span class="brand-hoa">HOA</span><span class="brand-aware">ware</span></a>
+        </h1>
         <p class="subtitle">Create a new HOA workspace by uploading documents and providing location data for the map.</p>
         <div class="actions"><a class="link-btn" href="/">Back to Dashboard</a> <a class="link-btn" href="/about">About</a></div>
 
@@ -217,6 +232,11 @@
           <div class="full">
             <label for="files">PDF Documents</label>
             <input id="files" type="file" accept=".pdf,application/pdf" multiple />
+          </div>
+
+          <div class="full">
+            <label for="website">HOA Website (usually login page)</label>
+            <input id="website" placeholder="https://examplehoa.com" />
           </div>
 
           <div>
@@ -266,6 +286,7 @@
     <script>
       const hoaName = document.getElementById("hoaName");
       const files = document.getElementById("files");
+      const website = document.getElementById("website");
       const street = document.getElementById("street");
       const city = document.getElementById("city");
       const state = document.getElementById("state");
@@ -316,6 +337,7 @@
             form.append("files", file);
           }
           if (street.value.trim()) form.append("street", street.value.trim());
+          if (website.value.trim()) form.append("website_url", website.value.trim());
           if (city.value.trim()) form.append("city", city.value.trim());
           if (state.value.trim()) form.append("state", state.value.trim());
           if (postal.value.trim()) form.append("postal_code", postal.value.trim());
