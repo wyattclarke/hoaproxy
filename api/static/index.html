@@ -139,9 +139,18 @@
         background: #fff;
         color: #1b355c;
         padding: 10px 14px;
+        font-family: "Manrope", "Segoe UI", sans-serif;
+        font-size: 0.92rem;
         font-weight: 800;
+        line-height: 1.15;
         text-decoration: none;
         cursor: pointer;
+        appearance: none;
+      }
+
+      .btn:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
       }
 
       .btn.primary {
@@ -306,13 +315,11 @@
             <a class="brand brand-link" href="/"><span class="brand-mark" aria-hidden="true"></span><span class="brand-hoa">HOA</span><span class="brand-aware">ware</span></a>
           </h1>
           <div class="actions">
-            <a class="btn primary" href="/add-hoa">Add New HOA</a>
+            <a class="btn primary" href="/add-hoa">Add Your HOA</a>
             <a class="btn" href="/about">About</a>
-            <button id="refreshBtn" class="btn" type="button">Refresh</button>
-            <button id="inferBtn" class="btn" type="button">Infer Missing Locations</button>
           </div>
         </div>
-        <p class="subtitle">A civil society platform for neighborhood government. Be a citizen, not a hostage.</p>
+        <p class="subtitle">Civil society for your neighborhood. Make HOA life better, together.</p>
         <div class="search-row">
           <input id="searchInput" placeholder="Search by HOA name, city, or state" />
           <div class="meta" id="countMeta"></div>
@@ -351,8 +358,6 @@
       const countMeta = document.getElementById("countMeta");
       const homeStatus = document.getElementById("homeStatus");
       const hoaList = document.getElementById("hoaList");
-      const refreshBtn = document.getElementById("refreshBtn");
-      const inferBtn = document.getElementById("inferBtn");
 
       function setStatus(message, kind = "") {
         homeStatus.className = `status ${kind}`.trim();
@@ -492,23 +497,7 @@
         }
       }
 
-      async function inferMissingLocations() {
-        inferBtn.disabled = true;
-        setStatus("Inferring missing locations from indexed documents...");
-        try {
-          await fetchJson("/hoas/locations/infer", { method: "POST" });
-          await loadSummaries();
-          setStatus("Inference complete.", "ok");
-        } catch (err) {
-          setStatus(String(err.message || err), "error");
-        } finally {
-          inferBtn.disabled = false;
-        }
-      }
-
       searchInput.addEventListener("input", applyFilter);
-      refreshBtn.addEventListener("click", loadSummaries);
-      inferBtn.addEventListener("click", inferMissingLocations);
 
       initMap();
       loadSummaries();
