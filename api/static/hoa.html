@@ -478,6 +478,7 @@
         mode: "qa",
         map: null,
         marker: null,
+        boundaryLayer: null,
       };
 
       const hoaTitle = document.getElementById("hoaTitle");
@@ -626,6 +627,51 @@
           assistantInput.placeholder = "Guest parking rules";
           assistantBtn.textContent = "Search";
         }
+      }
+
+      function parseBoundaryLatLngs(boundaryGeojson) {
+        if (!boundaryGeojson || typeof boundaryGeojson !== "object") return null;
+
+        const toLatLng = (coord) => {
+          if (!Array.isArray(coord) || coord.length < 2) return null;
+          const lon = Number(coord[0]);
+          const lat = Number(coord[1]);
+          if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+          return [lat, lon];
+        };
+
+        const toRing = (ring) => {
+          if (!Array.isArray(ring) || !ring.length) return null;
+          const points = ring.map(toLatLng).filter(Boolean);
+          return points.length >= 3 ? points : null;
+        };
+
+        if (boundaryGeojson.type === "Polygon") {
+          if (!Array.isArray(boundaryGeojson.coordinates) || !boundaryGeojson.coordinates.length) return null;
+          const rings = boundaryGeojson.coordinates.map(toRing).filter(Boolean);
+          return rings.length ? rings : null;
+        }
+
+        if (boundaryGeojson.type === "MultiPolygon") {
+          if (!Array.isArray(boundaryGeojson.coordinates) || !boundaryGeojson.coordinates.length) return null;
+          const polygons = boundaryGeojson.coordinates
+            .map((polygon) => (Array.isArray(polygon) ? polygon.map(toRing).filter(Boolean) : null))
+            .filter((polygon) => polygon && polygon.length);
+          return polygons.length ? polygons : null;
+        }
+
+        return null;
+      }
+
+      function buildBoundaryLayer(boundaryGeojson) {
+        const latLngs = parseBoundaryLatLngs(boundaryGeojson);
+        if (!latLngs) return null;
+        return L.polygon(latLngs, {
+          color: "#185fe9",
+          weight: 2,
+          fillColor: "#3d7eff",
+          fillOpacity: 0.16,
+        });
       }
 
       async function loadHoaMeta() {
@@ -781,11 +827,33 @@
             state.marker.remove();
             state.marker = null;
           }
+          if (state.boundaryLayer) {
+            state.boundaryLayer.remove();
+            state.boundaryLayer = null;
+          }
+
+          const label = [loc && loc.street, loc && loc.city, loc && loc.state, loc && loc.postal_code].filter(Boolean).join(", ") || "Mapped HOA location";
+          const popupHtml = `<strong>${escapeHtml(state.hoaName)}</strong><br>${escapeHtml(label)}`;
+
+          let hasMapData = false;
+          const boundaryLayer = buildBoundaryLayer(loc && loc.boundary_geojson);
+          if (boundaryLayer) {
+            state.boundaryLayer = boundaryLayer.addTo(state.map);
+            state.boundaryLayer.bindPopup(popupHtml);
+            state.map.fitBounds(state.boundaryLayer.getBounds(), { padding: [20, 20], maxZoom: 15 });
+            hasMapData = true;
+          }
+
           if (loc && loc.latitude != null && loc.longitude != null) {
             state.marker = L.marker([loc.latitude, loc.longitude]).addTo(state.map);
-            const label = [loc.street, loc.city, loc.state, loc.postal_code].filter(Boolean).join(", ") || "Mapped HOA location";
-            state.marker.bindPopup(`<strong>${escapeHtml(state.hoaName)}</strong><br>${escapeHtml(label)}`);
-            state.map.setView([loc.latitude, loc.longitude], 13);
+            state.marker.bindPopup(popupHtml);
+            if (!hasMapData) {
+              state.map.setView([loc.latitude, loc.longitude], 13);
+            }
+            hasMapData = true;
+          }
+
+          if (hasMapData) {
             setStatus(mapStatus, "Location loaded.", "ok");
           } else {
             state.map.setView([35.78, -78.64], 7);

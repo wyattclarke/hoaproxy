@@ -521,6 +521,16 @@
             } else {
               fitBounds = boundaryLayer.getBounds();
             }
+            const hasAddressContext = Boolean(item.city || item.state);
+            if (!hasAddressContext) {
+              const center =
+                item.latitude != null && item.longitude != null
+                  ? L.latLng(item.latitude, item.longitude)
+                  : boundaryLayer.getBounds().getCenter();
+              const marker = L.marker(center).addTo(state.markerLayer);
+              marker.bindPopup(popupHtml);
+              state.markers.set(item.hoa, marker);
+            }
             continue;
           }
 
