@@ -352,6 +352,7 @@
         markers: new Map(),
         map: null,
         markerLayer: null,
+        polygonLayer: null,
       };
 
       const searchInput = document.getElementById("searchInput");
@@ -412,10 +413,63 @@
         }).addTo(state.map);
 
         state.markerLayer = L.layerGroup().addTo(state.map);
+        state.polygonLayer = L.layerGroup().addTo(state.map);
       }
 
       function locationText(item) {
-        return [item.city, item.state].filter(Boolean).join(", ") || "Location not mapped yet";
+        const place = [item.city, item.state].filter(Boolean).join(", ");
+        if (place) return place;
+        if (item.boundary_geojson) return "Boundary mapped";
+        return "Location not mapped yet";
+      }
+
+      function isMapped(item) {
+        return Boolean(item.boundary_geojson || (item.latitude != null && item.longitude != null));
+      }
+
+      function parseBoundaryLatLngs(boundaryGeojson) {
+        if (!boundaryGeojson || typeof boundaryGeojson !== "object") return null;
+
+        const toLatLng = (coord) => {
+          if (!Array.isArray(coord) || coord.length < 2) return null;
+          const lon = Number(coord[0]);
+          const lat = Number(coord[1]);
+          if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+          return [lat, lon];
+        };
+
+        const toRing = (ring) => {
+          if (!Array.isArray(ring) || !ring.length) return null;
+          const points = ring.map(toLatLng).filter(Boolean);
+          return points.length >= 3 ? points : null;
+        };
+
+        if (boundaryGeojson.type === "Polygon") {
+          if (!Array.isArray(boundaryGeojson.coordinates) || !boundaryGeojson.coordinates.length) return null;
+          const rings = boundaryGeojson.coordinates.map(toRing).filter(Boolean);
+          return rings.length ? rings : null;
+        }
+
+        if (boundaryGeojson.type === "MultiPolygon") {
+          if (!Array.isArray(boundaryGeojson.coordinates) || !boundaryGeojson.coordinates.length) return null;
+          const polygons = boundaryGeojson.coordinates
+            .map((polygon) => (Array.isArray(polygon) ? polygon.map(toRing).filter(Boolean) : null))
+            .filter((polygon) => polygon && polygon.length);
+          return polygons.length ? polygons : null;
+        }
+
+        return null;
+      }
+
+      function buildBoundaryLayer(item) {
+        const latLngs = parseBoundaryLatLngs(item.boundary_geojson);
+        if (!latLngs) return null;
+        return L.polygon(latLngs, {
+          color: "#185fe9",
+          weight: 2,
+          fillColor: "#3d7eff",
+          fillOpacity: 0.16,
+        });
       }
 
       function renderList() {
@@ -427,7 +481,7 @@
 
         hoaList.innerHTML = state.filtered
           .map((item) => {
-            const mapped = item.latitude != null && item.longitude != null;
+            const mapped = isMapped(item);
             return (
               `<div class="hoa-card">` +
               `<div class="hoa-head"><a class="hoa-name hoa-name-link" href="${profileHref(item.hoa)}">${escapeHtml(item.hoa)}</a><div class="meta">${mapped ? "Mapped" : "Unmapped"}</div></div>` +
@@ -446,25 +500,43 @@
       }
 
       function renderMarkers() {
-        if (!state.map || !state.markerLayer) return;
+        if (!state.map || !state.markerLayer || !state.polygonLayer) return;
         state.markerLayer.clearLayers();
+        state.polygonLayer.clearLayers();
         state.markers.clear();
 
-        const bounds = [];
+        let fitBounds = null;
         for (const item of state.filtered) {
-          if (item.latitude == null || item.longitude == null) continue;
-          const marker = L.marker([item.latitude, item.longitude]).addTo(state.markerLayer);
-          marker.bindPopup(
+          const popupHtml =
             `<a class="hoa-name-link" href="${profileHref(item.hoa)}"><strong>${escapeHtml(item.hoa)}</strong></a><br>` +
               `<span class="meta">${escapeHtml(locationText(item))}</span><br>` +
-              `${item.doc_count} docs`
-          );
+              `${item.doc_count} docs`;
+
+          const boundaryLayer = buildBoundaryLayer(item);
+          if (boundaryLayer) {
+            boundaryLayer.addTo(state.polygonLayer);
+            boundaryLayer.bindPopup(popupHtml);
+            if (fitBounds) {
+              fitBounds.extend(boundaryLayer.getBounds());
+            } else {
+              fitBounds = boundaryLayer.getBounds();
+            }
+            continue;
+          }
+
+          if (item.latitude == null || item.longitude == null) continue;
+          const marker = L.marker([item.latitude, item.longitude]).addTo(state.markerLayer);
+          marker.bindPopup(popupHtml);
           state.markers.set(item.hoa, marker);
-          bounds.push([item.latitude, item.longitude]);
+          if (fitBounds) {
+            fitBounds.extend([item.latitude, item.longitude]);
+          } else {
+            fitBounds = L.latLngBounds([[item.latitude, item.longitude]]);
+          }
         }
 
-        if (bounds.length) {
-          state.map.fitBounds(bounds, { padding: [30, 30], maxZoom: 12 });
+        if (fitBounds && fitBounds.isValid()) {
+          state.map.fitBounds(fitBounds, { padding: [30, 30], maxZoom: 12 });
         } else {
           state.map.setView([35.78, -78.64], 7);
         }

@@ -158,6 +158,7 @@
       }
 
       input,
+      textarea,
       button {
         width: 100%;
         border: 1px solid var(--line);
@@ -167,6 +168,7 @@
       }
 
       input:focus,
+      textarea:focus,
       button:focus {
         outline: none;
         border-color: #8ab3ff;
@@ -179,6 +181,23 @@
         color: #fff;
         font-weight: 800;
         cursor: pointer;
+      }
+
+      button.secondary {
+        border-color: var(--line);
+        background: #f8fbff;
+        color: #1f3a64;
+        font-weight: 700;
+      }
+
+      .map-actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .map-actions button {
+        width: auto;
       }
 
       #map {
@@ -265,8 +284,19 @@
           </div>
 
           <div class="full">
+            <label>HOA Boundary Polygon (optional)</label>
+            <div class="map-actions">
+              <button id="drawBoundaryBtn" class="secondary" type="button">Draw Boundary</button>
+              <button id="finishBoundaryBtn" class="secondary" type="button">Finish Polygon</button>
+              <button id="clearBoundaryBtn" class="secondary" type="button">Clear Boundary</button>
+            </div>
+            <input id="boundaryGeojson" type="hidden" />
+            <div id="boundaryHint" class="hint">Click Draw Boundary, then click the map to add boundary vertices.</div>
+          </div>
+
+          <div class="full">
             <div id="map"></div>
-            <div class="hint">Tip: click on map to autofill latitude/longitude.</div>
+            <div class="hint">Tip: in normal mode, click map to autofill latitude/longitude.</div>
           </div>
 
           <div class="full">
@@ -293,6 +323,11 @@
       const postal = document.getElementById("postal");
       const lat = document.getElementById("lat");
       const lon = document.getElementById("lon");
+      const boundaryGeojson = document.getElementById("boundaryGeojson");
+      const boundaryHint = document.getElementById("boundaryHint");
+      const drawBoundaryBtn = document.getElementById("drawBoundaryBtn");
+      const finishBoundaryBtn = document.getElementById("finishBoundaryBtn");
+      const clearBoundaryBtn = document.getElementById("clearBoundaryBtn");
       const submitBtn = document.getElementById("submitBtn");
       const statusEl = document.getElementById("status");
 
@@ -308,7 +343,8 @@
             city.value.trim() ||
             state.value.trim() ||
             street.value.trim() ||
-            postal.value.trim()
+            postal.value.trim() ||
+            boundaryGeojson.value.trim()
         );
       }
 
@@ -323,7 +359,7 @@
           return;
         }
         if (!hasLocation()) {
-          setStatus("Add location info (address and/or coordinates).", "error");
+          setStatus("Add location info (address, coordinates, and/or boundary polygon).", "error");
           return;
         }
 
@@ -343,6 +379,7 @@
           if (postal.value.trim()) form.append("postal_code", postal.value.trim());
           if (lat.value.trim()) form.append("latitude", lat.value.trim());
           if (lon.value.trim()) form.append("longitude", lon.value.trim());
+          if (boundaryGeojson.value.trim()) form.append("boundary_geojson", boundaryGeojson.value.trim());
 
           const res = await fetch("/upload", { method: "POST", body: form });
           if (!res.ok) {
@@ -375,7 +412,95 @@
           attribution: "&copy; OpenStreetMap contributors",
         }).addTo(map);
         let marker = null;
+        let drawingBoundary = false;
+        let boundaryPolyline = null;
+        let boundaryPolygon = null;
+        let boundaryPoints = [];
+
+        function renderBoundary() {
+          if (boundaryPolyline) {
+            boundaryPolyline.remove();
+            boundaryPolyline = null;
+          }
+          if (boundaryPolygon) {
+            boundaryPolygon.remove();
+            boundaryPolygon = null;
+          }
+          if (!boundaryPoints.length) return;
+          if (drawingBoundary || boundaryPoints.length < 3) {
+            boundaryPolyline = L.polyline(boundaryPoints, {
+              color: "#1a66ff",
+              weight: 3,
+              dashArray: "7 5",
+            }).addTo(map);
+            return;
+          }
+          boundaryPolygon = L.polygon(boundaryPoints, {
+            color: "#1a66ff",
+            weight: 2,
+            fillColor: "#3c7bff",
+            fillOpacity: 0.18,
+          }).addTo(map);
+          map.fitBounds(boundaryPolygon.getBounds(), { padding: [20, 20], maxZoom: 15 });
+        }
+
+        function writeBoundaryGeojson() {
+          if (drawingBoundary || boundaryPoints.length < 3) {
+            boundaryGeojson.value = "";
+            return;
+          }
+          const coordinates = boundaryPoints.map(([pointLat, pointLon]) => [
+            Number(pointLon.toFixed(6)),
+            Number(pointLat.toFixed(6)),
+          ]);
+          const first = coordinates[0];
+          const last = coordinates[coordinates.length - 1];
+          if (first[0] !== last[0] || first[1] !== last[1]) {
+            coordinates.push([first[0], first[1]]);
+          }
+          boundaryGeojson.value = JSON.stringify({
+            type: "Polygon",
+            coordinates: [coordinates],
+          });
+        }
+
+        drawBoundaryBtn.addEventListener("click", () => {
+          drawingBoundary = true;
+          boundaryHint.textContent = "Boundary draw mode on: click map to add vertices, then click Finish Polygon.";
+          setStatus("Boundary drawing started.");
+          renderBoundary();
+          writeBoundaryGeojson();
+        });
+
+        finishBoundaryBtn.addEventListener("click", () => {
+          if (boundaryPoints.length < 3) {
+            setStatus("Boundary needs at least 3 points.", "error");
+            return;
+          }
+          drawingBoundary = false;
+          renderBoundary();
+          writeBoundaryGeojson();
+          boundaryHint.textContent = `Boundary saved with ${boundaryPoints.length} vertices.`;
+          setStatus("Boundary polygon captured from map.", "ok");
+        });
+
+        clearBoundaryBtn.addEventListener("click", () => {
+          drawingBoundary = false;
+          boundaryPoints = [];
+          boundaryGeojson.value = "";
+          boundaryHint.textContent = "Boundary cleared. Click Draw Boundary to start again.";
+          renderBoundary();
+          setStatus("Boundary cleared.");
+        });
+
         map.on("click", (e) => {
+          if (drawingBoundary) {
+            boundaryPoints.push([e.latlng.lat, e.latlng.lng]);
+            renderBoundary();
+            writeBoundaryGeojson();
+            setStatus(`Boundary point ${boundaryPoints.length} added.`);
+            return;
+          }
           lat.value = e.latlng.lat.toFixed(6);
           lon.value = e.latlng.lng.toFixed(6);
           if (marker) marker.remove();

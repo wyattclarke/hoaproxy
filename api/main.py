@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from html import escape as html_escape
+import json
 import logging
 import re
 import shutil
@@ -94,6 +95,7 @@ class HoaLocation(BaseModel):
     country: str | None = None
     latitude: float | None = None
     longitude: float | None = None
+    boundary_geojson: dict | None = None
     source: str | None = None
     updated_at: str | None = None
 
@@ -109,6 +111,7 @@ class HoaSummary(BaseModel):
     state: str | None = None
     latitude: float | None = None
     longitude: float | None = None
+    boundary_geojson: dict | None = None
 
 
 def _normalize_hoa_name(raw_name: str) -> str:
@@ -221,6 +224,99 @@ def _geocode_from_parts(*, street: str | None, city: str | None, state: str | No
     except Exception:
         logger.exception("Geocoding failed for query: %s", query)
         return None
+
+
+def _sanitize_geojson_position(position: object) -> list[float]:
+    if not isinstance(position, (list, tuple)) or len(position) < 2:
+        raise HTTPException(status_code=400, detail="boundary_geojson positions must be [longitude, latitude]")
+    try:
+        longitude = float(position[0])
+        latitude = float(position[1])
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="boundary_geojson positions must contain numeric longitude/latitude") from exc
+    if not (-180 <= longitude <= 180):
+        raise HTTPException(status_code=400, detail="boundary_geojson longitude must be between -180 and 180")
+    if not (-90 <= latitude <= 90):
+        raise HTTPException(status_code=400, detail="boundary_geojson latitude must be between -90 and 90")
+    return [round(longitude, 6), round(latitude, 6)]
+
+
+def _sanitize_geojson_ring(ring: object) -> list[list[float]]:
+    if not isinstance(ring, list) or not ring:
+        raise HTTPException(status_code=400, detail="boundary_geojson ring must be a non-empty array")
+    cleaned = [_sanitize_geojson_position(point) for point in ring]
+    if len(cleaned) < 3:
+        raise HTTPException(status_code=400, detail="boundary_geojson polygon ring needs at least 3 points")
+    if cleaned[0] != cleaned[-1]:
+        cleaned.append([cleaned[0][0], cleaned[0][1]])
+    if len(cleaned) < 4:
+        raise HTTPException(status_code=400, detail="boundary_geojson polygon ring must be closed")
+    return cleaned
+
+
+def _parse_boundary_geojson(raw_boundary: str | None) -> str | None:
+    if raw_boundary is None:
+        return None
+    cleaned = raw_boundary.strip()
+    if not cleaned:
+        return None
+    try:
+        parsed = json.loads(cleaned)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="boundary_geojson must be valid JSON") from exc
+    if not isinstance(parsed, dict):
+        raise HTTPException(status_code=400, detail="boundary_geojson must be a GeoJSON object")
+
+    geo_type = parsed.get("type")
+    coordinates = parsed.get("coordinates")
+    if geo_type not in {"Polygon", "MultiPolygon"}:
+        raise HTTPException(status_code=400, detail="boundary_geojson type must be Polygon or MultiPolygon")
+
+    if geo_type == "Polygon":
+        if not isinstance(coordinates, list) or not coordinates:
+            raise HTTPException(status_code=400, detail="boundary_geojson Polygon coordinates are required")
+        normalized = {"type": "Polygon", "coordinates": [_sanitize_geojson_ring(ring) for ring in coordinates]}
+    else:
+        if not isinstance(coordinates, list) or not coordinates:
+            raise HTTPException(status_code=400, detail="boundary_geojson MultiPolygon coordinates are required")
+        polygons: list[list[list[list[float]]]] = []
+        for polygon in coordinates:
+            if not isinstance(polygon, list) or not polygon:
+                raise HTTPException(status_code=400, detail="boundary_geojson MultiPolygon polygon must include rings")
+            polygons.append([_sanitize_geojson_ring(ring) for ring in polygon])
+        normalized = {"type": "MultiPolygon", "coordinates": polygons}
+
+    return json.dumps(normalized, separators=(",", ":"))
+
+
+def _center_from_boundary_geojson(boundary_geojson: str | None) -> tuple[float, float] | None:
+    if not boundary_geojson:
+        return None
+    try:
+        parsed = json.loads(boundary_geojson)
+    except Exception:
+        return None
+
+    points: list[tuple[float, float]] = []
+
+    def collect(coords: object) -> None:
+        if not isinstance(coords, list):
+            return
+        if coords and isinstance(coords[0], (int, float)) and len(coords) >= 2:
+            points.append((float(coords[1]), float(coords[0])))
+            return
+        for child in coords:
+            collect(child)
+
+    collect(parsed.get("coordinates"))
+    if not points:
+        return None
+
+    min_lat = min(point[0] for point in points)
+    max_lat = max(point[0] for point in points)
+    min_lon = min(point[1] for point in points)
+    max_lon = max(point[1] for point in points)
+    return ((min_lat + max_lat) / 2, (min_lon + max_lon) / 2)
 
 
 def _infer_and_store_location(hoa_name: str) -> dict | None:
@@ -496,10 +592,12 @@ def upsert_hoa_location(
     country: str | None = Form(default=None),
     latitude: float | None = Form(default=None),
     longitude: float | None = Form(default=None),
+    boundary_geojson: str | None = Form(default=None),
 ) -> HoaLocation:
     settings = load_settings()
     resolved_hoa = _resolve_hoa_name(hoa_name)
     normalized_website = _normalize_website_url(website_url)
+    normalized_boundary = _parse_boundary_geojson(boundary_geojson)
     if latitude is not None and not (-90 <= latitude <= 90):
         raise HTTPException(status_code=400, detail="latitude must be between -90 and 90")
     if longitude is not None and not (-180 <= longitude <= 180):
@@ -513,6 +611,10 @@ def upsert_hoa_location(
         )
         if coords:
             latitude, longitude = coords
+    if (latitude is None or longitude is None) and normalized_boundary:
+        center = _center_from_boundary_geojson(normalized_boundary)
+        if center:
+            latitude, longitude = center
     with db.get_connection(settings.db_path) as conn:
         db.upsert_hoa_location(
             conn,
@@ -525,6 +627,7 @@ def upsert_hoa_location(
             country=(country.strip().upper() if country else None),
             latitude=latitude,
             longitude=longitude,
+            boundary_geojson=normalized_boundary,
             source="manual",
         )
         row = db.get_hoa_location(conn, resolved_hoa)
@@ -592,6 +695,7 @@ async def upload_documents(
     country: str | None = Form(default=None),
     latitude: float | None = Form(default=None),
     longitude: float | None = Form(default=None),
+    boundary_geojson: str | None = Form(default=None),
 ) -> UploadResponse:
     settings = load_settings()
     resolved_hoa = _resolve_hoa_name(hoa)
@@ -616,8 +720,9 @@ async def upload_documents(
         await upload.close()
 
     normalized_website = _normalize_website_url(website_url)
+    normalized_boundary = _parse_boundary_geojson(boundary_geojson)
     location_saved = False
-    if any(value is not None and str(value).strip() for value in [normalized_website, street, city, state, postal_code, country]) or (
+    if any(value is not None and str(value).strip() for value in [normalized_website, street, city, state, postal_code, country, normalized_boundary]) or (
         latitude is not None and longitude is not None
     ):
         if latitude is not None and not (-90 <= latitude <= 90):
@@ -633,6 +738,10 @@ async def upload_documents(
             )
             if coords:
                 latitude, longitude = coords
+        if (latitude is None or longitude is None) and normalized_boundary:
+            center = _center_from_boundary_geojson(normalized_boundary)
+            if center:
+                latitude, longitude = center
         with db.get_connection(settings.db_path) as conn:
             db.upsert_hoa_location(
                 conn,
@@ -645,6 +754,7 @@ async def upload_documents(
                 country=(country.strip().upper() if country else None),
                 latitude=latitude,
                 longitude=longitude,
+                boundary_geojson=normalized_boundary,
                 source="manual",
             )
         location_saved = True

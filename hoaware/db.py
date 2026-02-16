@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 from pathlib import Path
 from typing import Sequence
@@ -76,7 +77,20 @@ def get_connection(db_path: Path) -> sqlite3.Connection:
     conn.execute("PRAGMA foreign_keys=ON;")
     conn.executescript(SCHEMA)
     _ensure_table_column(conn, "hoa_locations", "website_url", "TEXT")
+    _ensure_table_column(conn, "hoa_locations", "boundary_geojson", "TEXT")
     return conn
+
+
+def _load_geojson(raw_value: object) -> dict | None:
+    if raw_value is None:
+        return None
+    try:
+        parsed = json.loads(str(raw_value))
+    except Exception:
+        return None
+    if isinstance(parsed, dict):
+        return parsed
+    return None
 
 
 def get_or_create_hoa(conn: sqlite3.Connection, name: str) -> int:
@@ -206,7 +220,8 @@ def list_hoa_summaries(conn: sqlite3.Connection) -> list[dict]:
             l.city,
             l.state,
             l.latitude,
-            l.longitude
+            l.longitude,
+            l.boundary_geojson
         FROM hoas h
         JOIN doc_stats ds ON ds.hoa_id = h.id
         LEFT JOIN chunk_stats cs ON cs.hoa_id = h.id
@@ -227,6 +242,7 @@ def list_hoa_summaries(conn: sqlite3.Connection) -> list[dict]:
             "state": str(row["state"]) if row["state"] is not None else None,
             "latitude": float(row["latitude"]) if row["latitude"] is not None else None,
             "longitude": float(row["longitude"]) if row["longitude"] is not None else None,
+            "boundary_geojson": _load_geojson(row["boundary_geojson"]),
         }
         for row in rows
     ]
@@ -246,6 +262,7 @@ def get_hoa_location(conn: sqlite3.Connection, hoa_name: str) -> dict | None:
             l.country,
             l.latitude,
             l.longitude,
+            l.boundary_geojson,
             l.source,
             l.updated_at
         FROM hoas h
@@ -263,6 +280,7 @@ def get_hoa_location(conn: sqlite3.Connection, hoa_name: str) -> dict | None:
         and row["city"] is None
         and row["street"] is None
         and row["website_url"] is None
+        and row["boundary_geojson"] is None
     ):
         return {
             "hoa": str(row["hoa"]),
@@ -275,6 +293,7 @@ def get_hoa_location(conn: sqlite3.Connection, hoa_name: str) -> dict | None:
             "country": None,
             "latitude": None,
             "longitude": None,
+            "boundary_geojson": None,
             "source": None,
             "updated_at": None,
         }
@@ -289,6 +308,7 @@ def get_hoa_location(conn: sqlite3.Connection, hoa_name: str) -> dict | None:
         "country": str(row["country"]) if row["country"] is not None else None,
         "latitude": float(row["latitude"]) if row["latitude"] is not None else None,
         "longitude": float(row["longitude"]) if row["longitude"] is not None else None,
+        "boundary_geojson": _load_geojson(row["boundary_geojson"]),
         "source": str(row["source"]) if row["source"] is not None else None,
         "updated_at": str(row["updated_at"]) if row["updated_at"] is not None else None,
     }
@@ -307,6 +327,7 @@ def upsert_hoa_location(
     country: str | None = None,
     latitude: float | None = None,
     longitude: float | None = None,
+    boundary_geojson: str | None = None,
     source: str | None = None,
 ) -> None:
     hoa_id = get_or_create_hoa(conn, hoa_name)
@@ -319,8 +340,8 @@ def upsert_hoa_location(
         conn.execute(
             """
             INSERT INTO hoa_locations
-                (hoa_id, display_name, website_url, street, city, state, postal_code, country, latitude, longitude, source)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (hoa_id, display_name, website_url, street, city, state, postal_code, country, latitude, longitude, boundary_geojson, source)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 hoa_id,
@@ -333,6 +354,7 @@ def upsert_hoa_location(
                 country or "US",
                 latitude,
                 longitude,
+                boundary_geojson,
                 source or "manual",
             ),
         )
@@ -352,6 +374,7 @@ def upsert_hoa_location(
             country = COALESCE(?, country),
             latitude = COALESCE(?, latitude),
             longitude = COALESCE(?, longitude),
+            boundary_geojson = COALESCE(?, boundary_geojson),
             source = COALESCE(?, source),
             updated_at = CURRENT_TIMESTAMP
         WHERE hoa_id = ?
@@ -366,6 +389,7 @@ def upsert_hoa_location(
             country,
             latitude,
             longitude,
+            boundary_geojson,
             source,
             hoa_id,
         ),
@@ -387,6 +411,7 @@ def list_hoa_locations(conn: sqlite3.Connection) -> list[dict]:
             l.country,
             l.latitude,
             l.longitude,
+            l.boundary_geojson,
             l.source,
             l.updated_at
         FROM hoas h
@@ -409,6 +434,7 @@ def list_hoa_locations(conn: sqlite3.Connection) -> list[dict]:
             "country": str(row["country"]) if row["country"] is not None else None,
             "latitude": float(row["latitude"]) if row["latitude"] is not None else None,
             "longitude": float(row["longitude"]) if row["longitude"] is not None else None,
+            "boundary_geojson": _load_geojson(row["boundary_geojson"]),
             "source": str(row["source"]) if row["source"] is not None else None,
             "updated_at": str(row["updated_at"]) if row["updated_at"] is not None else None,
         }
