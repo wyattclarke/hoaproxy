@@ -197,6 +197,148 @@
         color: var(--ok);
       }
 
+      .lookup-panel {
+        margin-top: 12px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.88);
+        padding: 12px;
+      }
+
+      .lookup-panel[hidden] {
+        display: none;
+      }
+
+      .intent-grid {
+        display: grid;
+        gap: 10px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .intent-card {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: #fff;
+        padding: 10px;
+      }
+
+      .intent-title {
+        margin: 0 0 8px;
+        font-size: 0.92rem;
+        font-weight: 800;
+      }
+
+      .intent-list {
+        display: grid;
+        gap: 8px;
+      }
+
+      .intent-item {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: #f8fbff;
+        padding: 8px 10px;
+      }
+
+      .address-workflow {
+        margin-top: 10px;
+        border-top: 1px solid #d8e4f7;
+        padding-top: 10px;
+      }
+
+      .address-workflow[hidden] {
+        display: none;
+      }
+
+      .suggestion-list {
+        display: grid;
+        gap: 8px;
+      }
+
+      .suggestion-item {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: #fff;
+        padding: 8px 10px;
+      }
+
+      .suggestion-item label {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+      }
+
+      .suggestion-meta {
+        font-size: 0.82rem;
+        color: var(--muted);
+      }
+
+      .badge {
+        display: inline-block;
+        margin-right: 6px;
+        border-radius: 999px;
+        padding: 2px 8px;
+        font-size: 0.74rem;
+        font-weight: 700;
+        border: 1px solid transparent;
+      }
+
+      .badge.inside {
+        background: #e8f8ef;
+        border-color: #bde7ce;
+        color: #1f6f42;
+      }
+
+      .badge.near-boundary {
+        background: #fff6e8;
+        border-color: #f0dbb4;
+        color: #8a5e15;
+      }
+
+      .badge.near-point {
+        background: #edf2ff;
+        border-color: #d3dfff;
+        color: #3258a8;
+      }
+
+      .mode-row {
+        margin-top: 10px;
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .query-row {
+        margin-top: 8px;
+        display: grid;
+        gap: 8px;
+        grid-template-columns: 1fr auto;
+      }
+
+      .query-row input {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 10px;
+        font: inherit;
+      }
+
+      .result-box {
+        margin-top: 10px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: #fff;
+        padding: 10px;
+      }
+
+      .result-item {
+        padding: 8px 0;
+        border-bottom: 1px solid #edf2fa;
+      }
+
+      .result-item:last-child {
+        border-bottom: 0;
+      }
+
       .grid {
         margin-top: 16px;
         display: grid;
@@ -304,6 +446,14 @@
         .search-row {
           grid-template-columns: 1fr;
         }
+
+        .intent-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .query-row {
+          grid-template-columns: 1fr;
+        }
       }
     </style>
   </head>
@@ -321,10 +471,39 @@
         </div>
         <p class="subtitle">Civil society for your neighborhood. Make HOA life better, together.</p>
         <div class="search-row">
-          <input id="searchInput" placeholder="Search by HOA name, city, or state" />
-          <div class="meta" id="countMeta"></div>
+          <input id="searchInput" placeholder="Search by HOA name or enter an address" />
+          <button class="btn primary" id="searchSubmitBtn" type="button">Search</button>
         </div>
+        <div class="meta" id="countMeta"></div>
         <div id="homeStatus" class="status"></div>
+        <section id="lookupPanel" class="lookup-panel" hidden>
+          <div class="intent-grid">
+            <article class="intent-card">
+              <h3 class="intent-title">HOA Matches</h3>
+              <div class="intent-list" id="hoaIntentList"></div>
+            </article>
+            <article class="intent-card">
+              <h3 class="intent-title">Address Match</h3>
+              <div id="addressIntentCard"></div>
+            </article>
+          </div>
+          <div id="lookupStatus" class="status"></div>
+          <section id="addressWorkflow" class="address-workflow" hidden>
+            <h3 class="intent-title">Suggested HOAs</h3>
+            <div class="suggestion-list" id="addressSuggestions"></div>
+            <div class="mode-row">
+              <button class="btn primary" id="multiModeQaBtn" type="button">Ask</button>
+              <button class="btn" id="multiModeSearchBtn" type="button">Search</button>
+            </div>
+            <div class="query-row">
+              <input id="multiQueryInput" placeholder="Ask a question or enter a search query" />
+              <button class="btn primary" id="runMultiBtn" type="button">Run</button>
+            </div>
+            <div id="multiStatus" class="status"></div>
+            <div id="multiOutput" class="result-box"></div>
+            <div id="multiSources" class="result-box"></div>
+          </section>
+        </section>
       </section>
 
       <section class="grid">
@@ -353,16 +532,43 @@
         map: null,
         markerLayer: null,
         polygonLayer: null,
+        lookupResult: null,
+        selectedHoas: new Set(),
+        multiMode: "qa",
       };
 
       const searchInput = document.getElementById("searchInput");
+      const searchSubmitBtn = document.getElementById("searchSubmitBtn");
       const countMeta = document.getElementById("countMeta");
       const homeStatus = document.getElementById("homeStatus");
       const hoaList = document.getElementById("hoaList");
+      const lookupPanel = document.getElementById("lookupPanel");
+      const hoaIntentList = document.getElementById("hoaIntentList");
+      const addressIntentCard = document.getElementById("addressIntentCard");
+      const lookupStatus = document.getElementById("lookupStatus");
+      const addressWorkflow = document.getElementById("addressWorkflow");
+      const addressSuggestions = document.getElementById("addressSuggestions");
+      const multiModeQaBtn = document.getElementById("multiModeQaBtn");
+      const multiModeSearchBtn = document.getElementById("multiModeSearchBtn");
+      const multiQueryInput = document.getElementById("multiQueryInput");
+      const runMultiBtn = document.getElementById("runMultiBtn");
+      const multiStatus = document.getElementById("multiStatus");
+      const multiOutput = document.getElementById("multiOutput");
+      const multiSources = document.getElementById("multiSources");
 
       function setStatus(message, kind = "") {
         homeStatus.className = `status ${kind}`.trim();
         homeStatus.textContent = message || "";
+      }
+
+      function setLookupStatus(message, kind = "") {
+        lookupStatus.className = `status ${kind}`.trim();
+        lookupStatus.textContent = message || "";
+      }
+
+      function setMultiStatus(message, kind = "") {
+        multiStatus.className = `status ${kind}`.trim();
+        multiStatus.textContent = message || "";
       }
 
       function escapeHtml(text) {
@@ -387,7 +593,11 @@
       }
 
       async function fetchJson(path, options = {}) {
-        const res = await fetch(path, options);
+        const isFormData = options.body instanceof FormData;
+        const headers = isFormData
+          ? { ...(options.headers || {}) }
+          : { "Content-Type": "application/json", ...(options.headers || {}) };
+        const res = await fetch(path, { ...options, headers });
         if (!res.ok) {
           let detail = `${res.status} ${res.statusText}`;
           try {
@@ -509,8 +719,8 @@
         for (const item of state.filtered) {
           const popupHtml =
             `<a class="hoa-name-link" href="${profileHref(item.hoa)}"><strong>${escapeHtml(item.hoa)}</strong></a><br>` +
-              `<span class="meta">${escapeHtml(locationText(item))}</span><br>` +
-              `${item.doc_count} docs`;
+            `<span class="meta">${escapeHtml(locationText(item))}</span><br>` +
+            `${item.doc_count} docs`;
 
           const boundaryLayer = buildBoundaryLayer(item);
           if (boundaryLayer) {
@@ -556,6 +766,7 @@
         const q = searchInput.value.trim().toLowerCase();
         if (!q) {
           state.filtered = [...state.summaries];
+          lookupPanel.hidden = true;
         } else {
           state.filtered = state.summaries.filter((item) => {
             const haystack = `${item.hoa} ${item.city || ""} ${item.state || ""} ${item.website_url || ""}`.toLowerCase();
@@ -564,6 +775,206 @@
         }
         renderList();
         renderMarkers();
+      }
+
+      function clearMultiResults() {
+        multiOutput.innerHTML = "Run a query after selecting one or more HOAs.";
+        multiSources.innerHTML = "Citations will appear here.";
+      }
+
+      function renderHoaMatches(items) {
+        if (!items.length) {
+          hoaIntentList.innerHTML = '<div class="intent-item">No HOA name matches.</div>';
+          return;
+        }
+        hoaIntentList.innerHTML = items
+          .map(
+            (item) =>
+              `<div class="intent-item"><a class="hoa-name-link" href="${profileHref(item.hoa)}">${escapeHtml(item.hoa)}</a><div class="suggestion-meta">Matched by HOA name</div></div>`
+          )
+          .join("");
+      }
+
+      function matchTypeBadge(matchType) {
+        if (matchType === "inside_boundary") return '<span class="badge inside">Inside boundary</span>';
+        if (matchType === "near_boundary") return '<span class="badge near-boundary">Nearby boundary</span>';
+        return '<span class="badge near-point">Nearby point</span>';
+      }
+
+      function renderAddressSuggestions() {
+        const suggestions = (state.lookupResult && state.lookupResult.address_suggestions) || [];
+        if (!suggestions.length) {
+          addressSuggestions.innerHTML = '<div class="suggestion-item">No HOA suggestions for this address.</div>';
+          return;
+        }
+        addressSuggestions.innerHTML = suggestions
+          .map((item) => {
+            const checked = state.selectedHoas.has(item.hoa) ? "checked" : "";
+            const miles = Number(item.distance_m || 0) / 1609.0;
+            const distanceLabel = item.match_type === "inside_boundary" ? "0.00 mi" : `${miles.toFixed(2)} mi`;
+            return (
+              `<div class="suggestion-item">` +
+              `<label><input class="suggestion-checkbox" type="checkbox" data-hoa="${encodeURIComponent(item.hoa)}" ${checked} />` +
+              `<span><strong>${escapeHtml(item.hoa)}</strong><br>${matchTypeBadge(item.match_type)}<span class="suggestion-meta">${escapeHtml(item.reason)} · ${distanceLabel}</span></span></label>` +
+              `</div>`
+            );
+          })
+          .join("");
+
+        for (const checkbox of document.querySelectorAll(".suggestion-checkbox")) {
+          checkbox.addEventListener("change", (e) => {
+            const encodedHoa = e.target.getAttribute("data-hoa");
+            const hoa = encodedHoa ? decodeURIComponent(encodedHoa) : "";
+            if (!hoa) return;
+            if (e.target.checked) state.selectedHoas.add(hoa);
+            else state.selectedHoas.delete(hoa);
+          });
+        }
+      }
+
+      function renderAddressIntent(addressLookup, suggestions) {
+        if (!addressLookup || !addressLookup.resolved) {
+          addressIntentCard.innerHTML = '<div class="intent-item">No address match from this input.</div>';
+          addressWorkflow.hidden = true;
+          return;
+        }
+        const suggestionsCount = suggestions.length;
+        addressIntentCard.innerHTML =
+          `<div class="intent-item"><strong>${escapeHtml(addressLookup.display_name || "Address resolved")}</strong><div class="suggestion-meta">` +
+          `${addressLookup.latitude.toFixed(6)}, ${addressLookup.longitude.toFixed(6)} · ${suggestionsCount} HOA suggestion${suggestionsCount === 1 ? "" : "s"}</div></div>` +
+          (suggestionsCount
+            ? '<div style="margin-top:8px"><button class="btn primary" id="useAddressBtn" type="button">Use Address Suggestions</button></div>'
+            : "");
+
+        const button = document.getElementById("useAddressBtn");
+        if (button) {
+          button.addEventListener("click", () => {
+            addressWorkflow.hidden = false;
+            renderAddressSuggestions();
+            setLookupStatus("Review HOA selections, then run Ask or Search.", "ok");
+          });
+        } else {
+          addressWorkflow.hidden = true;
+        }
+      }
+
+      function renderLookupResult(payload) {
+        state.lookupResult = payload;
+        state.selectedHoas = new Set(
+          (payload.address_suggestions || [])
+            .filter((item) => item.default_selected)
+            .map((item) => item.hoa)
+        );
+        lookupPanel.hidden = false;
+        clearMultiResults();
+        setMultiStatus("");
+        renderHoaMatches(payload.hoa_matches || []);
+        renderAddressIntent(payload.address_lookup, payload.address_suggestions || []);
+        if (!(payload.hoa_matches || []).length && !(payload.address_lookup && payload.address_lookup.resolved)) {
+          setLookupStatus("No HOA or address match found.", "error");
+          return;
+        }
+        setLookupStatus("Lookup complete.", "ok");
+      }
+
+      function setMultiMode(mode) {
+        state.multiMode = mode;
+        if (mode === "qa") {
+          multiModeQaBtn.classList.add("primary");
+          multiModeSearchBtn.classList.remove("primary");
+          multiQueryInput.placeholder = "Ask a question across selected HOAs";
+        } else {
+          multiModeSearchBtn.classList.add("primary");
+          multiModeQaBtn.classList.remove("primary");
+          multiQueryInput.placeholder = "Search selected HOA documents";
+        }
+      }
+
+      function renderSources(sources) {
+        if (!sources || !sources.length) {
+          multiSources.innerHTML = "No citations returned.";
+          return;
+        }
+        multiSources.innerHTML =
+          "<strong>Citations</strong>" +
+          sources
+            .map((source) => {
+              const hoa = source.hoa ? `${escapeHtml(source.hoa)} • ` : "";
+              return `<div class="result-item">${hoa}${escapeHtml(source.document || "unknown")} • pages ${escapeHtml(source.pages || "unknown")}</div>`;
+            })
+            .join("");
+      }
+
+      async function runMultiQuery() {
+        const selectedHoas = [...state.selectedHoas];
+        if (!selectedHoas.length) {
+          setMultiStatus("Select at least one HOA.", "error");
+          return;
+        }
+        const query = multiQueryInput.value.trim();
+        if (!query) {
+          setMultiStatus(state.multiMode === "qa" ? "Enter a question." : "Enter a search query.", "error");
+          return;
+        }
+
+        runMultiBtn.disabled = true;
+        multiOutput.innerHTML = "";
+        multiSources.innerHTML = "";
+        setMultiStatus(state.multiMode === "qa" ? "Generating answer..." : "Searching...");
+        try {
+          if (state.multiMode === "qa") {
+            const body = await fetchJson("/qa/multi", {
+              method: "POST",
+              body: JSON.stringify({ hoas: selectedHoas, question: query, k: 8 }),
+            });
+            multiOutput.innerHTML = `<div>${escapeHtml(body.answer || "")}</div>`;
+            renderSources(body.sources || []);
+            setMultiStatus("Answer ready.", "ok");
+          } else {
+            const body = await fetchJson("/search/multi", {
+              method: "POST",
+              body: JSON.stringify({ hoas: selectedHoas, query, k: 8 }),
+            });
+            const results = body.results || [];
+            multiOutput.innerHTML = results.length
+              ? results
+                  .map(
+                    (item) =>
+                      `<div class="result-item"><strong>${escapeHtml(item.hoa)}</strong> · score ${Number(item.score).toFixed(3)} · ${escapeHtml(item.document)} · pages ${escapeHtml(item.pages)}<br>${escapeHtml(item.excerpt)}</div>`
+                  )
+                  .join("")
+              : "No results found.";
+            renderSources(
+              results.map((item) => ({ hoa: item.hoa, document: item.document, pages: item.pages }))
+            );
+            setMultiStatus(results.length ? `Found ${results.length} result(s).` : "No results.", results.length ? "ok" : "");
+          }
+        } catch (err) {
+          setMultiStatus(String(err.message || err), "error");
+        } finally {
+          runMultiBtn.disabled = false;
+        }
+      }
+
+      async function runUniversalLookup() {
+        const q = searchInput.value.trim();
+        if (!q) {
+          lookupPanel.hidden = true;
+          setLookupStatus("");
+          return;
+        }
+        lookupPanel.hidden = false;
+        addressWorkflow.hidden = true;
+        setLookupStatus("Looking up HOA names and address...");
+        try {
+          const payload = await fetchJson("/lookup/universal", {
+            method: "POST",
+            body: JSON.stringify({ query: q, max_suggestions: 12 }),
+          });
+          renderLookupResult(payload);
+        } catch (err) {
+          setLookupStatus(String(err.message || err), "error");
+        }
       }
 
       async function loadSummaries() {
@@ -580,7 +991,19 @@
       }
 
       searchInput.addEventListener("input", applyFilter);
+      searchInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          runUniversalLookup();
+        }
+      });
+      searchSubmitBtn.addEventListener("click", runUniversalLookup);
+      multiModeQaBtn.addEventListener("click", () => setMultiMode("qa"));
+      multiModeSearchBtn.addEventListener("click", () => setMultiMode("search"));
+      runMultiBtn.addEventListener("click", runMultiQuery);
 
+      setMultiMode("qa");
+      clearMultiResults();
       initMap();
       loadSummaries();
     </script>

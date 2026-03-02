@@ -3,6 +3,7 @@ from __future__ import annotations
 from html import escape as html_escape
 import json
 import logging
+import math
 import re
 import shutil
 from pathlib import Path
@@ -17,8 +18,15 @@ from pydantic import BaseModel, Field
 
 from hoaware import db
 from hoaware.config import load_settings
+from hoaware.law import (
+    answer_electronic_proxy_questions,
+    answer_law_question,
+    electronic_proxy_summary,
+    list_jurisdictions,
+    list_profiles,
+)
 from hoaware.ingest import ingest_pdf_paths
-from hoaware.qa import get_answer, retrieve_context
+from hoaware.qa import get_answer, get_answer_multi, retrieve_context, retrieve_context_multi
 
 app = FastAPI(title="HOA QA API", version="0.2.0")
 _FILENAME_RE = re.compile(r"[^A-Za-z0-9._ -]+")
@@ -30,6 +38,9 @@ _STREET_RE = re.compile(
     r"(?:Street|St|Road|Rd|Avenue|Ave|Lane|Ln|Drive|Dr|Boulevard|Blvd|Court|Ct|Way|Circle|Cir|Parkway|Pkwy|Trail|Trl)\b",
     re.IGNORECASE,
 )
+_EARTH_RADIUS_M = 6371000.0
+_NEAR_BOUNDARY_M = 250.0
+_NEAR_POINT_M = 1609.0
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 logger = logging.getLogger(__name__)
 
@@ -66,6 +77,64 @@ class SearchResponse(BaseModel):
     results: List[SearchResult]
 
 
+class MultiSearchRequest(BaseModel):
+    hoas: list[str]
+    query: str
+    k: int = Field(default=8, ge=1, le=20)
+
+
+class MultiSearchResult(BaseModel):
+    score: float
+    hoa: str
+    document: str
+    pages: str
+    excerpt: str
+
+
+class MultiSearchResponse(BaseModel):
+    results: List[MultiSearchResult]
+
+
+class MultiQARequest(BaseModel):
+    hoas: list[str]
+    question: str
+    k: int = Field(default=8, ge=1, le=20)
+    model: str = "gpt-5-mini"
+
+
+class HoaMatch(BaseModel):
+    hoa: str
+    match_reason: str
+
+
+class AddressLookup(BaseModel):
+    resolved: bool
+    display_name: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+
+
+class AddressSuggestion(BaseModel):
+    hoa: str
+    match_type: str
+    confidence: str
+    default_selected: bool
+    distance_m: float
+    reason: str
+
+
+class UniversalLookupRequest(BaseModel):
+    query: str
+    max_suggestions: int = Field(default=12, ge=1, le=50)
+
+
+class UniversalLookupResponse(BaseModel):
+    query: str
+    hoa_matches: list[HoaMatch]
+    address_lookup: AddressLookup
+    address_suggestions: list[AddressSuggestion]
+
+
 class UploadResponse(BaseModel):
     hoa: str
     saved_files: List[str]
@@ -74,6 +143,72 @@ class UploadResponse(BaseModel):
     failed: int
     queued: bool = False
     location_saved: bool = False
+
+
+class LawJurisdictionSummary(BaseModel):
+    jurisdiction: str
+    community_types: int
+    profile_count: int
+    last_verified_date: str | None = None
+    rule_count: int
+
+
+class LawProfile(BaseModel):
+    id: int
+    jurisdiction: str
+    community_type: str
+    entity_form: str
+    governing_law_stack: list[dict]
+    records_access_summary: str | None = None
+    records_sharing_limits_summary: str | None = None
+    proxy_voting_summary: str | None = None
+    conflict_resolution_notes: str | None = None
+    known_gaps: list[str]
+    confidence: str
+    last_verified_date: str | None = None
+    source_rule_count: int
+    created_at: str
+    updated_at: str
+
+
+class LawQARequest(BaseModel):
+    jurisdiction: str = Field(..., min_length=2, max_length=2)
+    community_type: str
+    question_family: str
+    entity_form: str = "unknown"
+
+
+class LawQAResponse(BaseModel):
+    answer: str
+    checklist: list[str]
+    citations: list[dict]
+    known_unknowns: list[str]
+    confidence: str
+    last_verified_date: str | None = None
+    disclaimer: str
+
+
+class ElectronicProxyQuestionResponse(BaseModel):
+    jurisdiction: str
+    community_type: str
+    entity_form: str
+    electronic_assignment: dict
+    electronic_signature: dict
+    known_unknowns: list[str]
+    confidence: str
+    last_verified_date: str | None = None
+    disclaimer: str
+
+
+class ElectronicProxySummaryItem(BaseModel):
+    jurisdiction: str
+    community_type: str
+    entity_form: str
+    electronic_assignment_status: str
+    electronic_signature_status: str
+    confidence: str
+    last_verified_date: str | None = None
+    known_unknowns: list[str]
 
 
 class DocumentSummary(BaseModel):
@@ -226,6 +361,317 @@ def _geocode_from_parts(*, street: str | None, city: str | None, state: str | No
         return None
 
 
+def _geocode_from_query(query: str) -> dict | None:
+    cleaned = query.strip()
+    if not cleaned:
+        return None
+    try:
+        resp = requests.get(
+            "https://nominatim.openstreetmap.org/search",
+            params={"q": cleaned, "format": "json", "limit": 1},
+            headers={"User-Agent": "hoaware/0.2 (local-ui-location)"},
+            timeout=20,
+        )
+        resp.raise_for_status()
+        rows = resp.json()
+        if not rows:
+            return None
+        row = rows[0]
+        return {
+            "display_name": str(row.get("display_name") or cleaned),
+            "latitude": float(row["lat"]),
+            "longitude": float(row["lon"]),
+        }
+    except Exception:
+        logger.exception("Geocoding failed for free-form query: %s", cleaned)
+        return None
+
+
+def _normalize_geojson_ring(ring: object) -> list[tuple[float, float]] | None:
+    if not isinstance(ring, list):
+        return None
+    points: list[tuple[float, float]] = []
+    for coord in ring:
+        if not isinstance(coord, (list, tuple)) or len(coord) < 2:
+            return None
+        try:
+            lon = float(coord[0])
+            lat = float(coord[1])
+        except Exception:
+            return None
+        if not (-180 <= lon <= 180 and -90 <= lat <= 90):
+            return None
+        points.append((lon, lat))
+    if len(points) < 3:
+        return None
+    if points[0] != points[-1]:
+        points.append(points[0])
+    if len(points) < 4:
+        return None
+    return points
+
+
+def _extract_geojson_polygons(boundary_geojson: object) -> list[list[list[tuple[float, float]]]]:
+    if not isinstance(boundary_geojson, dict):
+        return []
+    geo_type = boundary_geojson.get("type")
+    coords = boundary_geojson.get("coordinates")
+    polygons: list[list[list[tuple[float, float]]]] = []
+    if geo_type == "Polygon":
+        if not isinstance(coords, list):
+            return []
+        rings: list[list[tuple[float, float]]] = []
+        for ring in coords:
+            normalized = _normalize_geojson_ring(ring)
+            if normalized is None:
+                return []
+            rings.append(normalized)
+        if rings:
+            polygons.append(rings)
+        return polygons
+    if geo_type == "MultiPolygon":
+        if not isinstance(coords, list):
+            return []
+        for polygon in coords:
+            if not isinstance(polygon, list):
+                return []
+            rings: list[list[tuple[float, float]]] = []
+            for ring in polygon:
+                normalized = _normalize_geojson_ring(ring)
+                if normalized is None:
+                    return []
+                rings.append(normalized)
+            if rings:
+                polygons.append(rings)
+        return polygons
+    return []
+
+
+def _point_on_segment(
+    point: tuple[float, float],
+    a: tuple[float, float],
+    b: tuple[float, float],
+    eps: float = 1e-12,
+) -> bool:
+    (px, py), (ax, ay), (bx, by) = point, a, b
+    cross = (px - ax) * (by - ay) - (py - ay) * (bx - ax)
+    if abs(cross) > eps:
+        return False
+    dot = (px - ax) * (bx - ax) + (py - ay) * (by - ay)
+    if dot < -eps:
+        return False
+    sq_len = (bx - ax) ** 2 + (by - ay) ** 2
+    if dot - sq_len > eps:
+        return False
+    return True
+
+
+def _point_in_ring(point_lon: float, point_lat: float, ring: list[tuple[float, float]]) -> bool:
+    inside = False
+    for i in range(len(ring) - 1):
+        x1, y1 = ring[i]
+        x2, y2 = ring[i + 1]
+        if _point_on_segment((point_lon, point_lat), (x1, y1), (x2, y2)):
+            return True
+        intersects = ((y1 > point_lat) != (y2 > point_lat)) and (
+            point_lon < ((x2 - x1) * (point_lat - y1) / ((y2 - y1) or 1e-15) + x1)
+        )
+        if intersects:
+            inside = not inside
+    return inside
+
+
+def _point_in_polygon(point_lon: float, point_lat: float, polygon: list[list[tuple[float, float]]]) -> bool:
+    if not polygon:
+        return False
+    outer = polygon[0]
+    if not _point_in_ring(point_lon, point_lat, outer):
+        return False
+    for hole in polygon[1:]:
+        if _point_in_ring(point_lon, point_lat, hole):
+            return False
+    return True
+
+
+def _distance_point_to_segment_m(
+    point_x: float,
+    point_y: float,
+    ax: float,
+    ay: float,
+    bx: float,
+    by: float,
+) -> float:
+    dx = bx - ax
+    dy = by - ay
+    if dx == 0.0 and dy == 0.0:
+        return math.hypot(point_x - ax, point_y - ay)
+    t = ((point_x - ax) * dx + (point_y - ay) * dy) / (dx * dx + dy * dy)
+    t = max(0.0, min(1.0, t))
+    closest_x = ax + t * dx
+    closest_y = ay + t * dy
+    return math.hypot(point_x - closest_x, point_y - closest_y)
+
+
+def _project_lon_lat_m(lon: float, lat: float, ref_lon: float, ref_lat: float) -> tuple[float, float]:
+    x = math.radians(lon - ref_lon) * _EARTH_RADIUS_M * math.cos(math.radians(ref_lat))
+    y = math.radians(lat - ref_lat) * _EARTH_RADIUS_M
+    return x, y
+
+
+def _distance_to_polygon_boundary_m(point_lon: float, point_lat: float, polygon: list[list[tuple[float, float]]]) -> float:
+    nearest = float("inf")
+    for ring in polygon:
+        for i in range(len(ring) - 1):
+            ax, ay = _project_lon_lat_m(ring[i][0], ring[i][1], point_lon, point_lat)
+            bx, by = _project_lon_lat_m(ring[i + 1][0], ring[i + 1][1], point_lon, point_lat)
+            distance = _distance_point_to_segment_m(0.0, 0.0, ax, ay, bx, by)
+            if distance < nearest:
+                nearest = distance
+    return nearest
+
+
+def _distance_to_geojson_boundary_m(point_lon: float, point_lat: float, boundary_geojson: object) -> float | None:
+    polygons = _extract_geojson_polygons(boundary_geojson)
+    if not polygons:
+        return None
+    nearest = float("inf")
+    for polygon in polygons:
+        distance = _distance_to_polygon_boundary_m(point_lon, point_lat, polygon)
+        if distance < nearest:
+            nearest = distance
+    return nearest if math.isfinite(nearest) else None
+
+
+def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    lat1r = math.radians(lat1)
+    lat2r = math.radians(lat2)
+    dlat = lat2r - lat1r
+    dlon = math.radians(lon2 - lon1)
+    a = math.sin(dlat / 2) ** 2 + math.cos(lat1r) * math.cos(lat2r) * math.sin(dlon / 2) ** 2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(max(0.0, 1 - a)))
+    return _EARTH_RADIUS_M * c
+
+
+def _ring_area_m2(ring: list[tuple[float, float]]) -> float:
+    if len(ring) < 4:
+        return 0.0
+    ref_lat = sum(lat for _, lat in ring[:-1]) / max(1, len(ring) - 1)
+    scale_x = _EARTH_RADIUS_M * math.cos(math.radians(ref_lat)) * math.pi / 180.0
+    scale_y = _EARTH_RADIUS_M * math.pi / 180.0
+    total = 0.0
+    for i in range(len(ring) - 1):
+        x1 = ring[i][0] * scale_x
+        y1 = ring[i][1] * scale_y
+        x2 = ring[i + 1][0] * scale_x
+        y2 = ring[i + 1][1] * scale_y
+        total += x1 * y2 - x2 * y1
+    return abs(total) * 0.5
+
+
+def _polygon_area_m2(polygon: list[list[tuple[float, float]]]) -> float:
+    if not polygon:
+        return 0.0
+    outer = _ring_area_m2(polygon[0])
+    holes = sum(_ring_area_m2(ring) for ring in polygon[1:])
+    return max(0.0, outer - holes)
+
+
+def _suggestions_for_point(
+    point_lat: float,
+    point_lon: float,
+    rows: list[dict],
+    max_suggestions: int,
+) -> list[dict]:
+    suggestions: list[dict] = []
+    for row in rows:
+        hoa_name = str(row.get("hoa") or "").strip()
+        if not hoa_name:
+            continue
+        boundary = row.get("boundary_geojson")
+        polygons = _extract_geojson_polygons(boundary) if boundary else []
+        inside_areas: list[float] = []
+        for polygon in polygons:
+            if _point_in_polygon(point_lon, point_lat, polygon):
+                inside_areas.append(_polygon_area_m2(polygon))
+        if inside_areas:
+            suggestions.append(
+                {
+                    "hoa": hoa_name,
+                    "match_type": "inside_boundary",
+                    "confidence": "high",
+                    "default_selected": True,
+                    "distance_m": 0.0,
+                    "reason": "Address point is inside HOA boundary polygon.",
+                    "_rank_area": min(inside_areas),
+                    "_rank_distance": 0.0,
+                }
+            )
+            continue
+
+        if polygons:
+            boundary_distance = _distance_to_geojson_boundary_m(point_lon, point_lat, boundary)
+            if boundary_distance is not None and boundary_distance <= _NEAR_BOUNDARY_M:
+                suggestions.append(
+                    {
+                        "hoa": hoa_name,
+                        "match_type": "near_boundary",
+                        "confidence": "medium",
+                        "default_selected": False,
+                        "distance_m": round(float(boundary_distance), 1),
+                        "reason": "Address point is close to HOA boundary polygon.",
+                        "_rank_area": float("inf"),
+                        "_rank_distance": float(boundary_distance),
+                    }
+                )
+                continue
+
+        lat = row.get("latitude")
+        lon = row.get("longitude")
+        if lat is None or lon is None:
+            continue
+        try:
+            point_distance = _haversine_m(point_lat, point_lon, float(lat), float(lon))
+        except Exception:
+            continue
+        if point_distance <= _NEAR_POINT_M:
+            suggestions.append(
+                {
+                    "hoa": hoa_name,
+                    "match_type": "nearby_point",
+                    "confidence": "low",
+                    "default_selected": False,
+                    "distance_m": round(float(point_distance), 1),
+                    "reason": "HOA has a nearby mapped point location.",
+                    "_rank_area": float("inf"),
+                    "_rank_distance": float(point_distance),
+                }
+            )
+
+    priority = {"inside_boundary": 0, "near_boundary": 1, "nearby_point": 2}
+    suggestions.sort(
+        key=lambda item: (
+            priority.get(str(item.get("match_type")), 99),
+            float(item.get("_rank_area", float("inf"))),
+            float(item.get("_rank_distance", float("inf"))),
+            str(item.get("hoa", "")).casefold(),
+        )
+    )
+
+    cleaned: list[dict] = []
+    for item in suggestions[:max_suggestions]:
+        cleaned.append(
+            {
+                "hoa": str(item["hoa"]),
+                "match_type": str(item["match_type"]),
+                "confidence": str(item["confidence"]),
+                "default_selected": bool(item["default_selected"]),
+                "distance_m": float(item["distance_m"]),
+                "reason": str(item["reason"]),
+            }
+        )
+    return cleaned
+
+
 def _sanitize_geojson_position(position: object) -> list[float]:
     if not isinstance(position, (list, tuple)) or len(position) < 2:
         raise HTTPException(status_code=400, detail="boundary_geojson positions must be [longitude, latitude]")
@@ -342,6 +788,20 @@ def _infer_and_store_location(hoa_name: str) -> dict | None:
             source="inferred",
         )
         return db.get_hoa_location(conn, hoa_name)
+
+
+def _find_hoa_matches(query: str, hoa_names: list[str]) -> list[dict]:
+    needle = query.strip().casefold()
+    if not needle:
+        return []
+    rows: list[dict] = []
+    for name in hoa_names:
+        hay = name.casefold()
+        pos = hay.find(needle)
+        if pos >= 0:
+            rows.append({"hoa": name, "match_reason": "name_contains", "_exact": hay == needle, "_pos": pos, "_len": len(name)})
+    rows.sort(key=lambda row: (0 if row["_exact"] else 1, int(row["_pos"]), int(row["_len"]), str(row["hoa"]).casefold()))
+    return [{"hoa": str(row["hoa"]), "match_reason": str(row["match_reason"])} for row in rows]
 
 
 def _render_searchable_document_html(hoa_name: str, relative_path: str, chunks: list[dict]) -> str:
@@ -542,6 +1002,42 @@ def list_hoa_summary() -> List[HoaSummary]:
     with db.get_connection(settings.db_path) as conn:
         rows = db.list_hoa_summaries(conn)
     return [HoaSummary(**row) for row in rows]
+
+
+@app.post("/lookup/universal", response_model=UniversalLookupResponse)
+def universal_lookup(body: UniversalLookupRequest) -> UniversalLookupResponse:
+    query = body.query.strip()
+    if not query:
+        raise HTTPException(status_code=400, detail="query is required")
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        hoa_names = db.list_hoa_names_with_documents(conn)
+        location_rows = db.list_hoa_locations(conn)
+
+    hoa_matches = _find_hoa_matches(query, hoa_names)
+    geocoded = _geocode_from_query(query)
+    address_lookup = AddressLookup(resolved=False)
+    suggestions: list[dict] = []
+    if geocoded:
+        address_lookup = AddressLookup(
+            resolved=True,
+            display_name=str(geocoded["display_name"]),
+            latitude=float(geocoded["latitude"]),
+            longitude=float(geocoded["longitude"]),
+        )
+        suggestions = _suggestions_for_point(
+            point_lat=float(geocoded["latitude"]),
+            point_lon=float(geocoded["longitude"]),
+            rows=location_rows,
+            max_suggestions=body.max_suggestions,
+        )
+
+    return UniversalLookupResponse(
+        query=query,
+        hoa_matches=[HoaMatch(**item) for item in hoa_matches],
+        address_lookup=address_lookup,
+        address_suggestions=[AddressSuggestion(**item) for item in suggestions],
+    )
 
 
 @app.get("/hoas/locations", response_model=List[HoaLocation])
@@ -803,6 +1299,45 @@ def search(body: SearchRequest) -> SearchResponse:
     return SearchResponse(results=results)
 
 
+@app.post("/search/multi", response_model=MultiSearchResponse)
+def search_multi(body: MultiSearchRequest) -> MultiSearchResponse:
+    settings = load_settings()
+    query = body.query.strip()
+    if not query:
+        raise HTTPException(status_code=400, detail="query is required")
+    if not body.hoas:
+        raise HTTPException(status_code=400, detail="hoas is required")
+    resolved_hoas = [_resolve_hoa_name(hoa_name) for hoa_name in body.hoas if str(hoa_name).strip()]
+    if not resolved_hoas:
+        raise HTTPException(status_code=400, detail="hoas is required")
+    if not settings.openai_api_key:
+        raise HTTPException(status_code=400, detail="OPENAI_API_KEY is required for search")
+
+    try:
+        matches = retrieve_context_multi(query, resolved_hoas, body.k, settings)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    results: list[MultiSearchResult] = []
+    for item in matches:
+        payload = item["payload"]
+        raw_text = str(payload.get("text", ""))
+        excerpt = raw_text[:280].replace("\n", " ")
+        pages = f"{payload.get('start_page')}–{payload.get('end_page')}"
+        results.append(
+            MultiSearchResult(
+                score=float(item["score"]),
+                hoa=str(payload.get("hoa", "unknown")),
+                document=str(payload.get("document", "unknown")),
+                pages=pages,
+                excerpt=excerpt + ("..." if len(raw_text) > 280 else ""),
+            )
+        )
+    return MultiSearchResponse(results=results)
+
+
 @app.post("/qa", response_model=QAResponse)
 def qa(body: QARequest) -> QAResponse:
     settings = load_settings()
@@ -824,3 +1359,133 @@ def qa(body: QARequest) -> QAResponse:
     if not results:
         raise HTTPException(status_code=404, detail="No context found for query.")
     return QAResponse(answer=answer, sources=citations)
+
+
+@app.post("/qa/multi", response_model=QAResponse)
+def qa_multi(body: MultiQARequest) -> QAResponse:
+    settings = load_settings()
+    if not body.hoas:
+        raise HTTPException(status_code=400, detail="hoas is required")
+    resolved_hoas = [_resolve_hoa_name(hoa_name) for hoa_name in body.hoas if str(hoa_name).strip()]
+    if not resolved_hoas:
+        raise HTTPException(status_code=400, detail="hoas is required")
+    if not settings.openai_api_key:
+        raise HTTPException(status_code=400, detail="OPENAI_API_KEY is required for QA")
+    try:
+        answer, citations, results = get_answer_multi(
+            body.question,
+            resolved_hoas,
+            k=body.k,
+            model=body.model,
+            settings=settings,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    if not results:
+        raise HTTPException(status_code=404, detail="No context found for query.")
+    return QAResponse(answer=answer, sources=citations)
+
+
+@app.get("/law/jurisdictions", response_model=List[LawJurisdictionSummary])
+def list_law_jurisdictions() -> List[LawJurisdictionSummary]:
+    try:
+        rows = list_jurisdictions()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return [LawJurisdictionSummary(**row) for row in rows]
+
+
+@app.get("/law/{jurisdiction}/profiles", response_model=List[LawProfile])
+def list_law_profiles(
+    jurisdiction: str,
+    community_type: str | None = None,
+    entity_form: str | None = None,
+) -> List[LawProfile]:
+    try:
+        rows = list_profiles(
+            jurisdiction=jurisdiction,
+            community_type=community_type,
+            entity_form=entity_form,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return [LawProfile(**row) for row in rows]
+
+
+@app.post("/law/qa", response_model=LawQAResponse)
+def law_qa(body: LawQARequest) -> LawQAResponse:
+    try:
+        answer = answer_law_question(
+            jurisdiction=body.jurisdiction,
+            community_type=body.community_type,
+            entity_form=body.entity_form,
+            question_family=body.question_family,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return LawQAResponse(
+        answer=answer.answer,
+        checklist=answer.checklist,
+        citations=answer.citations,
+        known_unknowns=answer.known_unknowns,
+        confidence=answer.confidence,
+        last_verified_date=answer.last_verified_date,
+        disclaimer=answer.disclaimer,
+    )
+
+
+@app.get("/law/{jurisdiction}/proxy-electronic", response_model=ElectronicProxyQuestionResponse)
+def law_proxy_electronic(
+    jurisdiction: str,
+    community_type: str = "hoa",
+    entity_form: str = "unknown",
+) -> ElectronicProxyQuestionResponse:
+    try:
+        answer = answer_electronic_proxy_questions(
+            jurisdiction=jurisdiction,
+            community_type=community_type,
+            entity_form=entity_form,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return ElectronicProxyQuestionResponse(
+        jurisdiction=answer.jurisdiction,
+        community_type=answer.community_type,
+        entity_form=answer.entity_form,
+        electronic_assignment={
+            "status": answer.electronic_assignment.status,
+            "evidence_rules": answer.electronic_assignment.evidence_rules,
+            "citations": answer.electronic_assignment.citations,
+        },
+        electronic_signature={
+            "status": answer.electronic_signature.status,
+            "evidence_rules": answer.electronic_signature.evidence_rules,
+            "citations": answer.electronic_signature.citations,
+        },
+        known_unknowns=answer.known_unknowns,
+        confidence=answer.confidence,
+        last_verified_date=answer.last_verified_date,
+        disclaimer=answer.disclaimer,
+    )
+
+
+@app.get("/law/proxy-electronic/summary", response_model=List[ElectronicProxySummaryItem])
+def law_proxy_electronic_summary(
+    community_type: str = "hoa",
+    entity_form: str = "unknown",
+) -> List[ElectronicProxySummaryItem]:
+    try:
+        rows = electronic_proxy_summary(community_type=community_type, entity_form=entity_form)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return [ElectronicProxySummaryItem(**row) for row in rows]
