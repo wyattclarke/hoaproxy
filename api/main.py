@@ -18,15 +18,20 @@ from pydantic import BaseModel, Field
 
 from hoaware import db
 from hoaware.config import load_settings
-from hoaware.law import (
-    answer_electronic_proxy_questions,
-    answer_law_question,
-    electronic_proxy_summary,
-    list_jurisdictions,
-    list_profiles,
-)
 from hoaware.ingest import ingest_pdf_paths
 from hoaware.qa import get_answer, get_answer_multi, retrieve_context, retrieve_context_multi
+
+_LAW_IMPORT_ERROR: Exception | None = None
+try:
+    from hoaware.law import (
+        answer_electronic_proxy_questions,
+        answer_law_question,
+        electronic_proxy_summary,
+        list_jurisdictions,
+        list_profiles,
+    )
+except Exception as exc:  # pragma: no cover - only used when optional module is missing
+    _LAW_IMPORT_ERROR = exc
 
 app = FastAPI(title="HOA QA API", version="0.2.0")
 _FILENAME_RE = re.compile(r"[^A-Za-z0-9._ -]+")
@@ -256,6 +261,13 @@ def _normalize_hoa_name(raw_name: str) -> str:
     if "/" in cleaned or "\\" in cleaned or cleaned in {".", ".."}:
         raise HTTPException(status_code=400, detail="Invalid HOA name")
     return cleaned
+
+
+def _ensure_law_module_available() -> None:
+    if _LAW_IMPORT_ERROR is None:
+        return
+    logger.warning("Law module unavailable: %s", _LAW_IMPORT_ERROR)
+    raise HTTPException(status_code=503, detail="Law endpoints are temporarily unavailable.")
 
 
 def _resolve_hoa_name(raw_name: str) -> str:
@@ -1390,6 +1402,7 @@ def qa_multi(body: MultiQARequest) -> QAResponse:
 
 @app.get("/law/jurisdictions", response_model=List[LawJurisdictionSummary])
 def list_law_jurisdictions() -> List[LawJurisdictionSummary]:
+    _ensure_law_module_available()
     try:
         rows = list_jurisdictions()
     except Exception as exc:
@@ -1403,6 +1416,7 @@ def list_law_profiles(
     community_type: str | None = None,
     entity_form: str | None = None,
 ) -> List[LawProfile]:
+    _ensure_law_module_available()
     try:
         rows = list_profiles(
             jurisdiction=jurisdiction,
@@ -1418,6 +1432,7 @@ def list_law_profiles(
 
 @app.post("/law/qa", response_model=LawQAResponse)
 def law_qa(body: LawQARequest) -> LawQAResponse:
+    _ensure_law_module_available()
     try:
         answer = answer_law_question(
             jurisdiction=body.jurisdiction,
@@ -1446,6 +1461,7 @@ def law_proxy_electronic(
     community_type: str = "hoa",
     entity_form: str = "unknown",
 ) -> ElectronicProxyQuestionResponse:
+    _ensure_law_module_available()
     try:
         answer = answer_electronic_proxy_questions(
             jurisdiction=jurisdiction,
@@ -1482,6 +1498,7 @@ def law_proxy_electronic_summary(
     community_type: str = "hoa",
     entity_form: str = "unknown",
 ) -> List[ElectronicProxySummaryItem]:
+    _ensure_law_module_available()
     try:
         rows = electronic_proxy_summary(community_type=community_type, entity_form=entity_form)
     except ValueError as exc:
