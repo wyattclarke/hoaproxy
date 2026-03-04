@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HOAware | Sign Proxy</title>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Space+Grotesk:wght@600;700&display=swap");
+      :root { --bg: #eef5ff; --ink: #12233a; --muted: #587091; --line: #d3e0f4; --accent: #1662f3; --accent-strong: #0d49be; --ok: #177c45; --danger: #b62525; }
+      * { box-sizing: border-box; }
+      body { margin: 0; min-height: 100vh; font-family: "Manrope", sans-serif; color: var(--ink);
+        background: radial-gradient(95rem 60rem at 8% -22%, rgba(20,98,243,0.2), transparent 60%),
+                    linear-gradient(180deg, #f8fbff 0%, var(--bg) 54%, #edf3ff 100%); }
+      .shell { width: min(800px, 94vw); margin: 40px auto; }
+      .card { border: 1px solid var(--line); border-radius: 18px; background: rgba(255,255,255,0.94); box-shadow: 0 10px 32px rgba(16,40,73,0.09); padding: 28px; }
+      .brand { display: inline-flex; align-items: baseline; font-family: "Space Grotesk", sans-serif; font-size: 1.8rem; font-weight: 700; margin: 0 0 6px; }
+      .brand-hoa { color: #0f2f6d; } .brand-aware { color: #1a66ff; }
+      h2 { margin: 0 0 12px; font-family: "Space Grotesk", sans-serif; font-size: 1.2rem; }
+      .form-preview { border: 2px solid var(--line); border-radius: 12px; padding: 0; margin: 16px 0; max-height: 500px; overflow: auto; }
+      .form-preview iframe { width: 100%; height: 480px; border: none; border-radius: 12px; }
+      .consent { background: #f6f9ff; border: 1px solid var(--line); border-radius: 10px; padding: 14px; margin: 16px 0; font-size: 0.9rem; line-height: 1.5; }
+      .consent label { display: flex; align-items: flex-start; gap: 8px; font-weight: 600; cursor: pointer; }
+      .btn { display: inline-flex; align-items: center; justify-content: center; border-radius: 10px; border: 1px solid var(--accent); background: linear-gradient(180deg, var(--accent), var(--accent-strong)); color: #fff; padding: 12px 24px; font-family: inherit; font-size: 1rem; font-weight: 800; cursor: pointer; width: 100%; }
+      .btn:disabled { opacity: 0.55; cursor: not-allowed; }
+      .btn.secondary { background: #fff; color: var(--ink); border-color: var(--line); }
+      .btn-row { display: flex; gap: 10px; margin-top: 16px; }
+      .status { margin-top: 10px; min-height: 1.2em; font-size: 0.9rem; color: var(--muted); }
+      .status.ok { color: var(--ok); } .status.error { color: var(--danger); }
+      .badge { display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 0.8rem; font-weight: 700; }
+      .badge.draft { background: #fff3e0; color: #8a5e15; }
+      .badge.signed { background: #e8f8ef; color: #1f6f42; }
+      .badge.delivered { background: #e8f0ff; color: #1b5ad4; }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <div class="card">
+        <a href="/" style="text-decoration:none"><div class="brand"><span class="brand-hoa">HOA</span><span class="brand-aware">ware</span></div></a>
+        <h2>Review & Sign Proxy <span class="badge draft" id="statusBadge">draft</span></h2>
+        <div id="proxyMeta" style="color:var(--muted);font-size:0.9rem;margin-bottom:12px;"></div>
+
+        <div class="form-preview">
+          <iframe id="formFrame" srcdoc="<p>Loading proxy form...</p>"></iframe>
+        </div>
+
+        <div class="consent" id="consentBlock">
+          <label>
+            <input type="checkbox" id="consentCheck" />
+            <span>By clicking "Sign," I affirm that I am the grantor named above, I intend this to constitute my electronic signature under the ESIGN Act (15 U.S.C. &sect; 7001) and my state's UETA, and I authorize the delegate named above to vote my proxy as described.</span>
+          </label>
+        </div>
+
+        <div class="btn-row">
+          <button class="btn" id="signBtn" type="button" disabled>Sign Proxy</button>
+          <button class="btn secondary" id="deliverBtn" type="button" style="display:none">Deliver to Board</button>
+        </div>
+        <div id="status" class="status"></div>
+        <div style="margin-top:12px"><a href="/my-proxies" style="color:var(--accent);font-weight:700;text-decoration:none">View all my proxies</a></div>
+      </div>
+    </main>
+    <script src="/static/js/auth.js"></script>
+    <script>
+      if (!Auth.requireAuth()) throw new Error("redirect");
+
+      const formFrame = document.getElementById("formFrame");
+      const consentCheck = document.getElementById("consentCheck");
+      const consentBlock = document.getElementById("consentBlock");
+      const signBtn = document.getElementById("signBtn");
+      const deliverBtn = document.getElementById("deliverBtn");
+      const statusBadge = document.getElementById("statusBadge");
+      const proxyMeta = document.getElementById("proxyMeta");
+      const status = document.getElementById("status");
+
+      function getProxyId() {
+        const parts = window.location.pathname.split("/");
+        return parts[parts.length - 1];
+      }
+
+      consentCheck.addEventListener("change", () => { signBtn.disabled = !consentCheck.checked; });
+
+      async function loadProxy() {
+        try {
+          const id = getProxyId();
+          const proxy = await Auth.fetchJson("/proxies/" + id);
+
+          proxyMeta.textContent = (proxy.hoa_name || "HOA") + " | " +
+            (proxy.grantor_name || "Grantor") + " → " + (proxy.delegate_name || "Delegate") +
+            " | " + proxy.direction;
+
+          statusBadge.textContent = proxy.status;
+          statusBadge.className = "badge " + proxy.status;
+
+          // Load form HTML
+          const formResp = await Auth.fetchJson("/proxies/" + id + "/form");
+          // formResp is HTML string but we got JSON... actually the endpoint returns HTMLResponse
+          // Let's fetch it differently
+          const token = Auth.getToken();
+          const rawResp = await fetch("/proxies/" + id + "/form", {
+            headers: { Authorization: "Bearer " + token },
+          });
+          const html = await rawResp.text();
+          formFrame.srcdoc = html;
+
+          if (proxy.status !== "draft") {
+            consentBlock.style.display = "none";
+            signBtn.style.display = "none";
+          }
+          if (proxy.status === "signed") {
+            deliverBtn.style.display = "";
+          }
+          if (proxy.status === "delivered") {
+            status.className = "status ok";
+            status.textContent = "This proxy has been delivered.";
+          }
+        } catch (err) {
+          status.className = "status error";
+          status.textContent = err.message;
+        }
+      }
+
+      async function doSign() {
+        signBtn.disabled = true;
+        status.className = "status"; status.textContent = "Signing...";
+        try {
+          await Auth.fetchJson("/proxies/" + getProxyId() + "/sign", { method: "POST", body: JSON.stringify({}) });
+          status.className = "status ok"; status.textContent = "Proxy signed successfully!";
+          await loadProxy();
+        } catch (err) {
+          status.className = "status error"; status.textContent = err.message;
+        } finally { signBtn.disabled = false; }
+      }
+
+      async function doDeliver() {
+        deliverBtn.disabled = true;
+        status.className = "status"; status.textContent = "Delivering...";
+        try {
+          await Auth.fetchJson("/proxies/" + getProxyId() + "/deliver", { method: "POST", body: JSON.stringify({}) });
+          status.className = "status ok"; status.textContent = "Proxy marked as delivered. The delegate should deliver the form to the board.";
+          await loadProxy();
+        } catch (err) {
+          status.className = "status error"; status.textContent = err.message;
+        } finally { deliverBtn.disabled = false; }
+      }
+
+      signBtn.addEventListener("click", doSign);
+      deliverBtn.addEventListener("click", doDeliver);
+      loadProxy();
+    </script>
+  </body>
+</html>

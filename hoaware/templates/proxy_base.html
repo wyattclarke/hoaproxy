@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Proxy Authorization — {{ jurisdiction }}</title>
+  <style>
+    body { font-family: "Manrope", "Segoe UI", sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; color: #12233a; line-height: 1.6; }
+    h1 { font-family: "Space Grotesk", sans-serif; font-size: 1.5rem; margin-bottom: 4px; }
+    h2 { font-family: "Space Grotesk", sans-serif; font-size: 1.1rem; margin-top: 24px; border-bottom: 2px solid #1662f3; padding-bottom: 4px; }
+    .header { border: 2px solid #1662f3; border-radius: 12px; padding: 16px; background: #f6f9ff; margin-bottom: 24px; }
+    .citation { color: #587091; font-size: 0.88rem; font-style: italic; }
+    .field { margin: 10px 0; }
+    .field-label { font-weight: 700; font-size: 0.88rem; color: #587091; display: block; margin-bottom: 2px; }
+    .field-value { border-bottom: 1px solid #d3e0f4; padding: 4px 0; min-height: 1.4em; }
+    .field-value.filled { font-weight: 600; }
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .disclosure { background: #fff9e6; border: 1px solid #f0dbb4; border-radius: 8px; padding: 12px; margin: 16px 0; font-size: 0.9rem; }
+    .warning { background: #fff0f0; border: 1px solid #f0b4b4; border-radius: 8px; padding: 12px; margin: 16px 0; font-size: 0.9rem; }
+    .signature-block { border: 2px solid #12233a; border-radius: 12px; padding: 20px; margin-top: 24px; }
+    .signature-line { border-bottom: 1px solid #12233a; margin: 24px 0 4px; min-height: 30px; }
+    .revocation { background: #f6f9ff; border: 1px solid #d3e0f4; border-radius: 8px; padding: 12px; margin-top: 24px; font-size: 0.88rem; }
+    .disclaimer { margin-top: 24px; padding: 12px; background: #f0f4fa; border-radius: 8px; font-size: 0.8rem; color: #587091; }
+    .voting-instructions { border: 1px solid #d3e0f4; border-radius: 8px; padding: 16px; margin: 12px 0; }
+    .voting-item { padding: 8px 0; border-bottom: 1px dotted #d3e0f4; }
+    .voting-item:last-child { border-bottom: none; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Proxy Authorization Form</h1>
+    <div class="citation">
+      {{ jurisdiction }} — {{ community_type_display }}
+      {% if statutory_citation %}<br>Statutory Authority: {{ statutory_citation }}{% endif %}
+    </div>
+  </div>
+
+  <h2>1. Grantor (Property Owner)</h2>
+  <div class="two-col">
+    <div class="field">
+      <span class="field-label">Full Name</span>
+      <div class="field-value{% if grantor_name %} filled{% endif %}">{{ grantor_name or '___________________________' }}</div>
+    </div>
+    <div class="field">
+      <span class="field-label">Unit / Address</span>
+      <div class="field-value{% if grantor_unit %} filled{% endif %}">{{ grantor_unit or '___________________________' }}</div>
+    </div>
+  </div>
+
+  <h2>2. Proxy Holder (Delegate)</h2>
+  <div class="two-col">
+    <div class="field">
+      <span class="field-label">Full Name</span>
+      <div class="field-value{% if delegate_name %} filled{% endif %}">{{ delegate_name or '___________________________' }}</div>
+    </div>
+    <div class="field">
+      <span class="field-label">Relationship to HOA</span>
+      <div class="field-value filled">Member / Resident</div>
+    </div>
+  </div>
+
+  {% if holder_restrictions %}
+  <div class="disclosure">
+    <strong>Proxy Holder Restriction ({{ jurisdiction }}):</strong> {{ holder_restrictions }}
+  </div>
+  {% endif %}
+
+  <h2>3. Authorization</h2>
+  <div class="field">
+    <span class="field-label">HOA Name</span>
+    <div class="field-value{% if hoa_name %} filled{% endif %}">{{ hoa_name or '___________________________' }}</div>
+  </div>
+
+  {% if meeting_date %}
+  <div class="field">
+    <span class="field-label">Meeting Date</span>
+    <div class="field-value filled">{{ meeting_date }}</div>
+  </div>
+  {% endif %}
+
+  <div class="field">
+    <span class="field-label">Proxy Type</span>
+    <div class="field-value filled">{{ 'Directed Proxy' if direction == 'directed' else 'General (Undirected) Proxy' }}</div>
+  </div>
+
+  {% if validity_duration %}
+  <div class="field">
+    <span class="field-label">Duration / Expiry</span>
+    <div class="field-value filled">
+      {% if expires_at %}Valid until {{ expires_at }}{% else %}{{ validity_duration }}{% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if direction == 'directed' %}
+  <h2>4. Voting Instructions</h2>
+  {% if voting_instructions %}
+  <div class="voting-instructions">
+    {% for item in voting_instructions %}
+    <div class="voting-item">
+      <strong>{{ item.agenda_item }}</strong>: {{ item.vote }}
+      {% if item.notes %}<br><em>{{ item.notes }}</em>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="voting-instructions">
+    <p>I direct my proxy holder to vote as follows on the matters listed below:</p>
+    <div class="field">
+      <span class="field-label">Agenda Item / Motion</span>
+      <div class="field-value">___________________________</div>
+    </div>
+    <div class="field">
+      <span class="field-label">Vote (For / Against / Abstain)</span>
+      <div class="field-value">___________________________</div>
+    </div>
+    <p style="font-size:0.88rem;color:#587091;">For any matter not specified above, the proxy holder {{ 'may vote at their discretion' if undirected_fallback else 'shall abstain' }}.</p>
+  </div>
+  {% endif %}
+  {% endif %}
+
+  {% if required_disclosures %}
+  <h2>{{ '5' if direction == 'directed' else '4' }}. Required Disclosures</h2>
+  {% for disc in required_disclosures %}
+  <div class="disclosure">{{ disc }}</div>
+  {% endfor %}
+  {% endif %}
+
+  {% if form_requirements %}
+  <div class="warning">
+    <strong>State-Specific Form Requirements:</strong> {{ form_requirements }}
+  </div>
+  {% endif %}
+
+  {% set sig_num = namespace(val=5) %}
+  {% if direction == 'directed' %}{% set sig_num.val = sig_num.val + 1 %}{% endif %}
+  {% if required_disclosures %}{% set sig_num.val = sig_num.val + 1 %}{% endif %}
+
+  <div class="signature-block">
+    <h2 style="margin-top:0; border:none;">Signature</h2>
+    <p>I, <strong>{{ grantor_name or '_______________' }}</strong>, hereby appoint <strong>{{ delegate_name or '_______________' }}</strong> as my proxy holder to vote on my behalf at the {{ 'meeting of' if meeting_date else 'meetings of' }} <strong>{{ hoa_name or '_______________' }}</strong>{% if meeting_date %} on <strong>{{ meeting_date }}</strong>{% endif %}{{ ', in accordance with the directed voting instructions above' if direction == 'directed' else '' }}.</p>
+
+    {% if electronic_assignment_note %}
+    <p style="font-size:0.88rem;">{{ electronic_assignment_note }}</p>
+    {% endif %}
+
+    <div class="two-col">
+      <div>
+        <div class="signature-line"></div>
+        <span class="field-label">Signature</span>
+      </div>
+      <div>
+        <div class="signature-line"></div>
+        <span class="field-label">Date</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="revocation">
+    <strong>Revocation:</strong> This proxy may be revoked at any time prior to the meeting by written notice to the HOA board, by attending the meeting in person, or by issuing a later-dated proxy.
+    {% if revocation_notes %}<br>{{ revocation_notes }}{% endif %}
+  </div>
+
+  <div class="disclaimer">
+    <strong>Disclaimer:</strong> This proxy form was generated by HOAware for informational purposes. It is not legal advice. Consult an attorney if you have questions about your specific situation. Generated on {{ generated_date }}.
+  </div>
+</body>
+</html>

@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HOAware | Delegate Dashboard</title>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Space+Grotesk:wght@600;700&display=swap");
+      :root { --bg: #eef5ff; --ink: #12233a; --muted: #587091; --line: #d3e0f4; --accent: #1662f3; --accent-strong: #0d49be; --ok: #177c45; --danger: #b62525; }
+      * { box-sizing: border-box; }
+      body { margin: 0; min-height: 100vh; font-family: "Manrope", sans-serif; color: var(--ink);
+        background: radial-gradient(95rem 60rem at 8% -22%, rgba(20,98,243,0.2), transparent 60%),
+                    linear-gradient(180deg, #f8fbff 0%, var(--bg) 54%, #edf3ff 100%); }
+      .shell { width: min(800px, 94vw); margin: 28px auto 56px; }
+      .hero { border: 1px solid #c9dbfa; border-radius: 22px; background: linear-gradient(118deg, rgba(255,255,255,0.95), rgba(227,240,255,0.95)); box-shadow: 0 16px 44px rgba(17,40,74,0.14); padding: 22px; }
+      .top-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+      .brand { display: inline-flex; align-items: baseline; font-family: "Space Grotesk", sans-serif; font-size: clamp(1.5rem,3vw,2rem); font-weight: 700; margin: 0; }
+      .brand-link { color: inherit; text-decoration: none; }
+      .brand-hoa { color: #0f2f6d; } .brand-aware { color: #1a66ff; }
+      .nav { display: flex; gap: 8px; flex-wrap: wrap; }
+      .btn { display: inline-flex; align-items: center; justify-content: center; border-radius: 10px; border: 1px solid var(--line); background: #fff; color: #1b355c; padding: 9px 14px; font-family: inherit; font-size: 0.92rem; font-weight: 800; text-decoration: none; cursor: pointer; }
+      .btn.primary { border-color: var(--accent); background: linear-gradient(180deg, var(--accent), var(--accent-strong)); color: #fff; }
+      h2 { margin: 18px 0 10px; font-family: "Space Grotesk", sans-serif; font-size: 1.15rem; }
+      .card { border: 1px solid var(--line); border-radius: 14px; background: rgba(255,255,255,0.92); box-shadow: 0 6px 20px rgba(16,40,73,0.07); padding: 16px; margin-bottom: 12px; }
+      .meta { color: var(--muted); font-size: 0.86rem; }
+      .badge { display: inline-block; padding: 3px 8px; border-radius: 999px; font-size: 0.78rem; font-weight: 700; }
+      .badge.draft { background: #fff3e0; color: #8a5e15; }
+      .badge.signed { background: #e8f8ef; color: #1f6f42; }
+      .badge.delivered { background: #e8f0ff; color: #1b5ad4; }
+      .badge.revoked { background: #fce8e8; color: #b62525; }
+      .empty { padding: 20px; text-align: center; color: var(--muted); }
+      .stat-row { display: flex; gap: 14px; margin-top: 12px; flex-wrap: wrap; }
+      .stat { flex: 1; min-width: 100px; text-align: center; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: #f6f9ff; }
+      .stat-num { font-size: 1.8rem; font-weight: 800; color: var(--accent); }
+      .stat-label { font-size: 0.82rem; color: var(--muted); margin-top: 2px; }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <div class="top-row">
+          <h1 style="margin:0"><a class="brand brand-link" href="/"><span class="brand-hoa">HOA</span><span class="brand-aware">ware</span></a></h1>
+          <div class="nav" id="navContainer"></div>
+        </div>
+        <h2>Delegate Dashboard</h2>
+        <div class="stat-row" id="stats"></div>
+      </section>
+
+      <h2>Incoming Proxies</h2>
+      <div id="proxyList"></div>
+    </main>
+    <script src="/static/js/auth.js"></script>
+    <script>
+      if (!Auth.requireAuth()) throw new Error("redirect");
+      Auth.renderNav(document.getElementById("navContainer"));
+
+      function escapeHtml(t) { return String(t).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;"); }
+
+      async function load() {
+        const list = document.getElementById("proxyList");
+        const stats = document.getElementById("stats");
+        try {
+          const proxies = await Auth.fetchJson("/proxies/delegated");
+          const active = proxies.filter(p => !["revoked","expired"].includes(p.status));
+          const signed = proxies.filter(p => p.status === "signed").length;
+          const delivered = proxies.filter(p => p.status === "delivered").length;
+
+          stats.innerHTML =
+            '<div class="stat"><div class="stat-num">' + active.length + '</div><div class="stat-label">Active Proxies</div></div>' +
+            '<div class="stat"><div class="stat-num">' + signed + '</div><div class="stat-label">Signed</div></div>' +
+            '<div class="stat"><div class="stat-num">' + delivered + '</div><div class="stat-label">Delivered</div></div>';
+
+          if (!proxies.length) {
+            list.innerHTML = '<div class="empty">No incoming proxies yet. Share your delegate profile to collect proxies.</div>';
+            return;
+          }
+          list.innerHTML = proxies.map(p =>
+            '<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap">' +
+            '<div><strong>' + escapeHtml(p.grantor_name || "Grantor") + '</strong> ' +
+            '<span class="badge ' + p.status + '">' + p.status + '</span></div>' +
+            '<div class="meta">' + escapeHtml(p.hoa_name || "") + '</div></div>' +
+            '<div class="meta">' + p.direction +
+            (p.for_meeting_date ? ' | Meeting: ' + p.for_meeting_date : '') +
+            ' | Created: ' + (p.created_at || '') + '</div></div>'
+          ).join("");
+        } catch (err) {
+          list.innerHTML = '<div class="meta" style="color:var(--danger)">' + escapeHtml(err.message) + '</div>';
+        }
+      }
+
+      load();
+    </script>
+  </body>
+</html>

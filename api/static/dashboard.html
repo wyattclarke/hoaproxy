@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HOAware | Dashboard</title>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Space+Grotesk:wght@600;700&display=swap");
+
+      :root {
+        --bg: #eef5ff; --ink: #12233a; --muted: #587091; --line: #d3e0f4;
+        --accent: #1662f3; --accent-strong: #0d49be; --ok: #177c45; --danger: #b62525;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0; min-height: 100vh;
+        font-family: "Manrope", "Segoe UI", sans-serif; color: var(--ink);
+        background: radial-gradient(95rem 60rem at 8% -22%, rgba(20,98,243,0.2), transparent 60%),
+                    radial-gradient(70rem 45rem at 95% -15%, rgba(36,189,156,0.14), transparent 56%),
+                    linear-gradient(180deg, #f8fbff 0%, var(--bg) 54%, #edf3ff 100%);
+      }
+
+      .shell { width: min(900px, 94vw); margin: 28px auto 56px; }
+
+      .hero {
+        border: 1px solid #c9dbfa; border-radius: 22px;
+        background: linear-gradient(118deg, rgba(255,255,255,0.95) 0%, rgba(227,240,255,0.95) 100%);
+        box-shadow: 0 16px 44px rgba(17,40,74,0.14); padding: 22px;
+      }
+
+      .top-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+
+      .brand { display: inline-flex; align-items: baseline; gap: 0.12em;
+        font-family: "Space Grotesk", "Manrope", sans-serif;
+        font-size: clamp(1.5rem, 3vw, 2rem); font-weight: 700; margin: 0; }
+      .brand-link { color: inherit; text-decoration: none; }
+      .brand-hoa { color: #0f2f6d; } .brand-aware { color: #1a66ff; }
+
+      .nav { display: flex; gap: 8px; flex-wrap: wrap; }
+
+      .btn {
+        display: inline-flex; align-items: center; justify-content: center;
+        border-radius: 10px; border: 1px solid var(--line); background: #fff;
+        color: #1b355c; padding: 9px 14px; font-family: inherit;
+        font-size: 0.92rem; font-weight: 800; text-decoration: none; cursor: pointer;
+      }
+      .btn.primary { border-color: var(--accent); background: linear-gradient(180deg, var(--accent), var(--accent-strong)); color: #fff; }
+      .btn.danger { border-color: var(--danger); background: var(--danger); color: #fff; }
+
+      h2 { margin: 18px 0 10px; font-family: "Space Grotesk", "Manrope", sans-serif; font-size: 1.15rem; }
+      h3 { margin: 0 0 6px; font-size: 1rem; }
+
+      .card {
+        border: 1px solid var(--line); border-radius: 14px;
+        background: rgba(255,255,255,0.92); box-shadow: 0 6px 20px rgba(16,40,73,0.07);
+        padding: 16px; margin-bottom: 14px;
+      }
+
+      .grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+
+      .status { margin-top: 8px; min-height: 1.2em; font-size: 0.9rem; color: var(--muted); }
+      .status.ok { color: var(--ok); } .status.error { color: var(--danger); }
+
+      .meta { color: var(--muted); font-size: 0.86rem; }
+
+      .empty { padding: 20px; text-align: center; color: var(--muted); }
+
+      .pill {
+        display: inline-block; margin-right: 6px; margin-top: 4px; font-size: 0.75rem;
+        border-radius: 999px; padding: 3px 8px; background: #ebf3ff; border: 1px solid #cae0ff; color: #244a7f;
+      }
+
+      .claim-row { display: flex; gap: 8px; margin-top: 10px; align-items: center; flex-wrap: wrap; }
+      .claim-row select, .claim-row input { border: 1px solid var(--line); border-radius: 8px; padding: 8px; font: inherit; }
+      .claim-row select { flex: 1; min-width: 160px; }
+      .claim-row input { width: 120px; }
+
+      .link { color: var(--accent); font-weight: 700; text-decoration: none; }
+      .link:hover { text-decoration: underline; }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <div class="top-row">
+          <h1 style="margin:0"><a class="brand brand-link" href="/"><span class="brand-hoa">HOA</span><span class="brand-aware">ware</span></a></h1>
+          <div class="nav" id="navContainer"></div>
+        </div>
+        <h2 id="greeting">Dashboard</h2>
+        <div id="pageStatus" class="status"></div>
+      </section>
+
+      <h2>My HOA Memberships</h2>
+      <div id="hoaList" class="grid"></div>
+
+      <div class="card" style="margin-top:14px">
+        <h3>Claim Membership in an HOA</h3>
+        <div class="claim-row">
+          <select id="hoaSelect"><option value="">Loading HOAs...</option></select>
+          <input id="unitInput" placeholder="Unit # (optional)" />
+          <button class="btn primary" id="claimBtn" type="button">Claim</button>
+        </div>
+        <div id="claimStatus" class="status"></div>
+      </div>
+
+      <h2>Delegate Status</h2>
+      <div id="delegateSection"></div>
+    </main>
+
+    <script src="/static/js/auth.js"></script>
+    <script>
+      if (!Auth.requireAuth()) throw new Error("redirect");
+
+      const greeting = document.getElementById("greeting");
+      const pageStatus = document.getElementById("pageStatus");
+      const hoaList = document.getElementById("hoaList");
+      const hoaSelect = document.getElementById("hoaSelect");
+      const unitInput = document.getElementById("unitInput");
+      const claimBtn = document.getElementById("claimBtn");
+      const claimStatus = document.getElementById("claimStatus");
+      const delegateSection = document.getElementById("delegateSection");
+      const navContainer = document.getElementById("navContainer");
+
+      Auth.renderNav(navContainer);
+
+      function escapeHtml(text) {
+        return String(text).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;");
+      }
+
+      function slugify(name) {
+        return String(name || "").trim().toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_-]/g, "").replaceAll("_", "-");
+      }
+
+      async function loadDashboard() {
+        try {
+          const me = await Auth.fetchJson("/auth/me");
+          Auth.setCachedUser(me);
+          greeting.textContent = `Welcome, ${me.display_name || me.email}`;
+
+          if (!me.hoas.length) {
+            hoaList.innerHTML = '<div class="empty">You haven\'t claimed any HOA memberships yet. Use the form below to get started.</div>';
+          } else {
+            hoaList.innerHTML = me.hoas.map(h =>
+              '<div class="card">' +
+              '<h3><a class="link" href="/hoa/' + slugify(h.hoa_name) + '">' + escapeHtml(h.hoa_name) + '</a></h3>' +
+              (h.unit_number ? '<span class="pill">Unit ' + escapeHtml(h.unit_number) + '</span>' : '') +
+              '<span class="pill">' + escapeHtml(h.status) + '</span>' +
+              '<div style="margin-top:8px"><a class="link" href="/become-delegate?hoa_id=' + h.hoa_id + '">Become a delegate</a></div>' +
+              '</div>'
+            ).join("");
+          }
+
+          // Load delegate info
+          await loadDelegateStatus(me);
+
+        } catch (err) {
+          pageStatus.className = "status error";
+          pageStatus.textContent = err.message;
+        }
+      }
+
+      async function loadDelegateStatus(me) {
+        // Check each claimed HOA for delegate status
+        let delegateHtml = "";
+        for (const h of me.hoas) {
+          try {
+            const delegates = await Auth.fetchJson("/hoas/" + h.hoa_id + "/delegates");
+            const myDelegate = delegates.find(d => d.user_id === me.user_id);
+            if (myDelegate) {
+              delegateHtml += '<div class="card"><h3>Delegate for ' + escapeHtml(h.hoa_name) + '</h3>' +
+                '<div class="meta">' + escapeHtml(myDelegate.bio || "No bio set") + '</div>' +
+                '<a class="link" href="/delegate/' + myDelegate.id + '">View profile</a> · ' +
+                '<a class="link" href="/delegate-dashboard">Incoming proxies</a></div>';
+            }
+          } catch (_) {}
+        }
+        delegateSection.innerHTML = delegateHtml || '<div class="empty">Not registered as a delegate for any HOA. <a class="link" href="/become-delegate">Become a delegate</a></div>';
+      }
+
+      async function loadHoaOptions() {
+        try {
+          const hoas = await Auth.fetchJson("/hoas/summary");
+          hoaSelect.innerHTML = '<option value="">Select an HOA...</option>' +
+            hoas.map(h => {
+              const row = h;
+              // We need the hoa_id. Summary doesn't include it, so we'll use name-based lookup.
+              return '<option value="' + escapeHtml(row.hoa) + '">' + escapeHtml(row.hoa) + '</option>';
+            }).join("");
+        } catch (err) {
+          hoaSelect.innerHTML = '<option value="">Failed to load HOAs</option>';
+        }
+      }
+
+      async function claimHoa() {
+        const hoaName = hoaSelect.value;
+        if (!hoaName) {
+          claimStatus.className = "status error";
+          claimStatus.textContent = "Select an HOA.";
+          return;
+        }
+        claimBtn.disabled = true;
+        claimStatus.className = "status";
+        claimStatus.textContent = "Claiming membership...";
+        try {
+          // We need the hoa_id. Look it up by getting all HOAs with IDs.
+          // The /hoas endpoint returns names, but we need IDs. Let's use a direct query.
+          // Actually, we can use /hoas/summary but it doesn't have IDs either.
+          // We'll need to resolve by name via a small fetch.
+          const summaries = await Auth.fetchJson("/hoas/summary");
+          // We don't have hoa_id from summary. Let's just try to find or create it.
+          // Actually the claim endpoint takes hoa_id. We need another approach.
+          // Let's use a helper: fetch all hoas and find the matching one.
+          // Since the select value is the hoa name, let's search for its DB id.
+          const allHoas = await Auth.fetchJson("/hoas");
+          // We need the ID. The /hoas endpoint doesn't return IDs either.
+          // The simplest approach: make the claim endpoint accept name too, but
+          // the plan specifies /user/hoas/{hoa_id}/claim. Let's resolve via the location endpoint.
+          const locRes = await Auth.fetchJson("/hoas/" + encodeURIComponent(hoaName) + "/location");
+          // hoa_location has hoa name but not hoa_id. We need to expose hoa_id somewhere.
+          // Quick fix: use a direct resolution. Let me just add a helper in the API.
+          // Actually, let's just pass the name and let the API resolve it.
+          // For now, use a workaround: the /hoas/summary doesn't have IDs.
+          // The best approach: call a new mini-endpoint or modify claim to accept name.
+          // Let's just look up by querying each, or better: expose hoa_id on summary.
+          //
+          // Simplest: add an internal lookup. But for now, we can use the hoa_id from
+          // a dedicated lookup. Let's use a trick: POST to a name-based claim.
+          const res = await Auth.fetchJson("/user/hoas/claim-by-name", {
+            method: "POST",
+            body: JSON.stringify({ hoa_name: hoaName, unit_number: unitInput.value.trim() || null }),
+          });
+          claimStatus.className = "status ok";
+          claimStatus.textContent = "Membership claimed!";
+          await loadDashboard();
+        } catch (err) {
+          claimStatus.className = "status error";
+          claimStatus.textContent = err.message;
+        } finally {
+          claimBtn.disabled = false;
+        }
+      }
+
+      claimBtn.addEventListener("click", claimHoa);
+      loadHoaOptions();
+      loadDashboard();
+    </script>
+  </body>
+</html>

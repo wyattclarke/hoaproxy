@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HOAware | Delegate Profile</title>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Space+Grotesk:wght@600;700&display=swap");
+      :root { --bg: #eef5ff; --ink: #12233a; --muted: #587091; --line: #d3e0f4; --accent: #1662f3; --accent-strong: #0d49be; --ok: #177c45; --danger: #b62525; }
+      * { box-sizing: border-box; }
+      body { margin: 0; min-height: 100vh; font-family: "Manrope", sans-serif; color: var(--ink);
+        background: radial-gradient(95rem 60rem at 8% -22%, rgba(20,98,243,0.2), transparent 60%),
+                    linear-gradient(180deg, #f8fbff 0%, var(--bg) 54%, #edf3ff 100%); }
+      .shell { width: min(600px, 94vw); margin: 40px auto; }
+      .card { border: 1px solid var(--line); border-radius: 18px; background: rgba(255,255,255,0.94); box-shadow: 0 10px 32px rgba(16,40,73,0.09); padding: 28px; }
+      .brand { display: inline-flex; align-items: baseline; font-family: "Space Grotesk", sans-serif; font-size: 1.8rem; font-weight: 700; margin: 0 0 6px; }
+      .brand-hoa { color: #0f2f6d; } .brand-aware { color: #1a66ff; }
+      h2 { margin: 0 0 10px; font-family: "Space Grotesk", sans-serif; font-size: 1.3rem; }
+      .meta { color: var(--muted); font-size: 0.88rem; margin-bottom: 12px; }
+      .bio { line-height: 1.6; margin: 12px 0; padding: 12px; background: #f6f9ff; border-radius: 10px; border: 1px solid var(--line); }
+      .btn { display: inline-flex; align-items: center; justify-content: center; border-radius: 10px; border: 1px solid var(--accent); background: linear-gradient(180deg, var(--accent), var(--accent-strong)); color: #fff; padding: 10px 18px; font-family: inherit; font-size: 0.95rem; font-weight: 800; cursor: pointer; text-decoration: none; }
+      .status { margin-top: 10px; min-height: 1.2em; font-size: 0.9rem; color: var(--muted); }
+      .status.error { color: var(--danger); }
+      .nav { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+      .nav a { color: var(--accent); font-weight: 700; text-decoration: none; font-size: 0.9rem; }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <div class="card">
+        <a href="/" style="text-decoration:none"><div class="brand"><span class="brand-hoa">HOA</span><span class="brand-aware">ware</span></div></a>
+        <div class="nav"><a href="/">Home</a> <span style="color:var(--muted);margin:0 4px">/</span> <a href="/dashboard">Dashboard</a></div>
+        <h2 id="delegateName">Loading...</h2>
+        <div class="meta" id="delegateMeta"></div>
+        <div class="bio" id="delegateBio"></div>
+        <div id="actions"></div>
+        <div id="status" class="status"></div>
+      </div>
+    </main>
+    <script src="/static/js/auth.js"></script>
+    <script>
+      const delegateName = document.getElementById("delegateName");
+      const delegateMeta = document.getElementById("delegateMeta");
+      const delegateBio = document.getElementById("delegateBio");
+      const actions = document.getElementById("actions");
+      const status = document.getElementById("status");
+
+      function escapeHtml(text) {
+        return String(text).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;");
+      }
+
+      function getDelegateId() {
+        const parts = window.location.pathname.split("/");
+        return parts[parts.length - 1];
+      }
+
+      async function loadProfile() {
+        try {
+          const id = getDelegateId();
+          const d = await Auth.fetchJson("/delegates/" + id);
+          delegateName.textContent = d.display_name || "Delegate #" + d.id;
+          delegateMeta.textContent = "HOA: " + (d.hoa_name || "Unknown") + (d.contact_email ? " · " + d.contact_email : "");
+          delegateBio.textContent = d.bio || "No bio provided.";
+
+          // Show assign proxy button if logged in
+          if (Auth.isLoggedIn()) {
+            actions.innerHTML = '<a class="btn" href="/assign-proxy?delegate_id=' + d.id + '&hoa_id=' + d.hoa_id + '">Assign Proxy to This Delegate</a>';
+          } else {
+            actions.innerHTML = '<a class="btn" href="/login">Log in to assign proxy</a>';
+          }
+        } catch (err) {
+          delegateName.textContent = "Delegate Not Found";
+          status.className = "status error";
+          status.textContent = err.message;
+        }
+      }
+
+      loadProfile();
+    </script>
+  </body>
+</html>

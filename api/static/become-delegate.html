@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HOAware | Become a Delegate</title>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Space+Grotesk:wght@600;700&display=swap");
+      :root { --bg: #eef5ff; --ink: #12233a; --muted: #587091; --line: #d3e0f4; --accent: #1662f3; --accent-strong: #0d49be; --ok: #177c45; --danger: #b62525; }
+      * { box-sizing: border-box; }
+      body { margin: 0; min-height: 100vh; font-family: "Manrope", sans-serif; color: var(--ink);
+        background: radial-gradient(95rem 60rem at 8% -22%, rgba(20,98,243,0.2), transparent 60%),
+                    linear-gradient(180deg, #f8fbff 0%, var(--bg) 54%, #edf3ff 100%); }
+      .shell { width: min(600px, 94vw); margin: 40px auto; }
+      .card { border: 1px solid var(--line); border-radius: 18px; background: rgba(255,255,255,0.94); box-shadow: 0 10px 32px rgba(16,40,73,0.09); padding: 28px; }
+      .brand { display: inline-flex; align-items: baseline; font-family: "Space Grotesk", sans-serif; font-size: 1.8rem; font-weight: 700; margin: 0 0 6px; }
+      .brand-hoa { color: #0f2f6d; } .brand-aware { color: #1a66ff; }
+      h2 { margin: 0 0 16px; font-family: "Space Grotesk", sans-serif; font-size: 1.2rem; }
+      label { display: block; margin: 12px 0 4px; font-size: 0.88rem; font-weight: 700; }
+      select, input, textarea { width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font: inherit; background: #fff; }
+      textarea { min-height: 100px; resize: vertical; }
+      .btn { display: inline-flex; align-items: center; justify-content: center; border-radius: 10px; border: 1px solid var(--accent); background: linear-gradient(180deg, var(--accent), var(--accent-strong)); color: #fff; padding: 10px 18px; font-family: inherit; font-size: 0.95rem; font-weight: 800; cursor: pointer; width: 100%; margin-top: 16px; }
+      .btn:disabled { opacity: 0.55; cursor: not-allowed; }
+      .status { margin-top: 10px; min-height: 1.2em; font-size: 0.9rem; color: var(--muted); }
+      .status.ok { color: var(--ok); } .status.error { color: var(--danger); }
+      .nav { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+      .nav a { color: var(--accent); font-weight: 700; text-decoration: none; font-size: 0.9rem; }
+      .nav a:hover { text-decoration: underline; }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <div class="card">
+        <a href="/" style="text-decoration:none"><div class="brand"><span class="brand-hoa">HOA</span><span class="brand-aware">ware</span></div></a>
+        <div class="nav"><a href="/dashboard">Back to Dashboard</a></div>
+        <h2>Become a Delegate</h2>
+        <p style="color:var(--muted); font-size:0.9rem;">As a delegate, your neighbors can assign you their proxy votes. You'll be visible on the HOA page.</p>
+        <label for="hoaSelect">Select HOA</label>
+        <select id="hoaSelect"><option value="">Loading your HOAs...</option></select>
+        <label for="bio">Bio / Platform (optional)</label>
+        <textarea id="bio" placeholder="Tell your neighbors what you stand for..."></textarea>
+        <label for="contactEmail">Contact Email (optional)</label>
+        <input id="contactEmail" type="email" placeholder="Override your login email for delegate contact" />
+        <button class="btn" id="registerBtn" type="button">Register as Delegate</button>
+        <div id="status" class="status"></div>
+      </div>
+    </main>
+    <script src="/static/js/auth.js"></script>
+    <script>
+      if (!Auth.requireAuth()) throw new Error("redirect");
+
+      const hoaSelect = document.getElementById("hoaSelect");
+      const bio = document.getElementById("bio");
+      const contactEmail = document.getElementById("contactEmail");
+      const registerBtn = document.getElementById("registerBtn");
+      const status = document.getElementById("status");
+
+      async function loadMyHoas() {
+        try {
+          const me = await Auth.fetchJson("/auth/me");
+          if (!me.hoas.length) {
+            hoaSelect.innerHTML = '<option value="">No HOA memberships. Claim one first.</option>';
+            return;
+          }
+          hoaSelect.innerHTML = '<option value="">Select an HOA...</option>' +
+            me.hoas.map(h => '<option value="' + h.hoa_id + '">' + h.hoa_name + '</option>').join("");
+
+          // Pre-select if hoa_id is in URL params
+          const params = new URLSearchParams(window.location.search);
+          const preselect = params.get("hoa_id");
+          if (preselect) hoaSelect.value = preselect;
+        } catch (err) {
+          status.className = "status error";
+          status.textContent = err.message;
+        }
+      }
+
+      async function doRegister() {
+        const hoaId = hoaSelect.value;
+        if (!hoaId) {
+          status.className = "status error";
+          status.textContent = "Select an HOA.";
+          return;
+        }
+        registerBtn.disabled = true;
+        status.className = "status";
+        status.textContent = "Registering...";
+        try {
+          const data = await Auth.fetchJson("/delegates/register", {
+            method: "POST",
+            body: JSON.stringify({
+              hoa_id: parseInt(hoaId),
+              bio: bio.value.trim() || null,
+              contact_email: contactEmail.value.trim() || null,
+            }),
+          });
+          status.className = "status ok";
+          status.textContent = "Registered as delegate!";
+          setTimeout(() => { window.location.href = "/delegate/" + data.id; }, 1000);
+        } catch (err) {
+          status.className = "status error";
+          status.textContent = err.message;
+        } finally {
+          registerBtn.disabled = false;
+        }
+      }
+
+      registerBtn.addEventListener("click", doRegister);
+      loadMyHoas();
+    </script>
+  </body>
+</html>

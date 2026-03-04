@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HOAware | My Proxies</title>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Space+Grotesk:wght@600;700&display=swap");
+      :root { --bg: #eef5ff; --ink: #12233a; --muted: #587091; --line: #d3e0f4; --accent: #1662f3; --accent-strong: #0d49be; --ok: #177c45; --danger: #b62525; }
+      * { box-sizing: border-box; }
+      body { margin: 0; min-height: 100vh; font-family: "Manrope", sans-serif; color: var(--ink);
+        background: radial-gradient(95rem 60rem at 8% -22%, rgba(20,98,243,0.2), transparent 60%),
+                    linear-gradient(180deg, #f8fbff 0%, var(--bg) 54%, #edf3ff 100%); }
+      .shell { width: min(800px, 94vw); margin: 28px auto 56px; }
+      .hero { border: 1px solid #c9dbfa; border-radius: 22px; background: linear-gradient(118deg, rgba(255,255,255,0.95), rgba(227,240,255,0.95)); box-shadow: 0 16px 44px rgba(17,40,74,0.14); padding: 22px; }
+      .top-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+      .brand { display: inline-flex; align-items: baseline; font-family: "Space Grotesk", sans-serif; font-size: clamp(1.5rem,3vw,2rem); font-weight: 700; margin: 0; }
+      .brand-link { color: inherit; text-decoration: none; }
+      .brand-hoa { color: #0f2f6d; } .brand-aware { color: #1a66ff; }
+      .nav { display: flex; gap: 8px; flex-wrap: wrap; }
+      .btn { display: inline-flex; align-items: center; justify-content: center; border-radius: 10px; border: 1px solid var(--line); background: #fff; color: #1b355c; padding: 9px 14px; font-family: inherit; font-size: 0.92rem; font-weight: 800; text-decoration: none; cursor: pointer; }
+      .btn.primary { border-color: var(--accent); background: linear-gradient(180deg, var(--accent), var(--accent-strong)); color: #fff; }
+      .btn.danger { border-color: var(--danger); color: var(--danger); background: #fff; font-size: 0.82rem; padding: 6px 10px; }
+      h2 { margin: 18px 0 10px; font-family: "Space Grotesk", sans-serif; font-size: 1.15rem; }
+      .card { border: 1px solid var(--line); border-radius: 14px; background: rgba(255,255,255,0.92); box-shadow: 0 6px 20px rgba(16,40,73,0.07); padding: 16px; margin-bottom: 12px; }
+      .proxy-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+      .meta { color: var(--muted); font-size: 0.86rem; }
+      .badge { display: inline-block; padding: 3px 8px; border-radius: 999px; font-size: 0.78rem; font-weight: 700; }
+      .badge.draft { background: #fff3e0; color: #8a5e15; }
+      .badge.signed { background: #e8f8ef; color: #1f6f42; }
+      .badge.delivered { background: #e8f0ff; color: #1b5ad4; }
+      .badge.revoked { background: #fce8e8; color: #b62525; }
+      .badge.expired { background: #f0f0f0; color: #666; }
+      .empty { padding: 20px; text-align: center; color: var(--muted); }
+      .status { margin-top: 8px; font-size: 0.9rem; color: var(--muted); }
+      .status.ok { color: var(--ok); } .status.error { color: var(--danger); }
+      .link { color: var(--accent); font-weight: 700; text-decoration: none; }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <div class="top-row">
+          <h1 style="margin:0"><a class="brand brand-link" href="/"><span class="brand-hoa">HOA</span><span class="brand-aware">ware</span></a></h1>
+          <div class="nav" id="navContainer"></div>
+        </div>
+        <h2>My Proxy Assignments</h2>
+      </section>
+
+      <div style="margin-top:14px">
+        <a class="btn primary" href="/assign-proxy">Assign New Proxy</a>
+      </div>
+
+      <div id="proxyList" style="margin-top:14px"></div>
+    </main>
+    <script src="/static/js/auth.js"></script>
+    <script>
+      if (!Auth.requireAuth()) throw new Error("redirect");
+      Auth.renderNav(document.getElementById("navContainer"));
+
+      function escapeHtml(t) { return String(t).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;"); }
+
+      async function loadProxies() {
+        const list = document.getElementById("proxyList");
+        try {
+          const proxies = await Auth.fetchJson("/proxies/mine");
+          if (!proxies.length) {
+            list.innerHTML = '<div class="empty">No proxy assignments yet. <a class="link" href="/assign-proxy">Assign your first proxy</a></div>';
+            return;
+          }
+          list.innerHTML = proxies.map(p =>
+            '<div class="card"><div class="proxy-header">' +
+            '<div><strong>' + escapeHtml(p.hoa_name || "HOA") + '</strong> ' +
+            '<span class="badge ' + p.status + '">' + p.status + '</span></div>' +
+            '<div>' +
+            (p.status === 'draft' ? '<a class="link" href="/proxy-sign/' + p.id + '">Sign</a> ' : '') +
+            (p.status === 'signed' ? '<a class="link" href="/proxy-sign/' + p.id + '">Deliver</a> ' : '') +
+            (['draft','signed','delivered'].includes(p.status) ? '<button class="btn danger" onclick="revokeProxy(' + p.id + ')">Revoke</button>' : '') +
+            '</div></div>' +
+            '<div class="meta">Delegate: ' + escapeHtml(p.delegate_name || "Unknown") + ' | ' + p.direction +
+            (p.for_meeting_date ? ' | Meeting: ' + p.for_meeting_date : '') + '</div>' +
+            '<div class="meta">Created: ' + (p.created_at || '') + '</div>' +
+            '</div>'
+          ).join("");
+        } catch (err) {
+          list.innerHTML = '<div class="status error">' + escapeHtml(err.message) + '</div>';
+        }
+      }
+
+      async function revokeProxy(proxyId) {
+        if (!confirm("Are you sure you want to revoke this proxy?")) return;
+        try {
+          await Auth.fetchJson("/proxies/" + proxyId + "/revoke", {
+            method: "POST", body: JSON.stringify({ reason: "Revoked by grantor" }),
+          });
+          await loadProxies();
+        } catch (err) { alert(err.message); }
+      }
+
+      // Make revokeProxy globally available
+      window.revokeProxy = revokeProxy;
+      loadProxies();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HOAware | Assign Proxy</title>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Space+Grotesk:wght@600;700&display=swap");
+      :root { --bg: #eef5ff; --ink: #12233a; --muted: #587091; --line: #d3e0f4; --accent: #1662f3; --accent-strong: #0d49be; --ok: #177c45; --danger: #b62525; }
+      * { box-sizing: border-box; }
+      body { margin: 0; min-height: 100vh; font-family: "Manrope", sans-serif; color: var(--ink);
+        background: radial-gradient(95rem 60rem at 8% -22%, rgba(20,98,243,0.2), transparent 60%),
+                    linear-gradient(180deg, #f8fbff 0%, var(--bg) 54%, #edf3ff 100%); }
+      .shell { width: min(640px, 94vw); margin: 40px auto; }
+      .card { border: 1px solid var(--line); border-radius: 18px; background: rgba(255,255,255,0.94); box-shadow: 0 10px 32px rgba(16,40,73,0.09); padding: 28px; }
+      .brand { display: inline-flex; align-items: baseline; font-family: "Space Grotesk", sans-serif; font-size: 1.8rem; font-weight: 700; margin: 0 0 6px; }
+      .brand-hoa { color: #0f2f6d; } .brand-aware { color: #1a66ff; }
+      h2 { margin: 0 0 16px; font-family: "Space Grotesk", sans-serif; font-size: 1.2rem; }
+      label { display: block; margin: 14px 0 4px; font-size: 0.88rem; font-weight: 700; }
+      select, input, textarea { width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font: inherit; background: #fff; }
+      textarea { min-height: 80px; resize: vertical; }
+      .btn { display: inline-flex; align-items: center; justify-content: center; border-radius: 10px; border: 1px solid var(--accent); background: linear-gradient(180deg, var(--accent), var(--accent-strong)); color: #fff; padding: 10px 18px; font-family: inherit; font-size: 0.95rem; font-weight: 800; cursor: pointer; width: 100%; margin-top: 16px; }
+      .btn:disabled { opacity: 0.55; cursor: not-allowed; }
+      .status { margin-top: 10px; min-height: 1.2em; font-size: 0.9rem; color: var(--muted); }
+      .status.ok { color: var(--ok); } .status.error { color: var(--danger); }
+      .nav a { color: var(--accent); font-weight: 700; text-decoration: none; font-size: 0.9rem; }
+      .radio-group { display: flex; gap: 16px; margin-top: 4px; }
+      .radio-group label { display: inline-flex; align-items: center; gap: 6px; margin: 0; font-weight: 600; }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <div class="card">
+        <a href="/" style="text-decoration:none"><div class="brand"><span class="brand-hoa">HOA</span><span class="brand-aware">ware</span></div></a>
+        <div style="margin-bottom:16px"><a class="nav" href="/dashboard"><span style="color:var(--accent);font-weight:700;text-decoration:none">Back to Dashboard</span></a></div>
+        <h2>Assign Your Proxy</h2>
+
+        <label for="hoaSelect">HOA</label>
+        <select id="hoaSelect"><option value="">Loading...</option></select>
+
+        <label for="delegateSelect">Delegate (Proxy Holder)</label>
+        <select id="delegateSelect"><option value="">Select HOA first</option></select>
+
+        <label>Proxy Type</label>
+        <div class="radio-group">
+          <label><input type="radio" name="direction" value="directed" checked /> Directed</label>
+          <label><input type="radio" name="direction" value="undirected" /> Undirected</label>
+        </div>
+
+        <div id="votingSection">
+          <label for="votingInstructions">Voting Instructions (JSON, optional)</label>
+          <textarea id="votingInstructions" placeholder='[{"agenda_item": "Budget", "vote": "For"}]'></textarea>
+        </div>
+
+        <label for="meetingDate">Meeting Date (optional)</label>
+        <input id="meetingDate" type="date" />
+
+        <button class="btn" id="createBtn" type="button">Create Proxy</button>
+        <div id="status" class="status"></div>
+      </div>
+    </main>
+    <script src="/static/js/auth.js"></script>
+    <script>
+      if (!Auth.requireAuth()) throw new Error("redirect");
+
+      const hoaSelect = document.getElementById("hoaSelect");
+      const delegateSelect = document.getElementById("delegateSelect");
+      const meetingDate = document.getElementById("meetingDate");
+      const votingInstructions = document.getElementById("votingInstructions");
+      const votingSection = document.getElementById("votingSection");
+      const createBtn = document.getElementById("createBtn");
+      const status = document.getElementById("status");
+      const params = new URLSearchParams(window.location.search);
+
+      document.querySelectorAll('input[name="direction"]').forEach(r => {
+        r.addEventListener("change", () => {
+          votingSection.style.display = r.value === "directed" && r.checked ? "" : "none";
+        });
+      });
+
+      async function loadMyHoas() {
+        try {
+          const me = await Auth.fetchJson("/auth/me");
+          if (!me.hoas.length) {
+            hoaSelect.innerHTML = '<option value="">No memberships</option>';
+            return;
+          }
+          hoaSelect.innerHTML = '<option value="">Select HOA...</option>' +
+            me.hoas.map(h => '<option value="' + h.hoa_id + '">' + h.hoa_name + '</option>').join("");
+          const pre = params.get("hoa_id");
+          if (pre) { hoaSelect.value = pre; await loadDelegates(); }
+        } catch (err) {
+          status.className = "status error"; status.textContent = err.message;
+        }
+      }
+
+      async function loadDelegates() {
+        const hoaId = hoaSelect.value;
+        if (!hoaId) { delegateSelect.innerHTML = '<option value="">Select HOA first</option>'; return; }
+        try {
+          const delegates = await Auth.fetchJson("/hoas/" + hoaId + "/delegates");
+          if (!delegates.length) {
+            delegateSelect.innerHTML = '<option value="">No delegates for this HOA</option>';
+            return;
+          }
+          delegateSelect.innerHTML = '<option value="">Select delegate...</option>' +
+            delegates.map(d => '<option value="' + d.user_id + '">' + (d.display_name || 'Delegate #' + d.id) + '</option>').join("");
+          const pre = params.get("delegate_id");
+          if (pre) {
+            // Find user_id for this delegate_id
+            const match = delegates.find(d => String(d.id) === pre);
+            if (match) delegateSelect.value = match.user_id;
+          }
+        } catch (err) {
+          delegateSelect.innerHTML = '<option value="">Error loading delegates</option>';
+        }
+      }
+
+      hoaSelect.addEventListener("change", loadDelegates);
+
+      async function createProxy() {
+        const hoaId = hoaSelect.value;
+        const delegateUserId = delegateSelect.value;
+        const direction = document.querySelector('input[name="direction"]:checked').value;
+        if (!hoaId || !delegateUserId) {
+          status.className = "status error"; status.textContent = "Select HOA and delegate."; return;
+        }
+        createBtn.disabled = true;
+        status.className = "status"; status.textContent = "Creating proxy...";
+        try {
+          const payload = {
+            delegate_user_id: parseInt(delegateUserId),
+            hoa_id: parseInt(hoaId),
+            direction,
+            for_meeting_date: meetingDate.value || null,
+            voting_instructions: votingInstructions.value.trim() || null,
+          };
+          const proxy = await Auth.fetchJson("/proxies", { method: "POST", body: JSON.stringify(payload) });
+          status.className = "status ok"; status.textContent = "Proxy created! Redirecting to sign...";
+          setTimeout(() => { window.location.href = "/proxy-sign/" + proxy.id; }, 800);
+        } catch (err) {
+          status.className = "status error"; status.textContent = err.message;
+        } finally { createBtn.disabled = false; }
+      }
+
+      createBtn.addEventListener("click", createProxy);
+      loadMyHoas();
+    </script>
+  </body>
+</html>

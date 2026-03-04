@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from pathlib import Path
-from typing import Sequence
+from typing import Any, Sequence
 
 
 SCHEMA = """
@@ -53,6 +53,192 @@ CREATE TABLE IF NOT EXISTS hoa_locations (
     source TEXT DEFAULT 'manual',
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS legal_sources (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    jurisdiction TEXT NOT NULL,
+    community_type TEXT NOT NULL,
+    entity_form TEXT NOT NULL DEFAULT 'unknown',
+    governing_law_bucket TEXT NOT NULL,
+    source_type TEXT NOT NULL,
+    publisher TEXT,
+    citation TEXT NOT NULL,
+    citation_url TEXT NOT NULL,
+    effective_date TEXT,
+    last_verified_date TEXT,
+    checksum_sha256 TEXT,
+    snapshot_path TEXT,
+    parser_version TEXT,
+    notes TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (jurisdiction, community_type, entity_form, governing_law_bucket, citation, citation_url)
+);
+
+CREATE INDEX IF NOT EXISTS idx_legal_sources_scope
+    ON legal_sources(jurisdiction, community_type, entity_form, governing_law_bucket);
+
+CREATE TABLE IF NOT EXISTS legal_sections (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_id INTEGER NOT NULL REFERENCES legal_sources(id) ON DELETE CASCADE,
+    section_key TEXT NOT NULL,
+    heading TEXT,
+    text TEXT NOT NULL,
+    ordinal INTEGER NOT NULL DEFAULT 0,
+    checksum_sha256 TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (source_id, section_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_legal_sections_source
+    ON legal_sections(source_id, ordinal);
+
+CREATE TABLE IF NOT EXISTS legal_rules (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    jurisdiction TEXT NOT NULL,
+    community_type TEXT NOT NULL,
+    entity_form TEXT NOT NULL DEFAULT 'unknown',
+    topic_family TEXT NOT NULL,
+    rule_type TEXT NOT NULL,
+    applies_to TEXT,
+    value_text TEXT NOT NULL,
+    value_numeric REAL,
+    value_unit TEXT,
+    conditions TEXT,
+    exceptions TEXT,
+    source_id INTEGER REFERENCES legal_sources(id) ON DELETE CASCADE,
+    section_id INTEGER REFERENCES legal_sections(id) ON DELETE SET NULL,
+    citation TEXT NOT NULL,
+    citation_url TEXT,
+    effective_date TEXT,
+    last_verified_date TEXT,
+    confidence TEXT NOT NULL DEFAULT 'medium',
+    needs_human_review INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_legal_rules_scope
+    ON legal_rules(jurisdiction, community_type, entity_form, topic_family);
+CREATE INDEX IF NOT EXISTS idx_legal_rules_type
+    ON legal_rules(topic_family, rule_type);
+
+CREATE TABLE IF NOT EXISTS jurisdiction_profiles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    jurisdiction TEXT NOT NULL,
+    community_type TEXT NOT NULL,
+    entity_form TEXT NOT NULL DEFAULT 'unknown',
+    governing_law_stack TEXT NOT NULL DEFAULT '[]',
+    records_access_summary TEXT,
+    records_sharing_limits_summary TEXT,
+    proxy_voting_summary TEXT,
+    conflict_resolution_notes TEXT,
+    known_gaps TEXT NOT NULL DEFAULT '[]',
+    confidence TEXT NOT NULL DEFAULT 'low',
+    last_verified_date TEXT,
+    source_rule_count INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (jurisdiction, community_type, entity_form)
+);
+
+CREATE INDEX IF NOT EXISTS idx_jurisdiction_profiles_scope
+    ON jurisdiction_profiles(jurisdiction, community_type, entity_form);
+
+CREATE TABLE IF NOT EXISTS legal_ingest_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_phase TEXT NOT NULL,
+    status TEXT NOT NULL,
+    details_json TEXT,
+    started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    finished_at TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    display_name TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    verified_at TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    token_jti TEXT UNIQUE NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS membership_claims (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    hoa_id INTEGER NOT NULL REFERENCES hoas(id),
+    unit_number TEXT,
+    status TEXT DEFAULT 'self_declared',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, hoa_id)
+);
+
+CREATE TABLE IF NOT EXISTS delegates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    hoa_id INTEGER NOT NULL REFERENCES hoas(id),
+    bio TEXT,
+    contact_email TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, hoa_id)
+);
+
+CREATE TABLE IF NOT EXISTS proxy_assignments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    grantor_user_id INTEGER NOT NULL REFERENCES users(id),
+    delegate_user_id INTEGER NOT NULL REFERENCES users(id),
+    hoa_id INTEGER NOT NULL REFERENCES hoas(id),
+    jurisdiction TEXT NOT NULL,
+    community_type TEXT NOT NULL,
+    direction TEXT DEFAULT 'directed',
+    voting_instructions TEXT,
+    for_meeting_date DATE,
+    expires_at DATE,
+    status TEXT DEFAULT 'draft',
+    form_html TEXT,
+    signed_pdf_path TEXT,
+    signed_at TIMESTAMP,
+    delivered_at TIMESTAMP,
+    acknowledged_at TIMESTAMP,
+    revoked_at TIMESTAMP,
+    revoke_reason TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS proxy_audit (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    proxy_id INTEGER NOT NULL REFERENCES proxy_assignments(id),
+    action TEXT NOT NULL,
+    actor_user_id INTEGER REFERENCES users(id),
+    details TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS participation_records (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    hoa_id INTEGER NOT NULL REFERENCES hoas(id),
+    meeting_date DATE NOT NULL,
+    meeting_type TEXT,
+    total_units INTEGER,
+    votes_cast INTEGER,
+    quorum_required INTEGER,
+    quorum_met BOOLEAN,
+    source_document_id INTEGER REFERENCES documents(id),
+    entered_by_user_id INTEGER REFERENCES users(id),
+    notes TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(hoa_id, meeting_date, meeting_type)
+);
 """
 
 
@@ -91,6 +277,18 @@ def _load_geojson(raw_value: object) -> dict | None:
     if isinstance(parsed, dict):
         return parsed
     return None
+
+
+def _load_json_list(raw_value: object) -> list:
+    if raw_value is None:
+        return []
+    try:
+        parsed = json.loads(str(raw_value))
+    except Exception:
+        return []
+    if isinstance(parsed, list):
+        return parsed
+    return []
 
 
 def get_or_create_hoa(conn: sqlite3.Connection, name: str) -> int:
@@ -547,3 +745,1057 @@ def mark_document_for_reindex(
         (hoa_id, relative_path),
     )
     conn.commit()
+
+
+def _normalize_scope_token(value: str) -> str:
+    return value.strip().upper()
+
+
+def upsert_legal_source(
+    conn: sqlite3.Connection,
+    *,
+    jurisdiction: str,
+    community_type: str,
+    entity_form: str,
+    governing_law_bucket: str,
+    source_type: str,
+    citation: str,
+    citation_url: str,
+    publisher: str | None = None,
+    effective_date: str | None = None,
+    last_verified_date: str | None = None,
+    checksum_sha256: str | None = None,
+    snapshot_path: str | None = None,
+    parser_version: str | None = None,
+    notes: str | None = None,
+) -> int:
+    jurisdiction_norm = _normalize_scope_token(jurisdiction)
+    community_norm = community_type.strip().lower()
+    entity_norm = entity_form.strip().lower()
+    bucket_norm = governing_law_bucket.strip().lower()
+    source_type_norm = source_type.strip().lower()
+    row = conn.execute(
+        """
+        SELECT id
+        FROM legal_sources
+        WHERE jurisdiction = ?
+          AND community_type = ?
+          AND entity_form = ?
+          AND governing_law_bucket = ?
+          AND citation = ?
+          AND citation_url = ?
+        """,
+        (
+            jurisdiction_norm,
+            community_norm,
+            entity_norm,
+            bucket_norm,
+            citation.strip(),
+            citation_url.strip(),
+        ),
+    ).fetchone()
+    if row is None:
+        cur = conn.execute(
+            """
+            INSERT INTO legal_sources (
+                jurisdiction,
+                community_type,
+                entity_form,
+                governing_law_bucket,
+                source_type,
+                publisher,
+                citation,
+                citation_url,
+                effective_date,
+                last_verified_date,
+                checksum_sha256,
+                snapshot_path,
+                parser_version,
+                notes
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                jurisdiction_norm,
+                community_norm,
+                entity_norm,
+                bucket_norm,
+                source_type_norm,
+                publisher,
+                citation.strip(),
+                citation_url.strip(),
+                effective_date,
+                last_verified_date,
+                checksum_sha256,
+                snapshot_path,
+                parser_version,
+                notes,
+            ),
+        )
+        conn.commit()
+        return int(cur.lastrowid)
+
+    source_id = int(row["id"])
+    conn.execute(
+        """
+        UPDATE legal_sources
+        SET
+            source_type = ?,
+            publisher = COALESCE(?, publisher),
+            effective_date = COALESCE(?, effective_date),
+            last_verified_date = COALESCE(?, last_verified_date),
+            checksum_sha256 = COALESCE(?, checksum_sha256),
+            snapshot_path = COALESCE(?, snapshot_path),
+            parser_version = COALESCE(?, parser_version),
+            notes = COALESCE(?, notes),
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+        """,
+        (
+            source_type_norm,
+            publisher,
+            effective_date,
+            last_verified_date,
+            checksum_sha256,
+            snapshot_path,
+            parser_version,
+            notes,
+            source_id,
+        ),
+    )
+    conn.commit()
+    return source_id
+
+
+def replace_legal_sections(
+    conn: sqlite3.Connection,
+    *,
+    source_id: int,
+    sections: Sequence[dict[str, Any]],
+) -> list[int]:
+    conn.execute("DELETE FROM legal_sections WHERE source_id = ?", (source_id,))
+    section_ids: list[int] = []
+    for idx, section in enumerate(sections):
+        section_key = str(section.get("section_key") or f"section_{idx + 1}")
+        heading = section.get("heading")
+        text = str(section.get("text") or "").strip()
+        if not text:
+            continue
+        checksum_sha256 = section.get("checksum_sha256")
+        cur = conn.execute(
+            """
+            INSERT INTO legal_sections (
+                source_id, section_key, heading, text, ordinal, checksum_sha256
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                source_id,
+                section_key,
+                str(heading).strip() if heading else None,
+                text,
+                idx,
+                str(checksum_sha256).strip() if checksum_sha256 else None,
+            ),
+        )
+        section_ids.append(int(cur.lastrowid))
+    conn.commit()
+    return section_ids
+
+
+def upsert_legal_rule(
+    conn: sqlite3.Connection,
+    *,
+    jurisdiction: str,
+    community_type: str,
+    entity_form: str,
+    topic_family: str,
+    rule_type: str,
+    value_text: str,
+    citation: str,
+    citation_url: str | None = None,
+    applies_to: str | None = None,
+    value_numeric: float | None = None,
+    value_unit: str | None = None,
+    conditions: str | None = None,
+    exceptions: str | None = None,
+    source_id: int | None = None,
+    section_id: int | None = None,
+    effective_date: str | None = None,
+    last_verified_date: str | None = None,
+    confidence: str = "medium",
+    needs_human_review: int = 0,
+) -> int:
+    cur = conn.execute(
+        """
+        INSERT INTO legal_rules (
+            jurisdiction,
+            community_type,
+            entity_form,
+            topic_family,
+            rule_type,
+            applies_to,
+            value_text,
+            value_numeric,
+            value_unit,
+            conditions,
+            exceptions,
+            source_id,
+            section_id,
+            citation,
+            citation_url,
+            effective_date,
+            last_verified_date,
+            confidence,
+            needs_human_review
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            _normalize_scope_token(jurisdiction),
+            community_type.strip().lower(),
+            entity_form.strip().lower(),
+            topic_family.strip().lower(),
+            rule_type.strip().lower(),
+            applies_to.strip().lower() if applies_to else None,
+            value_text.strip(),
+            value_numeric,
+            value_unit.strip().lower() if value_unit else None,
+            conditions.strip() if conditions else None,
+            exceptions.strip() if exceptions else None,
+            source_id,
+            section_id,
+            citation.strip(),
+            citation_url.strip() if citation_url else None,
+            effective_date,
+            last_verified_date,
+            confidence.strip().lower(),
+            1 if needs_human_review else 0,
+        ),
+    )
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def replace_legal_rules_for_scope(
+    conn: sqlite3.Connection,
+    *,
+    jurisdiction: str,
+    community_type: str,
+    entity_form: str,
+    topic_family: str,
+    rules: Sequence[dict[str, Any]],
+) -> int:
+    jurisdiction_norm = _normalize_scope_token(jurisdiction)
+    community_norm = community_type.strip().lower()
+    entity_norm = entity_form.strip().lower()
+    topic_norm = topic_family.strip().lower()
+    conn.execute(
+        """
+        DELETE FROM legal_rules
+        WHERE jurisdiction = ?
+          AND community_type = ?
+          AND entity_form = ?
+          AND topic_family = ?
+        """,
+        (jurisdiction_norm, community_norm, entity_norm, topic_norm),
+    )
+    inserted = 0
+    for rule in rules:
+        value_text = str(rule.get("value_text") or "").strip()
+        citation = str(rule.get("citation") or "").strip()
+        if not value_text or not citation:
+            continue
+        upsert_legal_rule(
+            conn,
+            jurisdiction=jurisdiction_norm,
+            community_type=community_norm,
+            entity_form=entity_norm,
+            topic_family=topic_norm,
+            rule_type=str(rule.get("rule_type") or "unspecified"),
+            value_text=value_text,
+            citation=citation,
+            citation_url=rule.get("citation_url"),
+            applies_to=rule.get("applies_to"),
+            value_numeric=rule.get("value_numeric"),
+            value_unit=rule.get("value_unit"),
+            conditions=rule.get("conditions"),
+            exceptions=rule.get("exceptions"),
+            source_id=rule.get("source_id"),
+            section_id=rule.get("section_id"),
+            effective_date=rule.get("effective_date"),
+            last_verified_date=rule.get("last_verified_date"),
+            confidence=str(rule.get("confidence") or "medium"),
+            needs_human_review=int(rule.get("needs_human_review") or 0),
+        )
+        inserted += 1
+    return inserted
+
+
+def list_legal_sources(
+    conn: sqlite3.Connection,
+    *,
+    jurisdiction: str | None = None,
+    community_type: str | None = None,
+    entity_form: str | None = None,
+) -> list[dict]:
+    query = "SELECT * FROM legal_sources WHERE 1=1"
+    params: list[Any] = []
+    if jurisdiction:
+        query += " AND jurisdiction = ?"
+        params.append(_normalize_scope_token(jurisdiction))
+    if community_type:
+        query += " AND community_type = ?"
+        params.append(community_type.strip().lower())
+    if entity_form:
+        query += " AND entity_form = ?"
+        params.append(entity_form.strip().lower())
+    query += " ORDER BY jurisdiction, community_type, entity_form, governing_law_bucket, citation"
+    rows = conn.execute(query, params).fetchall()
+    return [
+        {
+            "id": int(row["id"]),
+            "jurisdiction": str(row["jurisdiction"]),
+            "community_type": str(row["community_type"]),
+            "entity_form": str(row["entity_form"]),
+            "governing_law_bucket": str(row["governing_law_bucket"]),
+            "source_type": str(row["source_type"]),
+            "publisher": str(row["publisher"]) if row["publisher"] is not None else None,
+            "citation": str(row["citation"]),
+            "citation_url": str(row["citation_url"]),
+            "effective_date": str(row["effective_date"]) if row["effective_date"] is not None else None,
+            "last_verified_date": str(row["last_verified_date"]) if row["last_verified_date"] is not None else None,
+            "checksum_sha256": str(row["checksum_sha256"]) if row["checksum_sha256"] is not None else None,
+            "snapshot_path": str(row["snapshot_path"]) if row["snapshot_path"] is not None else None,
+            "parser_version": str(row["parser_version"]) if row["parser_version"] is not None else None,
+            "notes": str(row["notes"]) if row["notes"] is not None else None,
+            "created_at": str(row["created_at"]),
+            "updated_at": str(row["updated_at"]),
+        }
+        for row in rows
+    ]
+
+
+def list_legal_rules_for_scope(
+    conn: sqlite3.Connection,
+    *,
+    jurisdiction: str,
+    community_type: str,
+    entity_form: str = "unknown",
+    topic_family: str | None = None,
+) -> list[dict]:
+    jurisdiction_norm = _normalize_scope_token(jurisdiction)
+    community_norm = community_type.strip().lower()
+    entity_norm = entity_form.strip().lower()
+    rows = conn.execute(
+        """
+        SELECT
+            r.*,
+            s.source_type AS source_type
+        FROM legal_rules r
+        LEFT JOIN legal_sources s ON s.id = r.source_id
+        WHERE r.jurisdiction = ?
+          AND r.community_type = ?
+          AND (r.entity_form = ? OR r.entity_form = 'unknown')
+          AND (? IS NULL OR r.topic_family = ?)
+        ORDER BY r.topic_family, r.rule_type, r.id
+        """,
+        (jurisdiction_norm, community_norm, entity_norm, topic_family, topic_family),
+    ).fetchall()
+    return [
+        {
+            "id": int(row["id"]),
+            "jurisdiction": str(row["jurisdiction"]),
+            "community_type": str(row["community_type"]),
+            "entity_form": str(row["entity_form"]),
+            "topic_family": str(row["topic_family"]),
+            "rule_type": str(row["rule_type"]),
+            "applies_to": str(row["applies_to"]) if row["applies_to"] is not None else None,
+            "value_text": str(row["value_text"]),
+            "value_numeric": float(row["value_numeric"]) if row["value_numeric"] is not None else None,
+            "value_unit": str(row["value_unit"]) if row["value_unit"] is not None else None,
+            "conditions": str(row["conditions"]) if row["conditions"] is not None else None,
+            "exceptions": str(row["exceptions"]) if row["exceptions"] is not None else None,
+            "source_id": int(row["source_id"]) if row["source_id"] is not None else None,
+            "section_id": int(row["section_id"]) if row["section_id"] is not None else None,
+            "citation": str(row["citation"]),
+            "citation_url": str(row["citation_url"]) if row["citation_url"] is not None else None,
+            "source_type": str(row["source_type"]) if row["source_type"] is not None else "unknown",
+            "effective_date": str(row["effective_date"]) if row["effective_date"] is not None else None,
+            "last_verified_date": str(row["last_verified_date"]) if row["last_verified_date"] is not None else None,
+            "confidence": str(row["confidence"]),
+            "needs_human_review": int(row["needs_human_review"]),
+            "created_at": str(row["created_at"]),
+            "updated_at": str(row["updated_at"]),
+        }
+        for row in rows
+    ]
+
+
+def upsert_jurisdiction_profile(
+    conn: sqlite3.Connection,
+    *,
+    jurisdiction: str,
+    community_type: str,
+    entity_form: str,
+    governing_law_stack: Sequence[dict[str, Any]],
+    records_access_summary: str | None,
+    records_sharing_limits_summary: str | None,
+    proxy_voting_summary: str | None,
+    conflict_resolution_notes: str | None,
+    known_gaps: Sequence[str],
+    confidence: str,
+    last_verified_date: str | None,
+    source_rule_count: int,
+) -> int:
+    jurisdiction_norm = _normalize_scope_token(jurisdiction)
+    community_norm = community_type.strip().lower()
+    entity_norm = entity_form.strip().lower()
+    row = conn.execute(
+        """
+        SELECT id
+        FROM jurisdiction_profiles
+        WHERE jurisdiction = ? AND community_type = ? AND entity_form = ?
+        """,
+        (jurisdiction_norm, community_norm, entity_norm),
+    ).fetchone()
+    payload_stack = json.dumps(list(governing_law_stack), separators=(",", ":"))
+    payload_gaps = json.dumps(list(known_gaps), separators=(",", ":"))
+    if row is None:
+        cur = conn.execute(
+            """
+            INSERT INTO jurisdiction_profiles (
+                jurisdiction,
+                community_type,
+                entity_form,
+                governing_law_stack,
+                records_access_summary,
+                records_sharing_limits_summary,
+                proxy_voting_summary,
+                conflict_resolution_notes,
+                known_gaps,
+                confidence,
+                last_verified_date,
+                source_rule_count
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                jurisdiction_norm,
+                community_norm,
+                entity_norm,
+                payload_stack,
+                records_access_summary,
+                records_sharing_limits_summary,
+                proxy_voting_summary,
+                conflict_resolution_notes,
+                payload_gaps,
+                confidence.strip().lower(),
+                last_verified_date,
+                int(source_rule_count),
+            ),
+        )
+        conn.commit()
+        return int(cur.lastrowid)
+
+    profile_id = int(row["id"])
+    conn.execute(
+        """
+        UPDATE jurisdiction_profiles
+        SET
+            governing_law_stack = ?,
+            records_access_summary = ?,
+            records_sharing_limits_summary = ?,
+            proxy_voting_summary = ?,
+            conflict_resolution_notes = ?,
+            known_gaps = ?,
+            confidence = ?,
+            last_verified_date = ?,
+            source_rule_count = ?,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+        """,
+        (
+            payload_stack,
+            records_access_summary,
+            records_sharing_limits_summary,
+            proxy_voting_summary,
+            conflict_resolution_notes,
+            payload_gaps,
+            confidence.strip().lower(),
+            last_verified_date,
+            int(source_rule_count),
+            profile_id,
+        ),
+    )
+    conn.commit()
+    return profile_id
+
+
+def list_jurisdiction_profiles(
+    conn: sqlite3.Connection,
+    *,
+    jurisdiction: str | None = None,
+    community_type: str | None = None,
+    entity_form: str | None = None,
+) -> list[dict]:
+    query = "SELECT * FROM jurisdiction_profiles WHERE 1=1"
+    params: list[Any] = []
+    if jurisdiction:
+        query += " AND jurisdiction = ?"
+        params.append(_normalize_scope_token(jurisdiction))
+    if community_type:
+        query += " AND community_type = ?"
+        params.append(community_type.strip().lower())
+    if entity_form:
+        query += " AND entity_form = ?"
+        params.append(entity_form.strip().lower())
+    query += " ORDER BY jurisdiction, community_type, entity_form"
+    rows = conn.execute(query, params).fetchall()
+    return [
+        {
+            "id": int(row["id"]),
+            "jurisdiction": str(row["jurisdiction"]),
+            "community_type": str(row["community_type"]),
+            "entity_form": str(row["entity_form"]),
+            "governing_law_stack": _load_json_list(row["governing_law_stack"]),
+            "records_access_summary": str(row["records_access_summary"]) if row["records_access_summary"] is not None else None,
+            "records_sharing_limits_summary": str(row["records_sharing_limits_summary"]) if row["records_sharing_limits_summary"] is not None else None,
+            "proxy_voting_summary": str(row["proxy_voting_summary"]) if row["proxy_voting_summary"] is not None else None,
+            "conflict_resolution_notes": str(row["conflict_resolution_notes"]) if row["conflict_resolution_notes"] is not None else None,
+            "known_gaps": _load_json_list(row["known_gaps"]),
+            "confidence": str(row["confidence"]),
+            "last_verified_date": str(row["last_verified_date"]) if row["last_verified_date"] is not None else None,
+            "source_rule_count": int(row["source_rule_count"]),
+            "created_at": str(row["created_at"]),
+            "updated_at": str(row["updated_at"]),
+        }
+        for row in rows
+    ]
+
+
+def get_jurisdiction_profile(
+    conn: sqlite3.Connection,
+    *,
+    jurisdiction: str,
+    community_type: str,
+    entity_form: str,
+) -> dict | None:
+    jurisdiction_norm = _normalize_scope_token(jurisdiction)
+    community_norm = community_type.strip().lower()
+    entity_norm = entity_form.strip().lower()
+    rows = conn.execute(
+        """
+        SELECT *
+        FROM jurisdiction_profiles
+        WHERE jurisdiction = ?
+          AND community_type = ?
+          AND entity_form IN (?, 'unknown')
+        ORDER BY CASE WHEN entity_form = ? THEN 0 ELSE 1 END, updated_at DESC
+        LIMIT 1
+        """,
+        (jurisdiction_norm, community_norm, entity_norm, entity_norm),
+    ).fetchall()
+    if not rows:
+        return None
+    row = rows[0]
+    return {
+        "id": int(row["id"]),
+        "jurisdiction": str(row["jurisdiction"]),
+        "community_type": str(row["community_type"]),
+        "entity_form": str(row["entity_form"]),
+        "governing_law_stack": _load_json_list(row["governing_law_stack"]),
+        "records_access_summary": str(row["records_access_summary"]) if row["records_access_summary"] is not None else None,
+        "records_sharing_limits_summary": str(row["records_sharing_limits_summary"]) if row["records_sharing_limits_summary"] is not None else None,
+        "proxy_voting_summary": str(row["proxy_voting_summary"]) if row["proxy_voting_summary"] is not None else None,
+        "conflict_resolution_notes": str(row["conflict_resolution_notes"]) if row["conflict_resolution_notes"] is not None else None,
+        "known_gaps": _load_json_list(row["known_gaps"]),
+        "confidence": str(row["confidence"]),
+        "last_verified_date": str(row["last_verified_date"]) if row["last_verified_date"] is not None else None,
+        "source_rule_count": int(row["source_rule_count"]),
+        "created_at": str(row["created_at"]),
+        "updated_at": str(row["updated_at"]),
+    }
+
+
+def list_law_jurisdictions(conn: sqlite3.Connection) -> list[dict]:
+    rows = conn.execute(
+        """
+        SELECT
+            jurisdiction,
+            COUNT(DISTINCT community_type) AS community_types,
+            COUNT(*) AS profile_count,
+            MAX(last_verified_date) AS last_verified_date,
+            SUM(source_rule_count) AS rule_count
+        FROM jurisdiction_profiles
+        GROUP BY jurisdiction
+        ORDER BY jurisdiction
+        """
+    ).fetchall()
+    return [
+        {
+            "jurisdiction": str(row["jurisdiction"]),
+            "community_types": int(row["community_types"]),
+            "profile_count": int(row["profile_count"]),
+            "last_verified_date": str(row["last_verified_date"]) if row["last_verified_date"] is not None else None,
+            "rule_count": int(row["rule_count"]) if row["rule_count"] is not None else 0,
+        }
+        for row in rows
+    ]
+
+
+def create_legal_ingest_run(
+    conn: sqlite3.Connection,
+    *,
+    run_phase: str,
+    status: str,
+    details: dict[str, Any] | None = None,
+) -> int:
+    cur = conn.execute(
+        """
+        INSERT INTO legal_ingest_runs (run_phase, status, details_json)
+        VALUES (?, ?, ?)
+        """,
+        (
+            run_phase.strip(),
+            status.strip().lower(),
+            json.dumps(details or {}, separators=(",", ":")),
+        ),
+    )
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def finalize_legal_ingest_run(
+    conn: sqlite3.Connection,
+    *,
+    run_id: int,
+    status: str,
+    details: dict[str, Any] | None = None,
+) -> None:
+    conn.execute(
+        """
+        UPDATE legal_ingest_runs
+        SET
+            status = ?,
+            details_json = COALESCE(?, details_json),
+            finished_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+        """,
+        (
+            status.strip().lower(),
+            json.dumps(details, separators=(",", ":")) if details is not None else None,
+            int(run_id),
+        ),
+    )
+    conn.commit()
+
+
+# ---------------------------------------------------------------------------
+# Users
+# ---------------------------------------------------------------------------
+
+def create_user(
+    conn: sqlite3.Connection,
+    *,
+    email: str,
+    password_hash: str,
+    display_name: str | None = None,
+) -> int:
+    cur = conn.execute(
+        """
+        INSERT INTO users (email, password_hash, display_name, verified_at)
+        VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+        """,
+        (email.strip().lower(), password_hash, (display_name or "").strip() or None),
+    )
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def get_user_by_email(conn: sqlite3.Connection, email: str) -> dict | None:
+    row = conn.execute(
+        "SELECT * FROM users WHERE email = ?",
+        (email.strip().lower(),),
+    ).fetchone()
+    if not row:
+        return None
+    return dict(row)
+
+
+def get_user_by_id(conn: sqlite3.Connection, user_id: int) -> dict | None:
+    row = conn.execute("SELECT * FROM users WHERE id = ?", (int(user_id),)).fetchone()
+    if not row:
+        return None
+    return dict(row)
+
+
+# ---------------------------------------------------------------------------
+# Sessions
+# ---------------------------------------------------------------------------
+
+def create_session(
+    conn: sqlite3.Connection,
+    *,
+    user_id: int,
+    token_jti: str,
+    expires_at: str,
+) -> int:
+    cur = conn.execute(
+        """
+        INSERT INTO sessions (user_id, token_jti, expires_at)
+        VALUES (?, ?, ?)
+        """,
+        (int(user_id), token_jti, expires_at),
+    )
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def get_session_by_jti(conn: sqlite3.Connection, jti: str) -> dict | None:
+    row = conn.execute(
+        "SELECT * FROM sessions WHERE token_jti = ?",
+        (jti,),
+    ).fetchone()
+    if not row:
+        return None
+    return dict(row)
+
+
+def delete_session_by_jti(conn: sqlite3.Connection, jti: str) -> None:
+    conn.execute("DELETE FROM sessions WHERE token_jti = ?", (jti,))
+    conn.commit()
+
+
+# ---------------------------------------------------------------------------
+# Membership Claims
+# ---------------------------------------------------------------------------
+
+def create_membership_claim(
+    conn: sqlite3.Connection,
+    *,
+    user_id: int,
+    hoa_id: int,
+    unit_number: str | None = None,
+) -> int:
+    cur = conn.execute(
+        """
+        INSERT INTO membership_claims (user_id, hoa_id, unit_number)
+        VALUES (?, ?, ?)
+        """,
+        (int(user_id), int(hoa_id), (unit_number or "").strip() or None),
+    )
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def get_membership_claim(
+    conn: sqlite3.Connection, user_id: int, hoa_id: int
+) -> dict | None:
+    row = conn.execute(
+        "SELECT * FROM membership_claims WHERE user_id = ? AND hoa_id = ?",
+        (int(user_id), int(hoa_id)),
+    ).fetchone()
+    if not row:
+        return None
+    return dict(row)
+
+
+def list_membership_claims_for_user(
+    conn: sqlite3.Connection, user_id: int
+) -> list[dict]:
+    rows = conn.execute(
+        """
+        SELECT mc.*, h.name AS hoa_name
+        FROM membership_claims mc
+        JOIN hoas h ON h.id = mc.hoa_id
+        WHERE mc.user_id = ?
+        ORDER BY mc.created_at DESC
+        """,
+        (int(user_id),),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+# ---------------------------------------------------------------------------
+# Delegates
+# ---------------------------------------------------------------------------
+
+def create_delegate(
+    conn: sqlite3.Connection,
+    *,
+    user_id: int,
+    hoa_id: int,
+    bio: str | None = None,
+    contact_email: str | None = None,
+) -> int:
+    cur = conn.execute(
+        """
+        INSERT INTO delegates (user_id, hoa_id, bio, contact_email)
+        VALUES (?, ?, ?, ?)
+        """,
+        (int(user_id), int(hoa_id), (bio or "").strip() or None, (contact_email or "").strip() or None),
+    )
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def get_delegate(conn: sqlite3.Connection, delegate_id: int) -> dict | None:
+    row = conn.execute(
+        """
+        SELECT d.*, u.display_name, u.email AS user_email, h.name AS hoa_name
+        FROM delegates d
+        JOIN users u ON u.id = d.user_id
+        JOIN hoas h ON h.id = d.hoa_id
+        WHERE d.id = ?
+        """,
+        (int(delegate_id),),
+    ).fetchone()
+    if not row:
+        return None
+    return dict(row)
+
+
+def get_delegate_by_user_hoa(
+    conn: sqlite3.Connection, user_id: int, hoa_id: int
+) -> dict | None:
+    row = conn.execute(
+        """
+        SELECT d.*, u.display_name, u.email AS user_email, h.name AS hoa_name
+        FROM delegates d
+        JOIN users u ON u.id = d.user_id
+        JOIN hoas h ON h.id = d.hoa_id
+        WHERE d.user_id = ? AND d.hoa_id = ?
+        """,
+        (int(user_id), int(hoa_id)),
+    ).fetchone()
+    if not row:
+        return None
+    return dict(row)
+
+
+def list_delegates_for_hoa(conn: sqlite3.Connection, hoa_id: int) -> list[dict]:
+    rows = conn.execute(
+        """
+        SELECT d.*, u.display_name, u.email AS user_email
+        FROM delegates d
+        JOIN users u ON u.id = d.user_id
+        WHERE d.hoa_id = ?
+        ORDER BY d.created_at DESC
+        """,
+        (int(hoa_id),),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def update_delegate(
+    conn: sqlite3.Connection,
+    delegate_id: int,
+    *,
+    bio: str | None = None,
+    contact_email: str | None = None,
+) -> None:
+    conn.execute(
+        """
+        UPDATE delegates SET bio = ?, contact_email = ? WHERE id = ?
+        """,
+        ((bio or "").strip() or None, (contact_email or "").strip() or None, int(delegate_id)),
+    )
+    conn.commit()
+
+
+# ---------------------------------------------------------------------------
+# Proxy Assignments
+# ---------------------------------------------------------------------------
+
+def create_proxy_assignment(
+    conn: sqlite3.Connection,
+    *,
+    grantor_user_id: int,
+    delegate_user_id: int,
+    hoa_id: int,
+    jurisdiction: str,
+    community_type: str,
+    direction: str = "directed",
+    voting_instructions: str | None = None,
+    for_meeting_date: str | None = None,
+    expires_at: str | None = None,
+    form_html: str | None = None,
+) -> int:
+    cur = conn.execute(
+        """
+        INSERT INTO proxy_assignments
+            (grantor_user_id, delegate_user_id, hoa_id, jurisdiction, community_type,
+             direction, voting_instructions, for_meeting_date, expires_at, form_html)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            int(grantor_user_id), int(delegate_user_id), int(hoa_id),
+            jurisdiction.strip(), community_type.strip(),
+            direction, voting_instructions, for_meeting_date, expires_at, form_html,
+        ),
+    )
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def get_proxy_assignment(conn: sqlite3.Connection, proxy_id: int) -> dict | None:
+    row = conn.execute(
+        """
+        SELECT pa.*,
+               gu.email AS grantor_email, gu.display_name AS grantor_name,
+               du.email AS delegate_email, du.display_name AS delegate_name,
+               h.name AS hoa_name
+        FROM proxy_assignments pa
+        JOIN users gu ON gu.id = pa.grantor_user_id
+        JOIN users du ON du.id = pa.delegate_user_id
+        JOIN hoas h ON h.id = pa.hoa_id
+        WHERE pa.id = ?
+        """,
+        (int(proxy_id),),
+    ).fetchone()
+    if not row:
+        return None
+    return dict(row)
+
+
+def update_proxy_status(
+    conn: sqlite3.Connection,
+    proxy_id: int,
+    status: str,
+    **extra_fields: Any,
+) -> None:
+    sets = ["status = ?", "updated_at = CURRENT_TIMESTAMP"]
+    vals: list[Any] = [status]
+    for col, val in extra_fields.items():
+        sets.append(f"{col} = ?")
+        vals.append(val)
+    vals.append(int(proxy_id))
+    conn.execute(
+        f"UPDATE proxy_assignments SET {', '.join(sets)} WHERE id = ?",
+        vals,
+    )
+    conn.commit()
+
+
+def list_proxies_for_grantor(conn: sqlite3.Connection, user_id: int) -> list[dict]:
+    rows = conn.execute(
+        """
+        SELECT pa.*, du.display_name AS delegate_name, h.name AS hoa_name
+        FROM proxy_assignments pa
+        JOIN users du ON du.id = pa.delegate_user_id
+        JOIN hoas h ON h.id = pa.hoa_id
+        WHERE pa.grantor_user_id = ?
+        ORDER BY pa.created_at DESC
+        """,
+        (int(user_id),),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def list_proxies_for_delegate(conn: sqlite3.Connection, user_id: int) -> list[dict]:
+    rows = conn.execute(
+        """
+        SELECT pa.*, gu.display_name AS grantor_name, h.name AS hoa_name
+        FROM proxy_assignments pa
+        JOIN users gu ON gu.id = pa.grantor_user_id
+        JOIN hoas h ON h.id = pa.hoa_id
+        WHERE pa.delegate_user_id = ?
+        ORDER BY pa.created_at DESC
+        """,
+        (int(user_id),),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def count_proxies_for_hoa(conn: sqlite3.Connection, hoa_id: int) -> dict:
+    row = conn.execute(
+        """
+        SELECT
+            COUNT(*) AS total,
+            SUM(CASE WHEN status = 'signed' THEN 1 ELSE 0 END) AS signed,
+            SUM(CASE WHEN status = 'delivered' THEN 1 ELSE 0 END) AS delivered
+        FROM proxy_assignments
+        WHERE hoa_id = ? AND status NOT IN ('revoked', 'expired')
+        """,
+        (int(hoa_id),),
+    ).fetchone()
+    return dict(row) if row else {"total": 0, "signed": 0, "delivered": 0}
+
+
+# ---------------------------------------------------------------------------
+# Proxy Audit
+# ---------------------------------------------------------------------------
+
+def create_proxy_audit(
+    conn: sqlite3.Connection,
+    *,
+    proxy_id: int,
+    action: str,
+    actor_user_id: int | None = None,
+    details: dict | None = None,
+) -> int:
+    cur = conn.execute(
+        """
+        INSERT INTO proxy_audit (proxy_id, action, actor_user_id, details)
+        VALUES (?, ?, ?, ?)
+        """,
+        (int(proxy_id), action, actor_user_id, json.dumps(details or {})),
+    )
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def list_proxy_audit(conn: sqlite3.Connection, proxy_id: int) -> list[dict]:
+    rows = conn.execute(
+        "SELECT * FROM proxy_audit WHERE proxy_id = ? ORDER BY created_at",
+        (int(proxy_id),),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+# ---------------------------------------------------------------------------
+# Participation Records
+# ---------------------------------------------------------------------------
+
+def create_participation_record(
+    conn: sqlite3.Connection,
+    *,
+    hoa_id: int,
+    meeting_date: str,
+    meeting_type: str | None = None,
+    total_units: int | None = None,
+    votes_cast: int | None = None,
+    quorum_required: int | None = None,
+    quorum_met: bool | None = None,
+    source_document_id: int | None = None,
+    entered_by_user_id: int | None = None,
+    notes: str | None = None,
+) -> int:
+    cur = conn.execute(
+        """
+        INSERT INTO participation_records
+            (hoa_id, meeting_date, meeting_type, total_units, votes_cast,
+             quorum_required, quorum_met, source_document_id, entered_by_user_id, notes)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            int(hoa_id), meeting_date, meeting_type, total_units, votes_cast,
+            quorum_required, quorum_met, source_document_id, entered_by_user_id,
+            (notes or "").strip() or None,
+        ),
+    )
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def list_participation_records(conn: sqlite3.Connection, hoa_id: int) -> list[dict]:
+    rows = conn.execute(
+        """
+        SELECT * FROM participation_records
+        WHERE hoa_id = ?
+        ORDER BY meeting_date DESC
+        """,
+        (int(hoa_id),),
+    ).fetchall()
+    return [dict(r) for r in rows]

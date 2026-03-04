@@ -32,6 +32,11 @@ class Settings:
     docai_processor_id: str | None
     docai_endpoint: str | None
     docai_chunk_pages: int
+    legal_source_map_path: Path
+    legal_corpus_root: Path
+    jwt_secret: str
+    jwt_algorithm: str
+    jwt_expiry_days: int
 
 
 def load_settings() -> Settings:
@@ -56,6 +61,11 @@ def load_settings() -> Settings:
         docai_processor_id=os.environ.get("HOA_DOCAI_PROCESSOR_ID"),
         docai_endpoint=os.environ.get("HOA_DOCAI_ENDPOINT"),
         docai_chunk_pages=int(os.environ.get("HOA_DOCAI_CHUNK_PAGES", "10")),
+        legal_source_map_path=Path(os.environ.get("HOA_LEGAL_SOURCE_MAP_PATH", "data/legal/source_map.json")),
+        legal_corpus_root=Path(os.environ.get("HOA_LEGAL_CORPUS_ROOT", "legal_corpus")),
+        jwt_secret=os.environ.get("JWT_SECRET", "dev-secret-change-in-production"),
+        jwt_algorithm=os.environ.get("JWT_ALGORITHM", "HS256"),
+        jwt_expiry_days=int(os.environ.get("JWT_EXPIRY_DAYS", "30")),
     )
 
 

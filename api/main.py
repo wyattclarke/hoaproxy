@@ -11,12 +11,13 @@ from typing import List
 from urllib.parse import quote, unquote, urlparse
 
 import requests
-from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from hoaware import db
+from hoaware.auth import get_current_user, hash_password, verify_password, create_access_token, optional_current_user
 from hoaware.config import load_settings
 from hoaware.ingest import ingest_pdf_paths
 from hoaware.qa import get_answer, get_answer_multi, retrieve_context, retrieve_context_multi
@@ -252,6 +253,116 @@ class HoaSummary(BaseModel):
     latitude: float | None = None
     longitude: float | None = None
     boundary_geojson: dict | None = None
+
+
+# ---------------------------------------------------------------------------
+# Auth models
+# ---------------------------------------------------------------------------
+
+class RegisterRequest(BaseModel):
+    email: str
+    password: str = Field(..., min_length=8)
+    display_name: str | None = None
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class AuthResponse(BaseModel):
+    user_id: int
+    token: str
+
+
+class UserMeResponse(BaseModel):
+    user_id: int
+    email: str
+    display_name: str | None = None
+    hoas: list[dict] = []
+
+
+class MembershipClaimRequest(BaseModel):
+    unit_number: str | None = None
+
+
+class MembershipClaimResponse(BaseModel):
+    id: int
+    user_id: int
+    hoa_id: int
+    hoa_name: str
+    unit_number: str | None = None
+    status: str
+
+
+class DelegateRegisterRequest(BaseModel):
+    hoa_id: int
+    bio: str | None = None
+    contact_email: str | None = None
+
+
+class DelegateUpdateRequest(BaseModel):
+    bio: str | None = None
+    contact_email: str | None = None
+
+
+class DelegateResponse(BaseModel):
+    id: int
+    user_id: int
+    hoa_id: int
+    hoa_name: str
+    display_name: str | None = None
+    bio: str | None = None
+    contact_email: str | None = None
+    created_at: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Proxy models
+# ---------------------------------------------------------------------------
+
+class CreateProxyRequest(BaseModel):
+    delegate_user_id: int
+    hoa_id: int
+    direction: str = "directed"
+    voting_instructions: str | None = None
+    for_meeting_date: str | None = None
+
+
+class SignProxyRequest(BaseModel):
+    pass  # No additional data needed; IP/UA captured from request
+
+
+class RevokeProxyRequest(BaseModel):
+    reason: str | None = None
+
+
+class ProxyResponse(BaseModel):
+    id: int
+    grantor_user_id: int
+    delegate_user_id: int
+    hoa_id: int
+    hoa_name: str | None = None
+    grantor_name: str | None = None
+    delegate_name: str | None = None
+    jurisdiction: str
+    community_type: str
+    direction: str
+    voting_instructions: str | None = None
+    for_meeting_date: str | None = None
+    expires_at: str | None = None
+    status: str
+    signed_at: str | None = None
+    delivered_at: str | None = None
+    revoked_at: str | None = None
+    revoke_reason: str | None = None
+    created_at: str | None = None
+
+
+class ProxyStatsResponse(BaseModel):
+    total: int
+    signed: int
+    delivered: int
 
 
 def _normalize_hoa_name(raw_name: str) -> str:
@@ -986,6 +1097,65 @@ def about_page() -> FileResponse:
     return FileResponse(page)
 
 
+def _serve_static_page(filename: str) -> FileResponse:
+    if not STATIC_DIR.exists():
+        raise HTTPException(status_code=404, detail="UI not available")
+    page = STATIC_DIR / filename
+    if not page.exists():
+        raise HTTPException(status_code=404, detail="Page not available")
+    return FileResponse(page)
+
+
+@app.get("/login", include_in_schema=False)
+def login_page() -> FileResponse:
+    return _serve_static_page("login.html")
+
+
+@app.get("/register", include_in_schema=False)
+def register_page() -> FileResponse:
+    return _serve_static_page("register.html")
+
+
+@app.get("/dashboard", include_in_schema=False)
+def dashboard_page() -> FileResponse:
+    return _serve_static_page("dashboard.html")
+
+
+@app.get("/become-delegate", include_in_schema=False)
+def become_delegate_page() -> FileResponse:
+    return _serve_static_page("become-delegate.html")
+
+
+@app.get("/delegate/{delegate_id}", include_in_schema=False)
+def delegate_profile_page(delegate_id: int) -> FileResponse:
+    return _serve_static_page("delegate-profile.html")
+
+
+@app.get("/assign-proxy", include_in_schema=False)
+def assign_proxy_page() -> FileResponse:
+    return _serve_static_page("assign-proxy.html")
+
+
+@app.get("/proxy-sign/{proxy_id}", include_in_schema=False)
+def proxy_sign_page(proxy_id: int) -> FileResponse:
+    return _serve_static_page("proxy-sign.html")
+
+
+@app.get("/my-proxies", include_in_schema=False)
+def my_proxies_page() -> FileResponse:
+    return _serve_static_page("my-proxies.html")
+
+
+@app.get("/delegate-dashboard", include_in_schema=False)
+def delegate_dashboard_page() -> FileResponse:
+    return _serve_static_page("delegate-dashboard.html")
+
+
+@app.get("/participation/{hoa_name:path}", include_in_schema=False)
+def participation_page(hoa_name: str) -> FileResponse:
+    return _serve_static_page("participation.html")
+
+
 @app.get("/hoa/{hoa_name:path}", include_in_schema=False)
 def hoa_profile_page(hoa_name: str) -> FileResponse:
     if not STATIC_DIR.exists():
@@ -999,6 +1169,387 @@ def hoa_profile_page(hoa_name: str) -> FileResponse:
 @app.get("/healthz")
 def health() -> dict:
     return {"status": "ok"}
+
+
+# ---------------------------------------------------------------------------
+# Auth endpoints
+# ---------------------------------------------------------------------------
+
+@app.post("/auth/register", response_model=AuthResponse)
+def register(body: RegisterRequest):
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        existing = db.get_user_by_email(conn, body.email)
+        if existing:
+            raise HTTPException(status_code=409, detail="Email already registered")
+        pw_hash = hash_password(body.password)
+        user_id = db.create_user(conn, email=body.email, password_hash=pw_hash, display_name=body.display_name)
+        token, jti, expires = create_access_token(user_id, settings)
+        db.create_session(conn, user_id=user_id, token_jti=jti, expires_at=expires.isoformat())
+    return AuthResponse(user_id=user_id, token=token)
+
+
+@app.post("/auth/login", response_model=AuthResponse)
+def login(body: LoginRequest):
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        user = db.get_user_by_email(conn, body.email)
+        if not user or not verify_password(body.password, user["password_hash"]):
+            raise HTTPException(status_code=401, detail="Invalid email or password")
+        token, jti, expires = create_access_token(user["id"], settings)
+        db.create_session(conn, user_id=user["id"], token_jti=jti, expires_at=expires.isoformat())
+    return AuthResponse(user_id=user["id"], token=token)
+
+
+@app.post("/auth/logout")
+def logout(user: dict = Depends(get_current_user)):
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        db.delete_session_by_jti(conn, user["_jti"])
+    return {"ok": True}
+
+
+@app.get("/auth/me", response_model=UserMeResponse)
+def me(user: dict = Depends(get_current_user)):
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        claims = db.list_membership_claims_for_user(conn, user["id"])
+    return UserMeResponse(
+        user_id=user["id"],
+        email=user["email"],
+        display_name=user.get("display_name"),
+        hoas=[{"hoa_id": c["hoa_id"], "hoa_name": c["hoa_name"], "unit_number": c["unit_number"], "status": c["status"]} for c in claims],
+    )
+
+
+# ---------------------------------------------------------------------------
+# Membership endpoints
+# ---------------------------------------------------------------------------
+
+@app.post("/user/hoas/{hoa_id}/claim", response_model=MembershipClaimResponse)
+def claim_membership(hoa_id: int, body: MembershipClaimRequest, user: dict = Depends(get_current_user)):
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        # Verify HOA exists
+        hoa_row = conn.execute("SELECT id, name FROM hoas WHERE id = ?", (hoa_id,)).fetchone()
+        if not hoa_row:
+            raise HTTPException(status_code=404, detail="HOA not found")
+        existing = db.get_membership_claim(conn, user["id"], hoa_id)
+        if existing:
+            raise HTTPException(status_code=409, detail="You have already claimed membership in this HOA")
+        claim_id = db.create_membership_claim(conn, user_id=user["id"], hoa_id=hoa_id, unit_number=body.unit_number)
+        claim = conn.execute("SELECT * FROM membership_claims WHERE id = ?", (claim_id,)).fetchone()
+    return MembershipClaimResponse(
+        id=claim_id, user_id=user["id"], hoa_id=hoa_id,
+        hoa_name=hoa_row["name"], unit_number=dict(claim).get("unit_number"), status="self_declared",
+    )
+
+
+class MembershipClaimByNameRequest(BaseModel):
+    hoa_name: str
+    unit_number: str | None = None
+
+
+@app.post("/user/hoas/claim-by-name", response_model=MembershipClaimResponse)
+def claim_membership_by_name(body: MembershipClaimByNameRequest, user: dict = Depends(get_current_user)):
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        hoa_row = conn.execute("SELECT id, name FROM hoas WHERE name = ?", (body.hoa_name,)).fetchone()
+        if not hoa_row:
+            raise HTTPException(status_code=404, detail="HOA not found")
+        hoa_id = hoa_row["id"]
+        existing = db.get_membership_claim(conn, user["id"], hoa_id)
+        if existing:
+            raise HTTPException(status_code=409, detail="You have already claimed membership in this HOA")
+        claim_id = db.create_membership_claim(conn, user_id=user["id"], hoa_id=hoa_id, unit_number=body.unit_number)
+    return MembershipClaimResponse(
+        id=claim_id, user_id=user["id"], hoa_id=hoa_id,
+        hoa_name=hoa_row["name"], unit_number=body.unit_number, status="self_declared",
+    )
+
+
+@app.get("/user/hoas")
+def list_user_hoas(user: dict = Depends(get_current_user)):
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        claims = db.list_membership_claims_for_user(conn, user["id"])
+    return claims
+
+
+# ---------------------------------------------------------------------------
+# Delegate endpoints
+# ---------------------------------------------------------------------------
+
+@app.post("/delegates/register", response_model=DelegateResponse)
+def register_delegate(body: DelegateRegisterRequest, user: dict = Depends(get_current_user)):
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        # Must be a member of the HOA
+        claim = db.get_membership_claim(conn, user["id"], body.hoa_id)
+        if not claim:
+            raise HTTPException(status_code=403, detail="You must claim membership in this HOA first")
+        existing = db.get_delegate_by_user_hoa(conn, user["id"], body.hoa_id)
+        if existing:
+            raise HTTPException(status_code=409, detail="You are already a delegate for this HOA")
+        delegate_id = db.create_delegate(
+            conn, user_id=user["id"], hoa_id=body.hoa_id,
+            bio=body.bio, contact_email=body.contact_email,
+        )
+        delegate = db.get_delegate(conn, delegate_id)
+    return DelegateResponse(
+        id=delegate["id"], user_id=delegate["user_id"], hoa_id=delegate["hoa_id"],
+        hoa_name=delegate["hoa_name"], display_name=delegate.get("display_name"),
+        bio=delegate.get("bio"), contact_email=delegate.get("contact_email"),
+        created_at=delegate.get("created_at"),
+    )
+
+
+@app.get("/delegates/{delegate_id}", response_model=DelegateResponse)
+def get_delegate(delegate_id: int):
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        delegate = db.get_delegate(conn, delegate_id)
+    if not delegate:
+        raise HTTPException(status_code=404, detail="Delegate not found")
+    return DelegateResponse(
+        id=delegate["id"], user_id=delegate["user_id"], hoa_id=delegate["hoa_id"],
+        hoa_name=delegate["hoa_name"], display_name=delegate.get("display_name"),
+        bio=delegate.get("bio"), contact_email=delegate.get("contact_email"),
+        created_at=delegate.get("created_at"),
+    )
+
+
+@app.get("/hoas/{hoa_id}/delegates")
+def list_hoa_delegates(hoa_id: int):
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        delegates = db.list_delegates_for_hoa(conn, hoa_id)
+    return [
+        DelegateResponse(
+            id=d["id"], user_id=d["user_id"], hoa_id=hoa_id,
+            hoa_name="", display_name=d.get("display_name"),
+            bio=d.get("bio"), contact_email=d.get("contact_email"),
+            created_at=d.get("created_at"),
+        )
+        for d in delegates
+    ]
+
+
+@app.patch("/delegates/{delegate_id}")
+def update_delegate(delegate_id: int, body: DelegateUpdateRequest, user: dict = Depends(get_current_user)):
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        delegate = db.get_delegate(conn, delegate_id)
+        if not delegate:
+            raise HTTPException(status_code=404, detail="Delegate not found")
+        if delegate["user_id"] != user["id"]:
+            raise HTTPException(status_code=403, detail="Not your delegate profile")
+        db.update_delegate(conn, delegate_id, bio=body.bio, contact_email=body.contact_email)
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# Proxy Template endpoints
+# ---------------------------------------------------------------------------
+
+@app.get("/proxy-templates/preview")
+def preview_proxy_template(
+    jurisdiction: str = "CA",
+    community_type: str = "hoa",
+) -> HTMLResponse:
+    from hoaware.proxy_templates import render_proxy_form
+    html = render_proxy_form(
+        jurisdiction=jurisdiction,
+        community_type=community_type,
+        grantor_name="Jane Doe",
+        grantor_unit="Unit 42",
+        delegate_name="John Smith",
+        hoa_name="Example Homeowners Association",
+        meeting_date="2026-04-15",
+        direction="directed",
+    )
+    return HTMLResponse(content=html)
+
+
+# ---------------------------------------------------------------------------
+# Proxy Assignment endpoints
+# ---------------------------------------------------------------------------
+
+def _proxy_to_response(p: dict) -> ProxyResponse:
+    return ProxyResponse(
+        id=p["id"], grantor_user_id=p["grantor_user_id"], delegate_user_id=p["delegate_user_id"],
+        hoa_id=p["hoa_id"], hoa_name=p.get("hoa_name"), grantor_name=p.get("grantor_name"),
+        delegate_name=p.get("delegate_name"), jurisdiction=p["jurisdiction"],
+        community_type=p["community_type"], direction=p.get("direction", "directed"),
+        voting_instructions=p.get("voting_instructions"), for_meeting_date=p.get("for_meeting_date"),
+        expires_at=p.get("expires_at"), status=p["status"], signed_at=p.get("signed_at"),
+        delivered_at=p.get("delivered_at"), revoked_at=p.get("revoked_at"),
+        revoke_reason=p.get("revoke_reason"), created_at=p.get("created_at"),
+    )
+
+
+@app.post("/proxies", response_model=ProxyResponse)
+def create_proxy(body: CreateProxyRequest, request: Request, user: dict = Depends(get_current_user)):
+    from hoaware.proxy_templates import render_proxy_form
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        # Verify grantor is a member of the HOA
+        claim = db.get_membership_claim(conn, user["id"], body.hoa_id)
+        if not claim:
+            raise HTTPException(status_code=403, detail="You must be a member of this HOA to create a proxy")
+        # Verify delegate exists for this HOA
+        delegate_delegate = None
+        delegates = db.list_delegates_for_hoa(conn, body.hoa_id)
+        for d in delegates:
+            if d["user_id"] == body.delegate_user_id:
+                delegate_delegate = d
+                break
+        if not delegate_delegate:
+            raise HTTPException(status_code=404, detail="Delegate not found for this HOA")
+        # Cannot assign proxy to yourself
+        if body.delegate_user_id == user["id"]:
+            raise HTTPException(status_code=400, detail="Cannot assign proxy to yourself")
+
+        # Get HOA location to determine jurisdiction
+        hoa_row = conn.execute("SELECT id, name FROM hoas WHERE id = ?", (body.hoa_id,)).fetchone()
+        hoa_name = hoa_row["name"] if hoa_row else "Unknown HOA"
+        loc = db.get_hoa_location(conn, hoa_name)
+        jurisdiction = (loc.get("state") if loc else None) or "XX"
+
+        # Render form
+        grantor = db.get_user_by_id(conn, user["id"])
+        delegate_user = db.get_user_by_id(conn, body.delegate_user_id)
+        form_html = render_proxy_form(
+            jurisdiction=jurisdiction,
+            community_type="hoa",
+            grantor_name=grantor.get("display_name") or grantor["email"],
+            grantor_unit=claim.get("unit_number"),
+            delegate_name=delegate_user.get("display_name") or delegate_user["email"],
+            hoa_name=hoa_name,
+            meeting_date=body.for_meeting_date,
+            direction=body.direction,
+        )
+
+        proxy_id = db.create_proxy_assignment(
+            conn,
+            grantor_user_id=user["id"],
+            delegate_user_id=body.delegate_user_id,
+            hoa_id=body.hoa_id,
+            jurisdiction=jurisdiction,
+            community_type="hoa",
+            direction=body.direction,
+            voting_instructions=body.voting_instructions,
+            for_meeting_date=body.for_meeting_date,
+            form_html=form_html,
+        )
+        db.create_proxy_audit(
+            conn, proxy_id=proxy_id, action="created", actor_user_id=user["id"],
+            details={"direction": body.direction},
+        )
+        proxy = db.get_proxy_assignment(conn, proxy_id)
+    return _proxy_to_response(proxy)
+
+
+@app.get("/proxies/mine")
+def list_my_proxies(user: dict = Depends(get_current_user)):
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        proxies = db.list_proxies_for_grantor(conn, user["id"])
+    return [_proxy_to_response(p) for p in proxies]
+
+
+@app.get("/proxies/delegated")
+def list_delegated_proxies(user: dict = Depends(get_current_user)):
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        proxies = db.list_proxies_for_delegate(conn, user["id"])
+    return [_proxy_to_response(p) for p in proxies]
+
+
+@app.get("/proxies/{proxy_id}", response_model=ProxyResponse)
+def get_proxy(proxy_id: int, user: dict = Depends(get_current_user)):
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        proxy = db.get_proxy_assignment(conn, proxy_id)
+    if not proxy:
+        raise HTTPException(status_code=404, detail="Proxy not found")
+    if proxy["grantor_user_id"] != user["id"] and proxy["delegate_user_id"] != user["id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    return _proxy_to_response(proxy)
+
+
+@app.get("/proxies/{proxy_id}/form")
+def get_proxy_form(proxy_id: int, user: dict = Depends(get_current_user)) -> HTMLResponse:
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        proxy = db.get_proxy_assignment(conn, proxy_id)
+    if not proxy:
+        raise HTTPException(status_code=404, detail="Proxy not found")
+    if proxy["grantor_user_id"] != user["id"] and proxy["delegate_user_id"] != user["id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    return HTMLResponse(content=proxy.get("form_html") or "<p>No form available.</p>")
+
+
+@app.post("/proxies/{proxy_id}/sign", response_model=ProxyResponse)
+def sign_proxy(proxy_id: int, request: Request, user: dict = Depends(get_current_user)):
+    from hoaware.esign import record_signature
+    ip = request.client.host if request.client else None
+    ua = request.headers.get("User-Agent")
+    success = record_signature(proxy_id, user["id"], ip_address=ip, user_agent=ua)
+    if not success:
+        raise HTTPException(status_code=400, detail="Cannot sign this proxy. It may not be in draft status or you may not be the grantor.")
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        proxy = db.get_proxy_assignment(conn, proxy_id)
+    return _proxy_to_response(proxy)
+
+
+@app.post("/proxies/{proxy_id}/deliver", response_model=ProxyResponse)
+def deliver_proxy(proxy_id: int, user: dict = Depends(get_current_user)):
+    from hoaware.email_service import deliver_proxy_to_board
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        proxy = db.get_proxy_assignment(conn, proxy_id)
+    if not proxy:
+        raise HTTPException(status_code=404, detail="Proxy not found")
+    if proxy["grantor_user_id"] != user["id"]:
+        raise HTTPException(status_code=403, detail="Only the grantor can deliver a proxy")
+    success = deliver_proxy_to_board(proxy_id, actor_user_id=user["id"])
+    if not success:
+        raise HTTPException(status_code=400, detail="Cannot deliver this proxy. It must be signed first.")
+    with db.get_connection(settings.db_path) as conn:
+        proxy = db.get_proxy_assignment(conn, proxy_id)
+    return _proxy_to_response(proxy)
+
+
+@app.post("/proxies/{proxy_id}/revoke", response_model=ProxyResponse)
+def revoke_proxy(proxy_id: int, body: RevokeProxyRequest, user: dict = Depends(get_current_user)):
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        proxy = db.get_proxy_assignment(conn, proxy_id)
+        if not proxy:
+            raise HTTPException(status_code=404, detail="Proxy not found")
+        if proxy["grantor_user_id"] != user["id"]:
+            raise HTTPException(status_code=403, detail="Only the grantor can revoke a proxy")
+        if proxy["status"] in ("revoked", "expired"):
+            raise HTTPException(status_code=400, detail=f"Proxy is already {proxy['status']}")
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc).isoformat()
+        db.update_proxy_status(conn, proxy_id, "revoked", revoked_at=now, revoke_reason=body.reason)
+        db.create_proxy_audit(
+            conn, proxy_id=proxy_id, action="revoked", actor_user_id=user["id"],
+            details={"reason": body.reason},
+        )
+        proxy = db.get_proxy_assignment(conn, proxy_id)
+    return _proxy_to_response(proxy)
+
+
+@app.get("/hoas/{hoa_id}/proxy-stats", response_model=ProxyStatsResponse)
+def get_proxy_stats(hoa_id: int):
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        stats = db.count_proxies_for_hoa(conn, hoa_id)
+    return ProxyStatsResponse(**stats)
 
 
 @app.get("/hoas")

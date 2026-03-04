@@ -464,7 +464,7 @@
           <h1 class="brand-wrap">
             <a class="brand brand-link" href="/"><span class="brand-mark" aria-hidden="true"></span><span class="brand-hoa">HOA</span><span class="brand-aware">ware</span></a>
           </h1>
-          <div class="actions">
+          <div class="actions" id="navContainer">
             <a class="btn primary" href="/add-hoa">Add Your HOA</a>
             <a class="btn" href="/about">About</a>
           </div>
@@ -1006,6 +1006,24 @@
       clearMultiResults();
       initMap();
       loadSummaries();
+    </script>
+    <script src="/static/js/auth.js"></script>
+    <script>
+      // Add auth-aware nav items
+      const navContainer = document.getElementById("navContainer");
+      if (navContainer) {
+        const baseLinks = '<a class="btn primary" href="/add-hoa">Add Your HOA</a><a class="btn" href="/about">About</a>';
+        if (Auth.isLoggedIn()) {
+          navContainer.innerHTML = baseLinks +
+            '<a class="btn" href="/dashboard">Dashboard</a>' +
+            '<a class="btn" id="logoutBtn">Logout</a>';
+          document.getElementById("logoutBtn").addEventListener("click", Auth.logout);
+        } else {
+          navContainer.innerHTML = baseLinks +
+            '<a class="btn" href="/login">Login</a>' +
+            '<a class="btn" href="/register">Register</a>';
+        }
+      }
     </script>
   </body>
 </html>
