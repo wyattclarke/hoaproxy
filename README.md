@@ -41,6 +41,8 @@ pip install -r requirements.txt
 | `HOA_DOCAI_PROCESSOR_ID` | Processor ID from Document AI | – |
 | `HOA_DOCAI_ENDPOINT` | (Optional) Custom API endpoint | computed |
 | `HOA_DOCAI_CHUNK_PAGES` | Split PDFs into chunks (default 10 pages) | `10` |
+| `HOA_LEGAL_SOURCE_MAP_PATH` | Jurisdiction law source map JSON | `data/legal/source_map.json` |
+| `HOA_LEGAL_CORPUS_ROOT` | Legal corpus snapshots + metadata root | `legal_corpus` |
 
 The app auto-loads `settings.env` (and `.env` if present), so you can run `uvicorn` without manually exporting variables.
 
@@ -116,6 +118,11 @@ A FastAPI service (`api/main.py`) exposes:
 - `POST /upload` – multipart upload (`hoa`, `files[]`) and immediate ingestion
 - `POST /search` – semantic chunk search (`hoa`, `query`, `k`)
 - `POST /qa` – body `{ "hoa": "Park Grove", "question": "...", "k": 6, "model": "gpt-4o-mini" }`
+- `GET /law/jurisdictions` – legal corpus jurisdiction coverage summary
+- `GET /law/{jurisdiction}/profiles` – normalized legal profiles (optional `community_type`, `entity_form`)
+- `POST /law/qa` – deterministic legal QA for a jurisdiction and question family
+- `GET /law/{jurisdiction}/proxy-electronic` – status/evidence for electronic proxy assignment + e-signature acceptance
+- `GET /law/proxy-electronic/summary` – per-jurisdiction summary for electronic proxy statuses
 
 Run locally:
 
@@ -201,6 +208,44 @@ Recommended workflow in Codex Web:
   python -m compileall -q api hoaware
   ```
 - Open a PR from your `codex/*` branch into `master`.
+
+## State Law Corpus Pipeline
+
+The repo now includes a jurisdiction legal-corpus workflow under `scripts/legal/`:
+
+```bash
+python scripts/legal/build_source_map.py
+python scripts/legal/fetch_law_texts.py --state NC
+python scripts/legal/normalize_law_texts.py --state NC
+python scripts/legal/extract_rules.py --state NC
+python scripts/legal/assemble_profiles.py --state NC
+python scripts/legal/validate_corpus.py
+```
+
+One-command runner:
+
+```bash
+python scripts/legal/run_pipeline.py --state NC
+python scripts/legal/run_pipeline.py --state NC --refresh-fetch --force-normalize
+python scripts/legal/run_pipeline.py --rebuild-source-map --rebuild-proxy-matrix --limit 500
+```
+
+Pipeline behavior:
+- Fetch and normalize are idempotent by default.
+- `run_pipeline.py` will not rebuild `data/legal/source_map.json` unless `--rebuild-source-map` is set.
+- `run_pipeline.py` will build `data/legal/proxy_requirement_matrix.json` if missing (or force with `--rebuild-proxy-matrix`).
+- Use `--skip-validate` to skip validation/progress-index refresh.
+
+CLI shortcuts:
+
+```bash
+python -m hoaware.cli law-jurisdictions
+python -m hoaware.cli law-profiles --jurisdiction NC
+python -m hoaware.cli law-qa NC --community-type hoa --question-family records_and_sharing
+python -m hoaware.cli law-pipeline --state NC
+python -m hoaware.cli law-proxy-electronic FL --community-type hoa
+python -m hoaware.cli law-proxy-electronic-summary --community-type hoa
+```
 
 ## Next Steps
 

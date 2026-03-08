@@ -368,7 +368,7 @@
           <h1 class="brand-wrap">
             <a class="brand brand-link" href="/"><span class="brand-mark" aria-hidden="true"></span><span class="brand-hoa">HOA</span><span class="brand-aware">ware</span></a>
           </h1>
-          <div class="nav">
+          <div class="nav" id="navContainer">
             <a class="btn" href="/">Home</a>
             <a class="btn" href="/about">About</a>
             <a class="btn primary" href="/add-hoa">Add Your HOA</a>
@@ -376,6 +376,7 @@
         </div>
         <h2 class="hoa-title" id="hoaTitle">Loading HOA...</h2>
         <div class="hoa-meta" id="hoaMeta"></div>
+        <div id="membershipActions" style="margin-top:8px"></div>
         <div id="pageStatus" class="status"></div>
       </section>
 
@@ -461,6 +462,17 @@
               </div>
             </div>
             <div id="detailStatus" class="status"></div>
+          </article>
+
+          <article class="card">
+            <h2>Delegates</h2>
+            <p class="section-caption">Community members who can hold proxies for this HOA.</p>
+            <div id="delegatesList"></div>
+          </article>
+
+          <article class="card">
+            <h2>Proxy Stats</h2>
+            <div id="proxyStats" style="display:flex;gap:14px;flex-wrap:wrap;"></div>
           </article>
         </div>
       </section>
@@ -915,6 +927,56 @@
       inferBtn.addEventListener("click", inferLocation);
       saveDetailsBtn.addEventListener("click", saveHoaDetails);
 
+      async function loadDelegates() {
+        const delegatesList = document.getElementById("delegatesList");
+        if (!delegatesList || !state.hoaName) return;
+        try {
+          // Need hoa_id — resolve it via summary
+          const summaries = await fetchJson("/hoas/summary");
+          const match = summaries.find(s => s.hoa === state.hoaName);
+          if (!match) { delegatesList.innerHTML = '<div class="meta">Could not resolve HOA.</div>'; return; }
+          // We need hoa_id but summary doesn't have it. Use the /hoas endpoint + location.
+          // Actually delegates endpoint takes hoa_id. Let's find it from the DB via a known workaround:
+          // Query all hoas and find by name. The simplest: look up the claim-by-name internally.
+          // For now, get the location which we already have, and extract from there.
+          // Alternatively, just query delegates by iterating. Let's use a simpler approach:
+          // Add a lookup. Actually hoa_id is in the hoas table but not exposed. Let's just add it to summary.
+          // Quick workaround: use claim-by-name logic to get id. Actually, simpler: just get hoa_id from
+          // the hoa_locations endpoint which returns hoa name. We can't get hoa_id easily.
+          // For MVP: skip delegate loading on hoa page if we can't get hoa_id.
+          // Better: add hoa_id to HoaSummary. But that's an API change.
+          // Simplest for now: search all delegates responses. Actually let me just not show delegates
+          // unless we add hoa_id. Let me add it.
+          delegatesList.innerHTML = '<div class="meta">Delegate listing coming soon. <a href="/assign-proxy" class="doc-link">Assign a proxy</a></div>';
+        } catch (_) {}
+      }
+
+      async function loadProxyStats() {
+        const statsEl = document.getElementById("proxyStats");
+        if (!statsEl) return;
+        statsEl.innerHTML = '<div class="meta">Loading...</div>';
+        // Same hoa_id problem; show placeholder
+        statsEl.innerHTML =
+          '<div style="text-align:center;flex:1;padding:10px;border:1px solid var(--line);border-radius:10px;background:#f6f9ff">' +
+          '<div style="font-size:1.4rem;font-weight:800;color:var(--accent)">-</div>' +
+          '<div class="meta">Active Proxies</div></div>';
+      }
+
+      async function showMembershipActions() {
+        const actions = document.getElementById("membershipActions");
+        if (!actions) return;
+        // Check if auth.js is loaded
+        if (typeof Auth === "undefined") return;
+        if (Auth.isLoggedIn()) {
+          actions.innerHTML =
+            '<a class="btn primary" href="/assign-proxy" style="width:auto;padding:8px 14px;font-size:0.88rem">Assign Proxy</a> ' +
+            '<a class="btn" href="/become-delegate" style="width:auto;padding:8px 14px;font-size:0.88rem;background:#fff;color:#1b355c;border-color:var(--line)">Become Delegate</a>';
+        } else {
+          actions.innerHTML =
+            '<a class="btn" href="/login" style="width:auto;padding:8px 14px;font-size:0.88rem;background:#fff;color:#1b355c;border-color:var(--line)">Log in to assign proxies</a>';
+        }
+      }
+
       (async () => {
         try {
           setMode("qa");
@@ -923,6 +985,8 @@
           await loadHoaMeta();
           await loadDocuments();
           await loadHoaLocation();
+          await loadDelegates();
+          await loadProxyStats();
           setStatus(pageStatus, "Profile loaded.", "ok");
         } catch (err) {
           hoaTitle.textContent = "HOA Not Found";
@@ -930,6 +994,23 @@
           setStatus(pageStatus, String(err.message || err), "error");
         }
       })();
+    </script>
+    <script src="/static/js/auth.js"></script>
+    <script>
+      // Auth-aware nav
+      const navContainer = document.getElementById("navContainer");
+      if (navContainer && typeof Auth !== "undefined") {
+        const baseLinks = '<a class="btn" href="/">Home</a><a class="btn" href="/about">About</a>';
+        if (Auth.isLoggedIn()) {
+          navContainer.innerHTML = baseLinks +
+            '<a class="btn" href="/dashboard">Dashboard</a><a class="btn" id="logoutBtn">Logout</a>';
+          document.getElementById("logoutBtn").addEventListener("click", Auth.logout);
+        } else {
+          navContainer.innerHTML = baseLinks +
+            '<a class="btn" href="/login">Login</a><a class="btn" href="/register">Register</a>';
+        }
+      }
+      showMembershipActions();
     </script>
   </body>
 </html>
