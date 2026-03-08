@@ -264,6 +264,10 @@ def get_connection(db_path: Path) -> sqlite3.Connection:
     conn.executescript(SCHEMA)
     _ensure_table_column(conn, "hoa_locations", "website_url", "TEXT")
     _ensure_table_column(conn, "hoa_locations", "boundary_geojson", "TEXT")
+    # M6 migrations
+    _ensure_table_column(conn, "hoas", "board_email", "TEXT")
+    _ensure_table_column(conn, "proxy_assignments", "documenso_document_id", "TEXT")
+    _ensure_table_column(conn, "proxy_assignments", "documenso_signing_url", "TEXT")
     return conn
 
 
@@ -374,6 +378,14 @@ def replace_chunks(
 def list_hoa_names(conn: sqlite3.Connection) -> list[str]:
     cur = conn.execute("SELECT name FROM hoas ORDER BY name COLLATE NOCASE")
     return [str(row["name"]) for row in cur.fetchall()]
+
+
+def set_hoa_board_email(conn: sqlite3.Connection, hoa_id: int, board_email: str | None) -> None:
+    conn.execute(
+        "UPDATE hoas SET board_email = ? WHERE id = ?",
+        (board_email, int(hoa_id)),
+    )
+    conn.commit()
 
 
 def list_hoa_names_with_documents(conn: sqlite3.Connection) -> list[str]:
@@ -1645,7 +1657,7 @@ def get_proxy_assignment(conn: sqlite3.Connection, proxy_id: int) -> dict | None
         SELECT pa.*,
                gu.email AS grantor_email, gu.display_name AS grantor_name,
                du.email AS delegate_email, du.display_name AS delegate_name,
-               h.name AS hoa_name
+               h.name AS hoa_name, h.board_email AS hoa_board_email
         FROM proxy_assignments pa
         JOIN users gu ON gu.id = pa.grantor_user_id
         JOIN users du ON du.id = pa.delegate_user_id

@@ -1,13 +1,18 @@
 """Email delivery abstraction.
 
-MVP: Log to console + store as "delivered."
-Future: SMTP/SendGrid/Postmark integration.
+Supports three modes set by EMAIL_PROVIDER env var:
+- "stub" (default): log only, no real email sent
+- "resend": use the Resend API (https://resend.com) — 100 emails/day free
+- "smtp": use SMTP (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD)
 """
 
 from __future__ import annotations
 
 import logging
+import smtplib
 from datetime import datetime, timezone
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 
 from hoaware import db
 from hoaware.config import load_settings
@@ -15,10 +20,182 @@ from hoaware.config import load_settings
 logger = logging.getLogger(__name__)
 
 
-def deliver_proxy_to_board(proxy_id: int, actor_user_id: int | None = None) -> bool:
-    """MVP: Log the delivery event. Do not actually send email.
+# ---------------------------------------------------------------------------
+# Internal send helpers
+# ---------------------------------------------------------------------------
 
-    The delegate prints/forwards the form manually.
+def _send_via_resend(
+    *,
+    api_key: str,
+    from_addr: str,
+    to: list[str],
+    subject: str,
+    html: str,
+) -> None:
+    import resend  # type: ignore
+    resend.api_key = api_key
+    resend.Emails.send({
+        "from": from_addr,
+        "to": to,
+        "subject": subject,
+        "html": html,
+    })
+
+
+def _send_via_smtp(
+    *,
+    host: str,
+    port: int,
+    user: str | None,
+    password: str | None,
+    from_addr: str,
+    to: list[str],
+    subject: str,
+    html: str,
+) -> None:
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    msg["From"] = from_addr
+    msg["To"] = ", ".join(to)
+    msg.attach(MIMEText(html, "html"))
+
+    with smtplib.SMTP(host, port) as smtp:
+        smtp.ehlo()
+        if port != 25:
+            smtp.starttls()
+            smtp.ehlo()
+        if user and password:
+            smtp.login(user, password)
+        smtp.sendmail(from_addr, to, msg.as_string())
+
+
+def _send_email(*, to: list[str], subject: str, html: str) -> bool:
+    """Send an email using the configured provider. Returns True on success."""
+    settings = load_settings()
+    provider = settings.email_provider
+
+    if provider == "resend":
+        if not settings.resend_api_key:
+            logger.warning("EMAIL_PROVIDER=resend but RESEND_API_KEY not set; falling back to stub")
+            provider = "stub"
+        else:
+            try:
+                _send_via_resend(
+                    api_key=settings.resend_api_key,
+                    from_addr=settings.email_from,
+                    to=to,
+                    subject=subject,
+                    html=html,
+                )
+                logger.info("Email sent via Resend to %s: %s", to, subject)
+                return True
+            except Exception as exc:
+                logger.error("Resend delivery failed: %s", exc)
+                return False
+
+    if provider == "smtp":
+        if not settings.smtp_host:
+            logger.warning("EMAIL_PROVIDER=smtp but SMTP_HOST not set; falling back to stub")
+            provider = "stub"
+        else:
+            try:
+                _send_via_smtp(
+                    host=settings.smtp_host,
+                    port=settings.smtp_port,
+                    user=settings.smtp_user,
+                    password=settings.smtp_password,
+                    from_addr=settings.email_from,
+                    to=to,
+                    subject=subject,
+                    html=html,
+                )
+                logger.info("Email sent via SMTP to %s: %s", to, subject)
+                return True
+            except Exception as exc:
+                logger.error("SMTP delivery failed: %s", exc)
+                return False
+
+    # Stub: log and consider "sent"
+    logger.info("EMAIL STUB to=%s subject=%r (set EMAIL_PROVIDER to send real email)", to, subject)
+    return True
+
+
+# ---------------------------------------------------------------------------
+# Email templates
+# ---------------------------------------------------------------------------
+
+def _proxy_delivery_html(proxy: dict) -> str:
+    grantor = proxy.get("grantor_name") or proxy.get("grantor_email", "A member")
+    delegate = proxy.get("delegate_name") or proxy.get("delegate_email", "you")
+    hoa = proxy.get("hoa_name", "your HOA")
+    meeting = proxy.get("for_meeting_date") or "the upcoming meeting"
+    return f"""
+    <html><body style="font-family:sans-serif;max-width:600px;margin:0 auto">
+    <h2>Proxy Authorization — {hoa}</h2>
+    <p><strong>{grantor}</strong> has signed a proxy authorization
+    designating <strong>{delegate}</strong> as their proxy holder
+    for <strong>{meeting}</strong> at <strong>{hoa}</strong>.</p>
+    <p>Please bring this proxy to the meeting and present it to the board secretary.
+    The grantor may revoke this proxy at any time before the meeting
+    by logging into HOAware.</p>
+    <hr>
+    <p style="font-size:12px;color:#666">
+    HOAware — This is not legal advice. Proxy validity is governed by your state's
+    HOA statutes and your community's governing documents.
+    </p>
+    </body></html>
+    """
+
+
+def _proxy_status_html(proxy: dict, event: str) -> str:
+    hoa = proxy.get("hoa_name", "your HOA")
+    messages = {
+        "signed": f"Your proxy for <strong>{hoa}</strong> has been signed successfully.",
+        "delivered": f"Your proxy for <strong>{hoa}</strong> has been delivered to the board.",
+        "revoked": f"Your proxy for <strong>{hoa}</strong> has been revoked.",
+        "expired": f"Your proxy for <strong>{hoa}</strong> has expired.",
+    }
+    body = messages.get(event, f"Your proxy status has changed to: {event}")
+    return f"""
+    <html><body style="font-family:sans-serif;max-width:600px;margin:0 auto">
+    <h2>Proxy Update — {hoa}</h2>
+    <p>{body}</p>
+    <p><a href="https://hoaware.app/my-proxies">View your proxies</a></p>
+    <hr>
+    <p style="font-size:12px;color:#666">HOAware — Not legal advice.</p>
+    </body></html>
+    """
+
+
+def _delegate_notification_html(proxy: dict, event: str) -> str:
+    hoa = proxy.get("hoa_name", "your HOA")
+    grantor = proxy.get("grantor_name") or proxy.get("grantor_email", "A member")
+    if event == "new_proxy":
+        subject_line = f"New proxy from {grantor}"
+        body = f"<strong>{grantor}</strong> has assigned you as their proxy holder for <strong>{hoa}</strong>."
+    else:
+        subject_line = f"Proxy revoked by {grantor}"
+        body = f"<strong>{grantor}</strong> has revoked their proxy at <strong>{hoa}</strong>."
+    return f"""
+    <html><body style="font-family:sans-serif;max-width:600px;margin:0 auto">
+    <h2>{subject_line}</h2>
+    <p>{body}</p>
+    <p><a href="https://hoaware.app/delegate-dashboard">View your delegate dashboard</a></p>
+    <hr>
+    <p style="font-size:12px;color:#666">HOAware — Not legal advice.</p>
+    </body></html>
+    """
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
+def deliver_proxy_to_board(proxy_id: int, actor_user_id: int | None = None) -> bool:
+    """Send the signed proxy form to the board and mark it as delivered.
+
+    If the HOA has a board_email set and EMAIL_PROVIDER != "stub", sends a real email.
+    Always records an audit entry and updates status to 'delivered'.
     """
     settings = load_settings()
     with db.get_connection(settings.db_path) as conn:
@@ -28,6 +205,26 @@ def deliver_proxy_to_board(proxy_id: int, actor_user_id: int | None = None) -> b
         if proxy["status"] not in ("signed",):
             return False
 
+        board_email = proxy.get("hoa_board_email")
+        email_sent = False
+
+        if board_email:
+            html = _proxy_delivery_html(proxy)
+            grantor_name = proxy.get("grantor_name") or proxy.get("grantor_email", "member")
+            hoa_name = proxy.get("hoa_name", "HOA")
+            email_sent = _send_email(
+                to=[board_email],
+                subject=f"Proxy Authorization: {grantor_name} → {hoa_name}",
+                html=html,
+            )
+        else:
+            logger.info(
+                "PROXY DELIVERY: proxy_id=%d — no board_email set for HOA %s; "
+                "delegate must deliver manually",
+                proxy_id,
+                proxy.get("hoa_name"),
+            )
+
         now = datetime.now(timezone.utc).isoformat()
         db.update_proxy_status(conn, proxy_id, "delivered", delivered_at=now)
         db.create_proxy_audit(
@@ -36,16 +233,54 @@ def deliver_proxy_to_board(proxy_id: int, actor_user_id: int | None = None) -> b
             action="delivered",
             actor_user_id=actor_user_id,
             details={
-                "method": "stub_log",
+                "method": "email" if email_sent else "manual",
+                "board_email": board_email,
                 "timestamp": now,
-                "note": "Email delivery stub. Delegate should deliver form manually.",
             },
         )
-        logger.info(
-            "PROXY DELIVERY: proxy_id=%d, grantor=%s, delegate=%s, hoa=%s",
-            proxy_id,
-            proxy.get("grantor_email"),
-            proxy.get("delegate_email"),
-            proxy.get("hoa_name"),
-        )
     return True
+
+
+def notify_grantor(proxy_id: int, event: str) -> bool:
+    """Send a status notification to the grantor (signed, delivered, revoked, expired)."""
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        proxy = db.get_proxy_assignment(conn, proxy_id)
+    if not proxy:
+        return False
+    grantor_email = proxy.get("grantor_email")
+    if not grantor_email:
+        return False
+    hoa_name = proxy.get("hoa_name", "your HOA")
+    subjects = {
+        "signed": f"Your proxy for {hoa_name} has been signed",
+        "delivered": f"Your proxy for {hoa_name} has been delivered",
+        "revoked": f"Your proxy for {hoa_name} has been revoked",
+        "expired": f"Your proxy for {hoa_name} has expired",
+    }
+    subject = subjects.get(event, f"Proxy update — {hoa_name}")
+    return _send_email(to=[grantor_email], subject=subject, html=_proxy_status_html(proxy, event))
+
+
+def notify_delegate(proxy_id: int, event: str) -> bool:
+    """Send a notification to the delegate (new_proxy, revoked)."""
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        proxy = db.get_proxy_assignment(conn, proxy_id)
+    if not proxy:
+        return False
+    delegate_email = proxy.get("delegate_email")
+    if not delegate_email:
+        return False
+    hoa_name = proxy.get("hoa_name", "your HOA")
+    grantor = proxy.get("grantor_name") or proxy.get("grantor_email", "A member")
+    subjects = {
+        "new_proxy": f"New proxy from {grantor} — {hoa_name}",
+        "revoked": f"Proxy revoked by {grantor} — {hoa_name}",
+    }
+    subject = subjects.get(event, f"Proxy update — {hoa_name}")
+    return _send_email(
+        to=[delegate_email],
+        subject=subject,
+        html=_delegate_notification_html(proxy, event),
+    )

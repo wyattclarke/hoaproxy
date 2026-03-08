@@ -25,5 +25,34 @@ services:
       - HOA_DB_PATH=/app/data/hoa_index.db
       - QDRANT_URL=http://qdrant:6333
 
+  # Documenso self-hosted e-signature (optional).
+  # To use: set DOCUMENSO_API_URL=http://documenso:3000 in settings.env and
+  # run: docker-compose --profile esign up
+  # For production, prefer Documenso Cloud (set DOCUMENSO_API_URL + DOCUMENSO_API_KEY).
+  documenso:
+    image: documenso/documenso:latest
+    profiles: ["esign"]
+    ports:
+      - "3000:3000"
+    env_file:
+      - settings.env
+    environment:
+      - NEXTAUTH_URL=http://localhost:3000
+      - NEXTAUTH_SECRET=${JWT_SECRET:-change-me}
+      - DATABASE_URL=postgresql://documenso:documenso@documenso-db:5432/documenso
+    depends_on:
+      - documenso-db
+
+  documenso-db:
+    image: postgres:15-alpine
+    profiles: ["esign"]
+    environment:
+      - POSTGRES_USER=documenso
+      - POSTGRES_PASSWORD=documenso
+      - POSTGRES_DB=documenso
+    volumes:
+      - documenso_db:/var/lib/postgresql/data
+
 volumes:
   qdrant_data:
+  documenso_db:
