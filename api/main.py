@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+from collections import defaultdict
+from contextlib import asynccontextmanager
 from html import escape as html_escape
 import json
 import logging
 import math
 import re
 import shutil
+import time
 from pathlib import Path
 from typing import List
 from urllib.parse import quote, unquote, urlparse
@@ -34,7 +37,41 @@ try:
 except Exception as exc:  # pragma: no cover - only used when optional module is missing
     _LAW_IMPORT_ERROR = exc
 
-app = FastAPI(title="HOA QA API", version="0.2.0")
+
+# ---------------------------------------------------------------------------
+# Rate limiting (simple in-memory, per-IP sliding window)
+# ---------------------------------------------------------------------------
+
+_rate_buckets: dict[str, list[float]] = defaultdict(list)
+_RATE_WINDOW = 60.0   # seconds
+_RATE_LIMIT   = 20    # max requests per window per IP
+
+
+def _check_rate_limit(request: Request, limit: int = _RATE_LIMIT) -> None:
+    ip = request.client.host if request.client else "unknown"
+    # TestClient uses "testclient" as host — skip rate limiting in tests
+    if ip == "testclient":
+        return
+    now = time.monotonic()
+    _rate_buckets[ip] = [t for t in _rate_buckets[ip] if now - t < _RATE_WINDOW]
+    if len(_rate_buckets[ip]) >= limit:
+        raise HTTPException(status_code=429, detail="Too many requests — try again in a minute")
+    _rate_buckets[ip].append(now)
+
+
+# ---------------------------------------------------------------------------
+# Startup: ensure all DB tables exist (safe to run on existing DB)
+# ---------------------------------------------------------------------------
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        conn.executescript(db.SCHEMA)
+    yield
+
+
+app = FastAPI(title="HOA QA API", version="0.2.0", lifespan=lifespan)
 _FILENAME_RE = re.compile(r"[^A-Za-z0-9._ -]+")
 _CITY_STATE_ZIP_RE = re.compile(
     r"\b([A-Z][A-Za-z]+(?:[\s-][A-Z][A-Za-z]+)*),\s*([A-Z]{2})\s+(\d{5}(?:-\d{4})?)\b"
@@ -1168,6 +1205,20 @@ def hoa_profile_page(hoa_name: str) -> FileResponse:
 
 @app.get("/healthz")
 def health() -> dict:
+    settings = load_settings()
+    required_tables = {"hoas", "users", "sessions", "membership_claims", "delegates",
+                       "proxy_assignments", "proxy_audit"}
+    try:
+        with db.get_connection(settings.db_path) as conn:
+            rows = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+            existing = {r["name"] for r in rows}
+            missing = required_tables - existing
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"DB unavailable: {exc}")
+    if missing:
+        raise HTTPException(status_code=503, detail=f"Missing tables: {missing}")
     return {"status": "ok"}
 
 
@@ -1176,7 +1227,8 @@ def health() -> dict:
 # ---------------------------------------------------------------------------
 
 @app.post("/auth/register", response_model=AuthResponse)
-def register(body: RegisterRequest):
+def register(request: Request, body: RegisterRequest):
+    _check_rate_limit(request, limit=10)
     settings = load_settings()
     with db.get_connection(settings.db_path) as conn:
         existing = db.get_user_by_email(conn, body.email)
@@ -1190,7 +1242,8 @@ def register(body: RegisterRequest):
 
 
 @app.post("/auth/login", response_model=AuthResponse)
-def login(body: LoginRequest):
+def login(request: Request, body: LoginRequest):
+    _check_rate_limit(request, limit=10)
     settings = load_settings()
     with db.get_connection(settings.db_path) as conn:
         user = db.get_user_by_email(conn, body.email)

@@ -9,6 +9,8 @@ services:
     envVars:
       - key: OPENAI_API_KEY
         sync: false
+      - key: JWT_SECRET
+        sync: false
       - key: HOA_DOCS_ROOT
         value: /var/data/casnc_hoa_docs
       - key: HOA_DB_PATH
