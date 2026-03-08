@@ -49,6 +49,8 @@ class Settings:
     smtp_port: int
     smtp_user: str | None
     smtp_password: str | None
+    # Data retention
+    proxy_retention_days: int
 
 
 def load_settings() -> Settings:
@@ -88,6 +90,7 @@ def load_settings() -> Settings:
         smtp_port=int(os.environ.get("SMTP_PORT", "587")),
         smtp_user=os.environ.get("SMTP_USER"),
         smtp_password=os.environ.get("SMTP_PASSWORD"),
+        proxy_retention_days=int(os.environ.get("PROXY_RETENTION_DAYS", "90")),
     )
 
 

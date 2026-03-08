@@ -57,6 +57,8 @@
       .link { color: var(--accent); font-weight: 700; text-decoration: none; }
       .link:hover { text-decoration: underline; }
       .footer { margin-top: 14px; text-align: center; font-size: 0.9rem; color: var(--muted); }
+      .tos-row { display: flex; align-items: flex-start; gap: 10px; margin-top: 14px; font-size: 0.88rem; color: var(--muted); }
+      .tos-row input[type=checkbox] { width: auto; margin-top: 2px; flex-shrink: 0; }
     </style>
   </head>
   <body>
@@ -70,6 +72,13 @@
         <input id="email" type="email" placeholder="you@example.com" autocomplete="email" />
         <label for="password">Password</label>
         <input id="password" type="password" placeholder="At least 8 characters" autocomplete="new-password" />
+        <div class="tos-row">
+          <input id="tosCheck" type="checkbox" required />
+          <label for="tosCheck" style="margin:0; font-weight:400;">
+            I agree to the <a class="link" href="/terms" target="_blank">Terms of Service</a> and
+            <a class="link" href="/privacy" target="_blank">Privacy Policy</a>
+          </label>
+        </div>
         <button class="btn" id="registerBtn" type="button">Create Account</button>
         <div id="status" class="status"></div>
         <div class="footer">Already have an account? <a class="link" href="/login">Log in</a></div>
@@ -80,6 +89,7 @@
       const displayName = document.getElementById("displayName");
       const emailInput = document.getElementById("email");
       const passwordInput = document.getElementById("password");
+      const tosCheck = document.getElementById("tosCheck");
       const registerBtn = document.getElementById("registerBtn");
       const status = document.getElementById("status");
 
@@ -97,6 +107,11 @@
         if (password.length < 8) {
           status.className = "status error";
           status.textContent = "Password must be at least 8 characters.";
+          return;
+        }
+        if (!tosCheck.checked) {
+          status.className = "status error";
+          status.textContent = "You must agree to the Terms of Service and Privacy Policy.";
           return;
         }
         registerBtn.disabled = true;

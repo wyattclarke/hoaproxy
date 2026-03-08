@@ -35,6 +35,8 @@ services:
         value: ""
       - key: GOOGLE_APPLICATION_CREDENTIALS
         value: /etc/secrets/gcp-service-account.json
+      - key: PROXY_RETENTION_DAYS
+        value: "90"
     disk:
       name: hoaware-data
       mountPath: /var/data

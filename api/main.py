@@ -14,6 +14,29 @@ from pathlib import Path
 from typing import List, Optional
 from urllib.parse import quote, unquote, urlparse
 
+
+# ---------------------------------------------------------------------------
+# Structured JSON logging
+# ---------------------------------------------------------------------------
+
+class _JsonFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        log_obj = {
+            "time": self.formatTime(record, "%Y-%m-%dT%H:%M:%SZ"),
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+        }
+        if record.exc_info:
+            log_obj["exc_info"] = self.formatException(record.exc_info)
+        return json.dumps(log_obj)
+
+
+_json_handler = logging.StreamHandler()
+_json_handler.setFormatter(_JsonFormatter())
+logging.root.setLevel(logging.INFO)
+logging.root.handlers = [_json_handler]
+
 import requests
 from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse
@@ -62,6 +85,46 @@ def _check_rate_limit(request: Request, limit: int = _RATE_LIMIT) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Data retention: expire and purge old proxy assignments
+# ---------------------------------------------------------------------------
+
+def _run_expiry_sweep() -> None:
+    """Mark expired proxy assignments and soft-delete old ones."""
+    settings = load_settings()
+    today = datetime.now(timezone.utc).date().isoformat()
+    try:
+        with db.get_connection(settings.db_path) as conn:
+            # Mark as 'expired' if expires_at < today and status is non-terminal
+            terminal = ("signed", "delivered", "acknowledged", "revoked", "expired", "purged")
+            placeholders = ",".join("?" * len(terminal))
+            conn.execute(
+                f"""
+                UPDATE proxy_assignments
+                SET status = 'expired'
+                WHERE expires_at IS NOT NULL
+                  AND expires_at < ?
+                  AND status NOT IN ({placeholders})
+                """,
+                (today, *terminal),
+            )
+            # Soft-delete (purge) assignments where expires_at + retention_days < today
+            retention_days = settings.proxy_retention_days
+            conn.execute(
+                f"""
+                UPDATE proxy_assignments
+                SET status = 'purged'
+                WHERE expires_at IS NOT NULL
+                  AND date(expires_at, '+' || ? || ' days') < ?
+                  AND status NOT IN ({placeholders})
+                """,
+                (retention_days, today, *terminal),
+            )
+            conn.commit()
+    except Exception:
+        logger.exception("Expiry sweep failed")
+
+
+# ---------------------------------------------------------------------------
 # Startup: ensure all DB tables exist (safe to run on existing DB)
 # ---------------------------------------------------------------------------
 
@@ -70,6 +133,7 @@ async def lifespan(app: FastAPI):
     settings = load_settings()
     with db.get_connection(settings.db_path) as conn:
         conn.executescript(db.SCHEMA)
+    _run_expiry_sweep()
     yield
 
 
@@ -1201,13 +1265,27 @@ def delegate_dashboard_page() -> FileResponse:
     return _serve_static_page("delegate-dashboard.html")
 
 
+@app.get("/terms", include_in_schema=False)
+def terms_page() -> FileResponse:
+    return _serve_static_page("terms.html")
+
+
+@app.get("/privacy", include_in_schema=False)
+def privacy_page() -> FileResponse:
+    return _serve_static_page("privacy.html")
+
+
 @app.post("/hoas/{hoa_id}/participation")
 def post_participation(
     hoa_id: int,
     body: ParticipationRequest,
+    request: Request,
     user: dict = Depends(get_current_user),
 ) -> dict:
+    _check_rate_limit(request, limit=20)
     settings = load_settings()
+    meeting_type = body.meeting_type.strip() if body.meeting_type else body.meeting_type
+    notes = body.notes.strip() if body.notes else body.notes
     with db.get_connection(settings.db_path) as conn:
         hoa_row = conn.execute("SELECT id FROM hoas WHERE id = ?", (hoa_id,)).fetchone()
         if not hoa_row:
@@ -1219,13 +1297,13 @@ def post_participation(
             conn,
             hoa_id=hoa_id,
             meeting_date=body.meeting_date,
-            meeting_type=body.meeting_type,
+            meeting_type=meeting_type,
             total_units=body.total_units,
             votes_cast=body.votes_cast,
             quorum_required=body.quorum_required,
             quorum_met=body.quorum_met,
             entered_by_user_id=user["id"],
-            notes=body.notes,
+            notes=notes,
         )
     return {"id": record_id, "hoa_id": hoa_id}
 
@@ -1301,12 +1379,13 @@ def health() -> dict:
 def register(request: Request, body: RegisterRequest):
     _check_rate_limit(request, limit=10)
     settings = load_settings()
+    display_name = body.display_name.strip() if body.display_name else None
     with db.get_connection(settings.db_path) as conn:
         existing = db.get_user_by_email(conn, body.email)
         if existing:
             raise HTTPException(status_code=409, detail="Email already registered")
         pw_hash = hash_password(body.password)
-        user_id = db.create_user(conn, email=body.email, password_hash=pw_hash, display_name=body.display_name)
+        user_id = db.create_user(conn, email=body.email, password_hash=pw_hash, display_name=display_name)
         token, jti, expires = create_access_token(user_id, settings)
         db.create_session(conn, user_id=user_id, token_jti=jti, expires_at=expires.isoformat())
     return AuthResponse(user_id=user_id, token=token)
@@ -1351,7 +1430,9 @@ def me(user: dict = Depends(get_current_user)):
 # ---------------------------------------------------------------------------
 
 @app.post("/user/hoas/{hoa_id}/claim", response_model=MembershipClaimResponse)
-def claim_membership(hoa_id: int, body: MembershipClaimRequest, user: dict = Depends(get_current_user)):
+def claim_membership(hoa_id: int, body: MembershipClaimRequest, request: Request, user: dict = Depends(get_current_user)):
+    _check_rate_limit(request, limit=20)
+    unit_number = body.unit_number.strip() if body.unit_number else None
     settings = load_settings()
     with db.get_connection(settings.db_path) as conn:
         # Verify HOA exists
@@ -1361,7 +1442,7 @@ def claim_membership(hoa_id: int, body: MembershipClaimRequest, user: dict = Dep
         existing = db.get_membership_claim(conn, user["id"], hoa_id)
         if existing:
             raise HTTPException(status_code=409, detail="You have already claimed membership in this HOA")
-        claim_id = db.create_membership_claim(conn, user_id=user["id"], hoa_id=hoa_id, unit_number=body.unit_number)
+        claim_id = db.create_membership_claim(conn, user_id=user["id"], hoa_id=hoa_id, unit_number=unit_number)
         claim = conn.execute("SELECT * FROM membership_claims WHERE id = ?", (claim_id,)).fetchone()
     return MembershipClaimResponse(
         id=claim_id, user_id=user["id"], hoa_id=hoa_id,
@@ -1405,8 +1486,11 @@ def list_user_hoas(user: dict = Depends(get_current_user)):
 # ---------------------------------------------------------------------------
 
 @app.post("/delegates/register", response_model=DelegateResponse)
-def register_delegate(body: DelegateRegisterRequest, user: dict = Depends(get_current_user)):
+def register_delegate(body: DelegateRegisterRequest, request: Request, user: dict = Depends(get_current_user)):
+    _check_rate_limit(request, limit=20)
     settings = load_settings()
+    bio = body.bio.strip() if body.bio else None
+    contact_email = body.contact_email.strip() if body.contact_email else None
     with db.get_connection(settings.db_path) as conn:
         # Must be a member of the HOA
         claim = db.get_membership_claim(conn, user["id"], body.hoa_id)
@@ -1417,7 +1501,7 @@ def register_delegate(body: DelegateRegisterRequest, user: dict = Depends(get_cu
             raise HTTPException(status_code=409, detail="You are already a delegate for this HOA")
         delegate_id = db.create_delegate(
             conn, user_id=user["id"], hoa_id=body.hoa_id,
-            bio=body.bio, contact_email=body.contact_email,
+            bio=bio, contact_email=contact_email,
         )
         delegate = db.get_delegate(conn, delegate_id)
     return DelegateResponse(
@@ -1516,6 +1600,7 @@ def _proxy_to_response(p: dict) -> ProxyResponse:
 
 @app.post("/proxies", response_model=ProxyResponse)
 def create_proxy(body: CreateProxyRequest, request: Request, user: dict = Depends(get_current_user)):
+    _check_rate_limit(request, limit=20)
     from hoaware.proxy_templates import render_proxy_form
     settings = load_settings()
     with db.get_connection(settings.db_path) as conn:
@@ -1618,6 +1703,7 @@ def get_proxy_form(proxy_id: int, user: dict = Depends(get_current_user)) -> HTM
 
 @app.post("/proxies/{proxy_id}/sign", response_model=ProxyResponse)
 def sign_proxy(proxy_id: int, request: Request, user: dict = Depends(get_current_user)):
+    _check_rate_limit(request, limit=20)
     """Initiate signing for a proxy.
 
     If Documenso is configured: creates a Documenso document, stores the signing URL,
@@ -1680,7 +1766,8 @@ def sign_proxy(proxy_id: int, request: Request, user: dict = Depends(get_current
 
 
 @app.post("/proxies/{proxy_id}/deliver", response_model=ProxyResponse)
-def deliver_proxy(proxy_id: int, user: dict = Depends(get_current_user)):
+def deliver_proxy(proxy_id: int, request: Request, user: dict = Depends(get_current_user)):
+    _check_rate_limit(request, limit=20)
     from hoaware.email_service import deliver_proxy_to_board, notify_delegate, notify_grantor
     settings = load_settings()
     with db.get_connection(settings.db_path) as conn:
@@ -1700,7 +1787,8 @@ def deliver_proxy(proxy_id: int, user: dict = Depends(get_current_user)):
 
 
 @app.post("/proxies/{proxy_id}/revoke", response_model=ProxyResponse)
-def revoke_proxy(proxy_id: int, body: RevokeProxyRequest, user: dict = Depends(get_current_user)):
+def revoke_proxy(proxy_id: int, body: RevokeProxyRequest, request: Request, user: dict = Depends(get_current_user)):
+    _check_rate_limit(request, limit=20)
     settings = load_settings()
     with db.get_connection(settings.db_path) as conn:
         proxy = db.get_proxy_assignment(conn, proxy_id)
