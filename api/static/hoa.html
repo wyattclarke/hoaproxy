@@ -474,6 +474,12 @@
             <h2>Proxy Stats</h2>
             <div id="proxyStats" style="display:flex;gap:14px;flex-wrap:wrap;"></div>
           </article>
+
+          <article class="card">
+            <h2>Participation</h2>
+            <p class="section-caption">Meeting attendance history and the proxy magic number.</p>
+            <div id="participationLink"></div>
+          </article>
         </div>
       </section>
     </main>
@@ -977,6 +983,15 @@
         }
       }
 
+      function showParticipationLink() {
+        const el = document.getElementById("participationLink");
+        if (!el || !state.hoaName) return;
+        const encoded = encodeURIComponent(state.hoaName);
+        el.innerHTML =
+          '<a href="/participation/' + encoded + '" style="color:var(--accent);font-weight:700;text-decoration:none;font-size:0.93rem;">' +
+          'View participation &amp; magic number &rarr;</a>';
+      }
+
       (async () => {
         try {
           setMode("qa");
@@ -987,6 +1002,7 @@
           await loadHoaLocation();
           await loadDelegates();
           await loadProxyStats();
+          showParticipationLink();
           setStatus(pageStatus, "Profile loaded.", "ok");
         } catch (err) {
           hoaTitle.textContent = "HOA Not Found";

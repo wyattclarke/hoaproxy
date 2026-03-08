@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HOAware | Participation History</title>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Space+Grotesk:wght@600;700&display=swap");
+      :root {
+        --bg: #eef5ff; --ink: #12233a; --muted: #587091; --line: #d3e0f4;
+        --accent: #1662f3; --accent-strong: #0d49be; --ok: #177c45; --danger: #b62525;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0; min-height: 100vh; font-family: "Manrope", sans-serif; color: var(--ink);
+        background:
+          radial-gradient(95rem 60rem at 8% -22%, rgba(20,98,243,0.2), transparent 60%),
+          linear-gradient(180deg, #f8fbff 0%, var(--bg) 54%, #edf3ff 100%);
+      }
+      .shell { width: min(900px, 94vw); margin: 40px auto 56px; }
+      .brand { display: inline-flex; align-items: baseline; font-family: "Space Grotesk", sans-serif; font-size: 1.8rem; font-weight: 700; margin: 0 0 6px; text-decoration: none; }
+      .brand-hoa { color: #0f2f6d; } .brand-aware { color: #1a66ff; }
+      .nav { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0 20px; align-items: center; }
+      .nav a { color: var(--accent); font-weight: 700; text-decoration: none; font-size: 0.9rem; }
+      .nav a:hover { text-decoration: underline; }
+      .nav-right { margin-left: auto; display: flex; gap: 8px; }
+      h1 { font-family: "Space Grotesk", sans-serif; font-size: 1.6rem; margin: 0 0 4px; }
+      .card { border: 1px solid var(--line); border-radius: 18px; background: rgba(255,255,255,0.94); box-shadow: 0 10px 32px rgba(16,40,73,0.09); padding: 28px; margin-bottom: 20px; }
+      .magic-box { background: linear-gradient(135deg, #1662f3 0%, #0d49be 100%); color: #fff; border-radius: 16px; padding: 24px 28px; margin-bottom: 20px; }
+      .magic-box h2 { font-family: "Space Grotesk", sans-serif; margin: 0 0 8px; font-size: 1.1rem; opacity: 0.88; }
+      .magic-number { font-family: "Space Grotesk", sans-serif; font-size: 3.2rem; font-weight: 700; line-height: 1; margin-bottom: 4px; }
+      .magic-label { font-size: 0.95rem; opacity: 0.85; margin-bottom: 12px; }
+      .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+      .badge-low { background: rgba(255,255,255,0.2); }
+      .badge-medium { background: rgba(255,255,255,0.35); }
+      .badge-high { background: rgba(255,255,255,0.5); color: #0d3080; }
+      .magic-stats { display: flex; gap: 24px; margin-top: 14px; flex-wrap: wrap; }
+      .magic-stat { font-size: 0.85rem; opacity: 0.85; }
+      .magic-stat strong { display: block; font-size: 1.1rem; opacity: 1; }
+      table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+      th { text-align: left; padding: 10px 12px; background: #f0f5ff; border-bottom: 2px solid var(--line); font-size: 0.82rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+      td { padding: 10px 12px; border-bottom: 1px solid var(--line); }
+      tr:last-child td { border-bottom: none; }
+      .quorum-yes { color: var(--ok); font-weight: 700; }
+      .quorum-no { color: var(--danger); font-weight: 700; }
+      .pct { font-weight: 700; color: var(--accent); }
+      .empty { color: var(--muted); font-style: italic; padding: 24px 0; text-align: center; }
+      .btn { display: inline-flex; align-items: center; justify-content: center; border-radius: 10px; border: 1px solid var(--accent); background: linear-gradient(180deg, var(--accent), var(--accent-strong)); color: #fff; padding: 8px 16px; font-family: inherit; font-size: 0.9rem; font-weight: 800; cursor: pointer; text-decoration: none; }
+      .btn-ghost { background: #fff; color: var(--accent); }
+      .status { margin-top: 10px; min-height: 1.2em; font-size: 0.9rem; color: var(--muted); }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <a href="/" class="brand"><span class="brand-hoa">HOA</span><span class="brand-aware">ware</span></a>
+      <div class="nav">
+        <a href="/">Home</a>
+        <a href="/about">About</a>
+        <div class="nav-right" id="navContainer"></div>
+      </div>
+
+      <h1 id="hoaTitle">Loading...</h1>
+      <p id="hoaMeta" style="color:var(--muted);margin:0 0 20px;font-size:0.93rem;"></p>
+
+      <div id="magicBox" style="display:none" class="magic-box">
+        <h2>Proxy Magic Number</h2>
+        <div class="magic-number" id="magicNum">-</div>
+        <div class="magic-label">proxies could swing a typical vote</div>
+        <span class="badge" id="magicBadge"></span>
+        <div class="magic-stats">
+          <div class="magic-stat"><strong id="statAvgVotes">-</strong>avg votes cast</div>
+          <div class="magic-stat"><strong id="statAvgRate">-</strong>avg turnout</div>
+          <div class="magic-stat"><strong id="statUnits">-</strong>total units</div>
+          <div class="magic-stat"><strong id="statDataPts">-</strong>data points</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
+          <h2 style="margin:0;font-family:'Space Grotesk',sans-serif;font-size:1.1rem;">Meeting History</h2>
+          <a href="/add-participation" class="btn" id="addBtn" style="display:none">Add Meeting Data</a>
+        </div>
+        <div id="tableWrapper">
+          <div class="empty">Loading...</div>
+        </div>
+      </div>
+
+      <div id="noDataBox" class="card" style="display:none;text-align:center;">
+        <p style="color:var(--muted);font-size:1rem;margin:0 0 16px;">No participation data yet. Be the first to add it.</p>
+        <a href="/add-participation" class="btn" id="noDataBtn" style="display:none">Add Meeting Data</a>
+      </div>
+    </main>
+
+    <script src="/static/js/auth.js"></script>
+    <script>
+      // Render nav
+      const navContainer = document.getElementById("navContainer");
+      if (navContainer && typeof Auth !== "undefined") {
+        if (Auth.isLoggedIn()) {
+          navContainer.innerHTML =
+            '<a href="/dashboard" style="color:var(--accent);font-weight:700;text-decoration:none;font-size:0.9rem;">Dashboard</a>' +
+            '<a href="#" id="logoutBtn" style="color:var(--accent);font-weight:700;text-decoration:none;font-size:0.9rem;margin-left:8px;">Logout</a>';
+          const lb = document.getElementById("logoutBtn");
+          if (lb) lb.addEventListener("click", e => { e.preventDefault(); Auth.logout(); });
+        } else {
+          navContainer.innerHTML =
+            '<a href="/login" style="color:var(--accent);font-weight:700;text-decoration:none;font-size:0.9rem;">Login</a>' +
+            '<a href="/register" style="color:var(--accent);font-weight:700;text-decoration:none;font-size:0.9rem;margin-left:8px;">Register</a>';
+        }
+      }
+
+      // Extract HOA name from URL: /participation/{hoa_name}
+      const hoaName = decodeURIComponent(window.location.pathname.replace(/^\/participation\//, ""));
+      document.getElementById("hoaTitle").textContent = hoaName || "Participation History";
+      document.getElementById("hoaMeta").textContent = "Meeting attendance and voting data for " + hoaName;
+
+      async function loadHoaId() {
+        // Find hoa_id by searching HOAs
+        const r = await fetch("/hoas?q=" + encodeURIComponent(hoaName));
+        if (r.ok) {
+          const list = await r.json();
+          const match = list.find(h => h.name === hoaName);
+          if (match) return match.id;
+        }
+        // Fallback: try /hoa-lookup
+        const r2 = await fetch("/hoa-lookup?q=" + encodeURIComponent(hoaName));
+        if (r2.ok) {
+          const data = await r2.json();
+          if (data.hoa_id) return data.hoa_id;
+        }
+        return null;
+      }
+
+      async function loadAll() {
+        let hoaId = null;
+        // Try to find hoa_id via a listing endpoint
+        try {
+          const r = await fetch("/hoas/list");
+          if (r.ok) {
+            const list = await r.json();
+            const match = (list.hoas || list).find(h => h.name === hoaName);
+            if (match) hoaId = match.id;
+          }
+        } catch (_) {}
+
+        if (!hoaId) {
+          // Try search approach
+          try {
+            const r = await fetch("/hoas?name=" + encodeURIComponent(hoaName));
+            if (r.ok) {
+              const data = await r.json();
+              const list = Array.isArray(data) ? data : (data.hoas || []);
+              const match = list.find(h => h.name === hoaName);
+              if (match) hoaId = match.id;
+            }
+          } catch (_) {}
+        }
+
+        if (!hoaId) {
+          // If still no hoa_id, try storing it in URL query param
+          const params = new URLSearchParams(window.location.search);
+          hoaId = params.get("hoa_id") ? parseInt(params.get("hoa_id")) : null;
+        }
+
+        if (!hoaId) {
+          document.getElementById("tableWrapper").innerHTML =
+            '<div class="empty">Could not find HOA. <a href="/">Return home</a></div>';
+          return;
+        }
+
+        // Store for add button
+        window._hoaId = hoaId;
+
+        // Show add button if logged in
+        if (typeof Auth !== "undefined" && Auth.isLoggedIn()) {
+          const btn = document.getElementById("addBtn");
+          if (btn) { btn.href = "/add-participation?hoa_id=" + hoaId; btn.style.display = "inline-flex"; }
+          const nb = document.getElementById("noDataBtn");
+          if (nb) { nb.href = "/add-participation?hoa_id=" + hoaId; nb.style.display = "inline-flex"; }
+        }
+
+        // Load participation records
+        const pr = await fetch("/hoas/" + hoaId + "/participation");
+        const records = pr.ok ? await pr.json() : [];
+
+        const tableWrapper = document.getElementById("tableWrapper");
+        const noDataBox = document.getElementById("noDataBox");
+        const cardEl = tableWrapper.closest(".card");
+
+        if (!records.length) {
+          if (cardEl) cardEl.style.display = "none";
+          if (noDataBox) noDataBox.style.display = "";
+        } else {
+          if (noDataBox) noDataBox.style.display = "none";
+          let html = '<table><thead><tr>' +
+            '<th>Date</th><th>Type</th><th>Votes Cast</th><th>Total Units</th>' +
+            '<th>Turnout</th><th>Quorum Met</th></tr></thead><tbody>';
+          for (const r of records) {
+            const pct = (r.total_units && r.votes_cast)
+              ? Math.round((r.votes_cast / r.total_units) * 100) + "%"
+              : "-";
+            const quorum = r.quorum_met === null || r.quorum_met === undefined
+              ? '<span style="color:var(--muted)">-</span>'
+              : r.quorum_met
+                ? '<span class="quorum-yes">Yes</span>'
+                : '<span class="quorum-no">No</span>';
+            const meetType = (r.meeting_type || "annual").charAt(0).toUpperCase() + (r.meeting_type || "annual").slice(1);
+            html += '<tr>' +
+              '<td>' + (r.meeting_date || "-") + '</td>' +
+              '<td>' + meetType + '</td>' +
+              '<td>' + (r.votes_cast ?? "-") + '</td>' +
+              '<td>' + (r.total_units ?? "-") + '</td>' +
+              '<td class="pct">' + pct + '</td>' +
+              '<td>' + quorum + '</td>' +
+              '</tr>';
+          }
+          html += '</tbody></table>';
+          tableWrapper.innerHTML = html;
+        }
+
+        // Load magic number
+        const mr = await fetch("/hoas/" + hoaId + "/magic-number");
+        if (mr.ok) {
+          const mn = await mr.json();
+          document.getElementById("magicNum").textContent = mn.proxies_to_swing;
+          document.getElementById("statAvgVotes").textContent = mn.average_votes_cast;
+          document.getElementById("statAvgRate").textContent = Math.round(mn.average_participation_rate * 100) + "%";
+          document.getElementById("statUnits").textContent = mn.total_units;
+          document.getElementById("statDataPts").textContent = mn.data_points;
+          const badge = document.getElementById("magicBadge");
+          badge.textContent = mn.confidence + " confidence";
+          badge.className = "badge badge-" + mn.confidence;
+          document.getElementById("magicBox").style.display = "";
+        }
+      }
+
+      loadAll().catch(err => {
+        document.getElementById("tableWrapper").innerHTML =
+          '<div class="empty">Error loading data: ' + (err.message || err) + '</div>';
+      });
+    </script>
+  </body>
+</html>

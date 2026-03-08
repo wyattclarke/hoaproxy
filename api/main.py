@@ -10,7 +10,7 @@ import re
 import shutil
 import time
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 from urllib.parse import quote, unquote, urlparse
 
 import requests
@@ -23,6 +23,7 @@ from hoaware import db
 from hoaware.auth import get_current_user, hash_password, verify_password, create_access_token, optional_current_user
 from hoaware.config import load_settings
 from hoaware.ingest import ingest_pdf_paths
+from hoaware import participation as participation_mod
 from hoaware.qa import get_answer, get_answer_multi, retrieve_context, retrieve_context_multi
 
 _LAW_IMPORT_ERROR: Exception | None = None
@@ -389,6 +390,7 @@ class ProxyResponse(BaseModel):
     for_meeting_date: str | None = None
     expires_at: str | None = None
     status: str
+    signing_url: str | None = None
     signed_at: str | None = None
     delivered_at: str | None = None
     revoked_at: str | None = None
@@ -400,6 +402,16 @@ class ProxyStatsResponse(BaseModel):
     total: int
     signed: int
     delivered: int
+
+
+class ParticipationRequest(BaseModel):
+    meeting_date: str           # YYYY-MM-DD
+    meeting_type: str = "annual"
+    total_units: int
+    votes_cast: int
+    quorum_required: Optional[int] = None
+    quorum_met: Optional[bool] = None
+    notes: Optional[str] = None
 
 
 def _normalize_hoa_name(raw_name: str) -> str:
@@ -1186,6 +1198,64 @@ def my_proxies_page() -> FileResponse:
 @app.get("/delegate-dashboard", include_in_schema=False)
 def delegate_dashboard_page() -> FileResponse:
     return _serve_static_page("delegate-dashboard.html")
+
+
+@app.post("/hoas/{hoa_id}/participation")
+def post_participation(
+    hoa_id: int,
+    body: ParticipationRequest,
+    user: dict = Depends(get_current_user),
+) -> dict:
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        hoa_row = conn.execute("SELECT id FROM hoas WHERE id = ?", (hoa_id,)).fetchone()
+        if not hoa_row:
+            raise HTTPException(status_code=404, detail="HOA not found")
+        claim = db.get_membership_claim(conn, user["id"], hoa_id)
+        if not claim:
+            raise HTTPException(status_code=403, detail="You must be a member of this HOA to add participation data")
+        record_id = participation_mod.add_participation_record(
+            conn,
+            hoa_id=hoa_id,
+            meeting_date=body.meeting_date,
+            meeting_type=body.meeting_type,
+            total_units=body.total_units,
+            votes_cast=body.votes_cast,
+            quorum_required=body.quorum_required,
+            quorum_met=body.quorum_met,
+            entered_by_user_id=user["id"],
+            notes=body.notes,
+        )
+    return {"id": record_id, "hoa_id": hoa_id}
+
+
+@app.get("/hoas/{hoa_id}/participation")
+def get_participation(hoa_id: int) -> list:
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        hoa_row = conn.execute("SELECT id FROM hoas WHERE id = ?", (hoa_id,)).fetchone()
+        if not hoa_row:
+            raise HTTPException(status_code=404, detail="HOA not found")
+        return participation_mod.get_participation_records(conn, hoa_id)
+
+
+@app.get("/hoas/{hoa_id}/magic-number")
+def get_magic_number(hoa_id: int) -> dict:
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        hoa_row = conn.execute("SELECT id FROM hoas WHERE id = ?", (hoa_id,)).fetchone()
+        if not hoa_row:
+            raise HTTPException(status_code=404, detail="HOA not found")
+        result = participation_mod.calculate_magic_number(conn, hoa_id)
+    if result["data_points"] == 0:
+        raise HTTPException(status_code=404, detail="No participation data yet for this HOA")
+    result["hoa_id"] = hoa_id
+    return result
+
+
+@app.get("/add-participation", include_in_schema=False)
+def add_participation_page() -> FileResponse:
+    return _serve_static_page("add-participation.html")
 
 
 @app.get("/participation/{hoa_name:path}", include_in_schema=False)

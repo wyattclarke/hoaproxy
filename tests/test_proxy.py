@@ -24,7 +24,7 @@ def _setup_db():
     with db.get_connection(settings.db_path) as conn:
         conn.executescript(db.SCHEMA)
         # Clean data between tests
-        for table in ["proxy_audit", "proxy_assignments", "delegates", "membership_claims", "sessions", "users"]:
+        for table in ["participation_records", "proxy_audit", "proxy_assignments", "delegates", "membership_claims", "sessions", "users"]:
             conn.execute(f"DELETE FROM {table}")
         conn.commit()
     yield

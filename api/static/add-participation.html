@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HOAware | Add Meeting Data</title>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Space+Grotesk:wght@600;700&display=swap");
+      :root { --bg: #eef5ff; --ink: #12233a; --muted: #587091; --line: #d3e0f4; --accent: #1662f3; --accent-strong: #0d49be; --ok: #177c45; --danger: #b62525; }
+      * { box-sizing: border-box; }
+      body { margin: 0; min-height: 100vh; font-family: "Manrope", sans-serif; color: var(--ink);
+        background: radial-gradient(95rem 60rem at 8% -22%, rgba(20,98,243,0.2), transparent 60%),
+                    linear-gradient(180deg, #f8fbff 0%, var(--bg) 54%, #edf3ff 100%); }
+      .shell { width: min(600px, 94vw); margin: 40px auto; }
+      .card { border: 1px solid var(--line); border-radius: 18px; background: rgba(255,255,255,0.94); box-shadow: 0 10px 32px rgba(16,40,73,0.09); padding: 28px; }
+      .brand { display: inline-flex; align-items: baseline; font-family: "Space Grotesk", sans-serif; font-size: 1.8rem; font-weight: 700; margin: 0 0 6px; text-decoration: none; }
+      .brand-hoa { color: #0f2f6d; } .brand-aware { color: #1a66ff; }
+      h2 { margin: 0 0 16px; font-family: "Space Grotesk", sans-serif; font-size: 1.2rem; }
+      label { display: block; margin: 12px 0 4px; font-size: 0.88rem; font-weight: 700; }
+      select, input, textarea { width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font: inherit; background: #fff; }
+      textarea { min-height: 80px; resize: vertical; }
+      .check-row { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+      .check-row input[type=checkbox] { width: auto; margin: 0; accent-color: var(--accent); }
+      .check-row label { margin: 0; font-size: 0.88rem; font-weight: 700; }
+      .btn { display: inline-flex; align-items: center; justify-content: center; border-radius: 10px; border: 1px solid var(--accent); background: linear-gradient(180deg, var(--accent), var(--accent-strong)); color: #fff; padding: 10px 18px; font-family: inherit; font-size: 0.95rem; font-weight: 800; cursor: pointer; width: 100%; margin-top: 16px; }
+      .btn:disabled { opacity: 0.55; cursor: not-allowed; }
+      .status { margin-top: 10px; min-height: 1.2em; font-size: 0.9rem; color: var(--muted); }
+      .status.ok { color: var(--ok); } .status.error { color: var(--danger); }
+      .nav { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+      .nav a { color: var(--accent); font-weight: 700; text-decoration: none; font-size: 0.9rem; }
+      .nav a:hover { text-decoration: underline; }
+      .hint { font-size: 0.82rem; color: var(--muted); margin: 2px 0 0; }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <div class="card">
+        <a href="/" class="brand"><span class="brand-hoa">HOA</span><span class="brand-aware">ware</span></a>
+        <div class="nav"><a href="/dashboard">Back to Dashboard</a></div>
+        <h2>Add Meeting Data</h2>
+        <p style="color:var(--muted); font-size:0.9rem; margin:0 0 8px;">
+          Record attendance and voting numbers from a past HOA meeting. This helps calculate the proxy magic number.
+        </p>
+
+        <label for="hoaSelect">HOA</label>
+        <select id="hoaSelect"><option value="">Loading your HOAs...</option></select>
+
+        <label for="meetingDate">Meeting Date</label>
+        <input id="meetingDate" type="date" />
+
+        <label for="meetingType">Meeting Type</label>
+        <select id="meetingType">
+          <option value="annual">Annual</option>
+          <option value="special">Special</option>
+          <option value="board">Board</option>
+        </select>
+
+        <label for="totalUnits">Total Units in HOA</label>
+        <input id="totalUnits" type="number" min="1" placeholder="e.g. 120" />
+        <p class="hint">Total number of units/lots eligible to vote</p>
+
+        <label for="votesCast">Votes Cast</label>
+        <input id="votesCast" type="number" min="0" placeholder="e.g. 34" />
+        <p class="hint">Total ballots or proxies received at the meeting</p>
+
+        <label for="quorumRequired">Quorum Required (optional)</label>
+        <input id="quorumRequired" type="number" min="0" placeholder="e.g. 30" />
+
+        <div class="check-row">
+          <input id="quorumMet" type="checkbox" />
+          <label for="quorumMet">Quorum was met</label>
+        </div>
+        <div id="quorumMetWrapper" style="display:none"></div>
+
+        <label for="notes">Notes (optional)</label>
+        <textarea id="notes" placeholder="Any relevant context about this meeting..."></textarea>
+
+        <button class="btn" id="submitBtn" type="button">Save Meeting Data</button>
+        <div id="status" class="status"></div>
+      </div>
+    </main>
+    <script src="/static/js/auth.js"></script>
+    <script>
+      if (!Auth.requireAuth()) throw new Error("redirect");
+
+      const hoaSelect = document.getElementById("hoaSelect");
+      const meetingDate = document.getElementById("meetingDate");
+      const meetingType = document.getElementById("meetingType");
+      const totalUnits = document.getElementById("totalUnits");
+      const votesCast = document.getElementById("votesCast");
+      const quorumRequired = document.getElementById("quorumRequired");
+      const quorumMet = document.getElementById("quorumMet");
+      const notes = document.getElementById("notes");
+      const submitBtn = document.getElementById("submitBtn");
+      const status = document.getElementById("status");
+
+      // Set today's date as default
+      const today = new Date().toISOString().slice(0, 10);
+      meetingDate.value = today;
+
+      async function loadMyHoas() {
+        try {
+          const me = await Auth.fetchJson("/auth/me");
+          if (!me.hoas || !me.hoas.length) {
+            hoaSelect.innerHTML = '<option value="">No HOA memberships — claim one first.</option>';
+            return;
+          }
+          hoaSelect.innerHTML = '<option value="">Select an HOA...</option>' +
+            me.hoas.map(h => '<option value="' + h.hoa_id + '">' + h.hoa_name + '</option>').join("");
+
+          // Pre-select if hoa_id in URL
+          const params = new URLSearchParams(window.location.search);
+          const preselect = params.get("hoa_id");
+          if (preselect) hoaSelect.value = preselect;
+        } catch (err) {
+          status.className = "status error";
+          status.textContent = err.message;
+        }
+      }
+
+      async function doSubmit() {
+        const hoaId = hoaSelect.value;
+        if (!hoaId) { status.className = "status error"; status.textContent = "Select an HOA."; return; }
+        if (!meetingDate.value) { status.className = "status error"; status.textContent = "Enter a meeting date."; return; }
+        if (!totalUnits.value || parseInt(totalUnits.value) < 1) { status.className = "status error"; status.textContent = "Enter a valid total units count."; return; }
+        if (votesCast.value === "" || parseInt(votesCast.value) < 0) { status.className = "status error"; status.textContent = "Enter votes cast (0 or more)."; return; }
+
+        submitBtn.disabled = true;
+        status.className = "status";
+        status.textContent = "Saving...";
+
+        const payload = {
+          meeting_date: meetingDate.value,
+          meeting_type: meetingType.value,
+          total_units: parseInt(totalUnits.value),
+          votes_cast: parseInt(votesCast.value),
+          quorum_required: quorumRequired.value ? parseInt(quorumRequired.value) : null,
+          quorum_met: quorumMet.checked,
+          notes: notes.value.trim() || null,
+        };
+
+        try {
+          await Auth.fetchJson("/hoas/" + hoaId + "/participation", {
+            method: "POST",
+            body: JSON.stringify(payload),
+          });
+          status.className = "status ok";
+          status.textContent = "Saved!";
+          // Redirect to participation page for this HOA
+          const hoaName = hoaSelect.options[hoaSelect.selectedIndex].text;
+          setTimeout(() => {
+            window.location.href = "/participation/" + encodeURIComponent(hoaName);
+          }, 800);
+        } catch (err) {
+          status.className = "status error";
+          status.textContent = err.message;
+        } finally {
+          submitBtn.disabled = false;
+        }
+      }
+
+      submitBtn.addEventListener("click", doSubmit);
+      loadMyHoas();
+    </script>
+  </body>
+</html>
