@@ -37,6 +37,26 @@ services:
         value: /etc/secrets/gcp-service-account.json
       - key: PROXY_RETENTION_DAYS
         value: "90"
+      - key: DOCUMENSO_API_URL
+        value: "https://app.documenso.com"
+      - key: DOCUMENSO_API_KEY
+        sync: false
+      - key: DOCUMENSO_WEBHOOK_SECRET
+        sync: false
+      - key: EMAIL_PROVIDER
+        value: "stub"
+      - key: EMAIL_FROM
+        value: "noreply@hoaware.app"
+      - key: RESEND_API_KEY
+        sync: false
+      - key: SMTP_HOST
+        value: ""
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        value: ""
+      - key: SMTP_PASSWORD
+        sync: false
     disk:
       name: hoaware-data
       mountPath: /var/data

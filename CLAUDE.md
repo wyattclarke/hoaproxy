@@ -16,10 +16,14 @@ HOAware is a semantic search / Q&A platform for HOA documents, with a proxy voti
 
 ## Environment Setup
 ```bash
-python3.10 -m venv .venv
+# Python 3.10 installed via pyenv; .venv lives in project root
 source .venv/bin/activate
 pip install -r requirements.txt
+pip install pytest httpx  # test deps, not in requirements.txt
 ```
+
+Python 3.10.12 is installed at `/Users/ngoshaliclarke/.pyenv/versions/3.10.12/`.
+If .venv is missing or wrong version: `rm -rf .venv && /Users/ngoshaliclarke/.pyenv/versions/3.10.12/bin/python3.10 -m venv .venv`
 
 Settings are loaded from `settings.env` (gitignored). Key values:
 - `OPENAI_API_KEY` — secret, get from OpenAI dashboard
@@ -39,7 +43,10 @@ Settings are loaded from `settings.env` (gitignored). Key values:
 
 **Render deployment:**
 - Service ID: `srv-d62kms68alac738h67b0`
-- `RENDER_API_KEY` — secret, get from Render dashboard
+- `RENDER_API_KEY` and `RENDER_SERVICE_ID` are in `settings.env`
+- When calling Render API from scripts/shell: `set -a && source settings.env && set +a` then use `$RENDER_API_KEY` — never hardcode secrets in commands
+- Render env vars API is PUT-only (replaces all); use the Python snippet pattern in this session to upsert a single key without echoing others
+- `JWT_SECRET` is set on Render (added Mar 2026)
 
 ## Running & Testing
 ```bash
@@ -59,9 +66,18 @@ Vanilla HTML/CSS/JS — no build step, no framework. Match existing style:
 - Colors: `--accent: #1662f3`, `--bg: #eef5ff`, `--ink: #12233a`
 - Auth: always load `/static/js/auth.js`, use `Auth.renderNav()`, `Auth.requireAuth()`, `Auth.fetchJson()`
 
-## Proxy Voting System (in progress)
-Milestones 1–4 complete and committed. Milestone 5 (Frontend Polish) is in progress.
-See `docs/implementation-plan.md` for the full 8-milestone plan.
+## Proxy Voting System — ALL 8 MILESTONES COMPLETE
+See `docs/implementation-plan.md` for full details. 129 tests, all passing.
+
+**Key patterns:**
+- DB startup migration: `lifespan` handler in `api/main.py` runs `db.SCHEMA` + expiry sweep on boot
+- Rate limiter: in-memory per-IP, `_check_rate_limit(request, limit=N)` — skips `testclient` host
+- Health check (`/healthz`): verifies all required tables exist, returns 503 if missing
+- E-sign: Documenso API when `DOCUMENSO_API_KEY` set; click-to-sign fallback otherwise
+- Email: `EMAIL_PROVIDER=stub|resend|smtp`; defaults to stub (logs only)
+- Data retention: `PROXY_RETENTION_DAYS=90`; expiry sweep runs on startup
+
+**Test isolation pattern:** module-level temp DB + `os.environ["HOA_DB_PATH"]`. FK delete order: `proxy_audit → proxy_assignments → delegates → membership_claims → sessions → users`.
 
 **Proxy lifecycle:** `draft → signed → delivered → acknowledged / revoked / expired`
 
@@ -88,3 +104,4 @@ ETL pipeline in `scripts/legal/`:
 - Write tests as you go; fix failures before moving on
 - This is a real product, not a prototype — write clean, production-quality code
 - Do not over-engineer; keep solutions focused on what's asked
+- Security: load secrets from `settings.env` via `os.environ`, never hardcode or echo in commands/logs
