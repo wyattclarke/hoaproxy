@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gzip
 import json
 import sqlite3
 from pathlib import Path
@@ -1851,3 +1852,52 @@ def list_participation_records(conn: sqlite3.Connection, hoa_id: int) -> list[di
         (int(hoa_id),),
     ).fetchall()
     return [dict(r) for r in rows]
+
+
+_SEEDS_DIR = Path(__file__).parent / "seeds"
+
+
+def seed_legal_data(conn: sqlite3.Connection) -> int:
+    """Seed legal_rules and jurisdiction_profiles from bundled gzip seed files
+    if those tables are currently empty. Returns the number of rows inserted."""
+    if not _SEEDS_DIR.exists():
+        return 0
+    inserted = 0
+
+    # Seed jurisdiction_profiles
+    jp_count = conn.execute("SELECT COUNT(*) FROM jurisdiction_profiles").fetchone()[0]
+    jp_seed = _SEEDS_DIR / "jurisdiction_profiles.jsonl.gz"
+    if jp_count == 0 and jp_seed.exists():
+        with gzip.open(jp_seed, "rt", encoding="utf-8") as f:
+            rows = [json.loads(line) for line in f if line.strip()]
+        for row in rows:
+            row.pop("id", None)
+            cols = list(row.keys())
+            placeholders = ", ".join("?" for _ in cols)
+            conn.execute(
+                f"INSERT OR IGNORE INTO jurisdiction_profiles ({', '.join(cols)}) VALUES ({placeholders})",
+                [row[c] for c in cols],
+            )
+        conn.commit()
+        inserted += len(rows)
+
+    # Seed legal_rules (proxy_voting only)
+    lr_count = conn.execute(
+        "SELECT COUNT(*) FROM legal_rules WHERE topic_family='proxy_voting'"
+    ).fetchone()[0]
+    lr_seed = _SEEDS_DIR / "legal_rules_proxy_voting.jsonl.gz"
+    if lr_count == 0 and lr_seed.exists():
+        with gzip.open(lr_seed, "rt", encoding="utf-8") as f:
+            rows = [json.loads(line) for line in f if line.strip()]
+        for row in rows:
+            row.pop("id", None)
+            cols = list(row.keys())
+            placeholders = ", ".join("?" for _ in cols)
+            conn.execute(
+                f"INSERT OR IGNORE INTO legal_rules ({', '.join(cols)}) VALUES ({placeholders})",
+                [row[c] for c in cols],
+            )
+        conn.commit()
+        inserted += len(rows)
+
+    return inserted

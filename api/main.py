@@ -133,6 +133,9 @@ async def lifespan(app: FastAPI):
     settings = load_settings()
     with db.get_connection(settings.db_path) as conn:
         conn.executescript(db.SCHEMA)
+        seeded = db.seed_legal_data(conn)
+        if seeded:
+            logger.info("Seeded %d legal rows from bundled seed files", seeded)
     _run_expiry_sweep()
     yield
 

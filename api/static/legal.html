@@ -210,8 +210,9 @@
           });
 
           function yesNo(val) {
-            if (val === true || val === "yes") return '<span class="yes">Yes</span>';
-            if (val === false || val === "no") return '<span class="no">No</span>';
+            const s = (typeof val === "object" && val !== null) ? val.status : val;
+            if (s === true || s === "yes" || s === "allowed") return '<span class="yes">Yes</span>';
+            if (s === false || s === "no" || s === "not_allowed") return '<span class="no">No</span>';
             return '<span class="unknown">Unknown</span>';
           }
 
