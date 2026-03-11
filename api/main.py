@@ -639,7 +639,10 @@ def _normalize_geojson_ring(ring: object) -> list[tuple[float, float]] | None:
             return None
         if not (-180 <= lon <= 180 and -90 <= lat <= 90):
             return None
-        points.append((lon, lat))
+        pt = (lon, lat)
+        if points and points[-1] == pt:
+            continue  # skip consecutive duplicate vertices
+        points.append(pt)
     if len(points) < 3:
         return None
     if points[0] != points[-1]:
@@ -692,13 +695,16 @@ def _point_on_segment(
     eps: float = 1e-12,
 ) -> bool:
     (px, py), (ax, ay), (bx, by) = point, a, b
+    sq_len = (bx - ax) ** 2 + (by - ay) ** 2
+    if sq_len <= eps * eps:
+        # Degenerate zero-length segment: only "on" it if the point is at that vertex
+        return (px - ax) ** 2 + (py - ay) ** 2 <= eps * eps
     cross = (px - ax) * (by - ay) - (py - ay) * (bx - ax)
     if abs(cross) > eps:
         return False
     dot = (px - ax) * (bx - ax) + (py - ay) * (by - ay)
     if dot < -eps:
         return False
-    sq_len = (bx - ax) ** 2 + (by - ay) ** 2
     if dot - sq_len > eps:
         return False
     return True
