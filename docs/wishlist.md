@@ -17,6 +17,30 @@ Key value-adds over the web app: push notifications (proxy status, meeting remin
 
 ---
 
+## Web Scraping HOA Document Corpus
+
+Many HOAs publish their governing documents (CC&Rs, bylaws, rules) on publicly accessible websites — HOA management portals, county recorder sites, neighborhood association pages, and community forums. Scraping these at scale would seed the document index without requiring residents to upload anything.
+
+**Potential sources:**
+- HOA management company portals (FirstService, Associa, CINC, AppFolio, etc.) — many expose document libraries without auth
+- County recorder / register of deeds sites — CC&Rs are recorded public documents in most states
+- State HOA registries — FL, AZ, NV, CO, and a few others maintain public HOA databases with contact info
+- Nextdoor / community Facebook groups — often link to official doc pages
+- Google: `site:*.com filetype:pdf "CC&R" OR "bylaws" OR "declaration of covenants"` style queries via Search API
+
+**Approach:**
+1. Build a crawler that discovers HOA home pages (start from state registry exports + Google Custom Search)
+2. For each HOA site, look for PDF links matching document patterns (bylaws, CC&R, rules & regulations, meeting minutes)
+3. Download, deduplicate by hash, and run through the existing ingest pipeline
+4. Store provenance (source URL, crawl date) alongside each document
+
+**Considerations:**
+- `robots.txt` compliance and rate limiting are essential
+- PDFs from county recorders are unambiguously public record; HOA portal docs may have terms-of-service restrictions — legal review needed before large-scale scraping
+- Quality signal: prefer documents where the HOA name matches a known registered HOA
+
+---
+
 ## Manual Legal Corpus: Missing States
 
 Four states could not be scraped automatically because their legislature sites use JavaScript rendering or CAPTCHAs. Their proxy voting rules need to be added manually.
