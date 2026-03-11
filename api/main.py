@@ -345,6 +345,7 @@ class HoaLocation(BaseModel):
 
 
 class HoaSummary(BaseModel):
+    hoa_id: int | None = None
     hoa: str
     doc_count: int
     chunk_count: int

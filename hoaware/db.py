@@ -429,6 +429,7 @@ def list_hoa_summaries(conn: sqlite3.Connection) -> list[dict]:
             GROUP BY d.hoa_id
         )
         SELECT
+            h.id AS hoa_id,
             h.name AS hoa,
             ds.doc_count,
             ds.total_bytes,
@@ -450,6 +451,7 @@ def list_hoa_summaries(conn: sqlite3.Connection) -> list[dict]:
     rows = cur.fetchall()
     return [
         {
+            "hoa_id": int(row["hoa_id"]),
             "hoa": str(row["hoa"]),
             "doc_count": int(row["doc_count"]),
             "chunk_count": int(row["chunk_count"]),

@@ -937,24 +937,26 @@
         const delegatesList = document.getElementById("delegatesList");
         if (!delegatesList || !state.hoaName) return;
         try {
-          // Need hoa_id — resolve it via summary
           const summaries = await fetchJson("/hoas/summary");
           const match = summaries.find(s => s.hoa === state.hoaName);
-          if (!match) { delegatesList.innerHTML = '<div class="meta">Could not resolve HOA.</div>'; return; }
-          // We need hoa_id but summary doesn't have it. Use the /hoas endpoint + location.
-          // Actually delegates endpoint takes hoa_id. Let's find it from the DB via a known workaround:
-          // Query all hoas and find by name. The simplest: look up the claim-by-name internally.
-          // For now, get the location which we already have, and extract from there.
-          // Alternatively, just query delegates by iterating. Let's use a simpler approach:
-          // Add a lookup. Actually hoa_id is in the hoas table but not exposed. Let's just add it to summary.
-          // Quick workaround: use claim-by-name logic to get id. Actually, simpler: just get hoa_id from
-          // the hoa_locations endpoint which returns hoa name. We can't get hoa_id easily.
-          // For MVP: skip delegate loading on hoa page if we can't get hoa_id.
-          // Better: add hoa_id to HoaSummary. But that's an API change.
-          // Simplest for now: search all delegates responses. Actually let me just not show delegates
-          // unless we add hoa_id. Let me add it.
-          delegatesList.innerHTML = '<div class="meta">Delegate listing coming soon. <a href="/assign-proxy" class="doc-link">Assign a proxy</a></div>';
-        } catch (_) {}
+          if (!match || !match.hoa_id) {
+            delegatesList.innerHTML = '<div class="meta">Could not resolve HOA.</div>';
+            return;
+          }
+          const delegates = await fetchJson("/hoas/" + match.hoa_id + "/delegates");
+          if (!delegates.length) {
+            delegatesList.innerHTML = '<div class="meta">No delegates registered for this HOA yet.</div>';
+            return;
+          }
+          delegatesList.innerHTML = delegates.map(d =>
+            '<div style="padding:8px 0;border-bottom:1px solid var(--line)">' +
+            '<strong>' + escapeHtml(d.display_name || "Delegate #" + d.id) + '</strong>' +
+            (d.bio ? '<div class="meta" style="margin-top:3px">' + escapeHtml(d.bio) + '</div>' : '') +
+            '</div>'
+          ).join("");
+        } catch (_) {
+          delegatesList.innerHTML = '<div class="meta">Could not load delegates.</div>';
+        }
       }
 
       async function loadProxyStats() {
