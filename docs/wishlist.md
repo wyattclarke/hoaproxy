@@ -17,6 +17,22 @@ Key value-adds over the web app: push notifications (proxy status, meeting remin
 
 ---
 
+## Blend Legal Corpus into HOA Doc Q&A
+
+When a user asks a question about their HOA docs, the answer should also draw on their state's legal corpus — not just the HOA's own bylaws. For example, "can I vote by proxy electronically?" is only fully answered by combining the HOA's rules with the state statute.
+
+**What it requires:**
+1. Resolve the user's state from their HOA's location record
+2. Query `legal_rules` for that state and relevant topic (proxy voting, records access, etc.)
+3. Inject those rules as additional context alongside the HOA doc chunks before the LLM call
+4. Surface citations from both sources in the response
+
+The HOA doc context comes from Qdrant (semantic search); the legal context comes from SQLite (structured lookup). They'd need to be merged in the prompt. The main risk is adding noise for purely HOA-specific questions (fence colors, parking rules) — worth filtering by topic or letting the LLM sort it out.
+
+Highest value for proxy/voting/records questions; lower value for property/aesthetics questions.
+
+---
+
 ## Web Scraping HOA Document Corpus
 
 Many HOAs publish their governing documents (CC&Rs, bylaws, rules) on publicly accessible websites — HOA management portals, county recorder sites, neighborhood association pages, and community forums. Scraping these at scale would seed the document index without requiring residents to upload anything.
