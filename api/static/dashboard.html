@@ -52,6 +52,13 @@
       h2 { margin: 18px 0 10px; font-family: "Space Grotesk", "Manrope", sans-serif; font-size: 1.15rem; }
       h3 { margin: 0 0 6px; font-size: 1rem; }
 
+      .qa-select { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px; font: inherit; background: #fff; }
+      .qa-input { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px; font: inherit; resize: vertical; min-height: 72px; margin-top: 8px; }
+      .qa-answer { white-space: pre-wrap; line-height: 1.6; margin-top: 10px; font-size: 0.93rem; }
+      .qa-citations { margin-top: 8px; font-size: 0.82rem; color: var(--muted); }
+      .qa-citations a { color: var(--accent); font-weight: 700; text-decoration: none; }
+      .qa-citations a:hover { text-decoration: underline; }
+
       .card {
         border: 1px solid var(--line); border-radius: 14px;
         background: rgba(255,255,255,0.92); box-shadow: 0 6px 20px rgba(16,40,73,0.07);
@@ -138,6 +145,19 @@
 
       <h2>Delegate Status</h2>
       <div id="delegateSection"></div>
+
+      <h2>Ask Your HOA Docs</h2>
+      <div class="card">
+        <p class="meta" style="margin:0 0 10px">Ask a question about your HOA rules and get an AI answer grounded in the indexed documents.</p>
+        <select class="qa-select" id="qaHoaSelect"><option value="">— select an HOA —</option></select>
+        <textarea class="qa-input" id="qaInput" placeholder="Do I need board approval to add a fence?"></textarea>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button class="btn primary" id="qaBtn" type="button">Ask</button>
+        </div>
+        <div id="qaStatus" class="status"></div>
+        <div id="qaAnswer" class="qa-answer"></div>
+        <div id="qaCitations" class="qa-citations"></div>
+      </div>
     </main>
 
     <script src="/static/js/auth.js"></script>
@@ -281,6 +301,7 @@
 
           // Load delegate info
           await loadDelegateStatus(me);
+          populateQaHoas(me.hoas);
 
         } catch (err) {
           pageStatus.className = "status error";
@@ -368,6 +389,59 @@
           claimBtn.disabled = false;
         }
       }
+
+      // QA widget
+      const qaHoaSelect = document.getElementById("qaHoaSelect");
+      const qaInput = document.getElementById("qaInput");
+      const qaBtn = document.getElementById("qaBtn");
+      const qaStatus = document.getElementById("qaStatus");
+      const qaAnswer = document.getElementById("qaAnswer");
+      const qaCitations = document.getElementById("qaCitations");
+
+      function populateQaHoas(hoas) {
+        if (!hoas.length) {
+          qaHoaSelect.innerHTML = '<option value="">No HOA memberships yet</option>';
+          return;
+        }
+        qaHoaSelect.innerHTML = (hoas.length === 1 ? "" : '<option value="">— select an HOA —</option>') +
+          hoas.map(h => '<option value="' + escapeHtml(h.hoa_name) + '">' + escapeHtml(h.hoa_name) + '</option>').join("");
+        if (hoas.length === 1) qaHoaSelect.value = hoas[0].hoa_name;
+      }
+
+      async function doQa() {
+        const hoa = qaHoaSelect.value;
+        const question = qaInput.value.trim();
+        if (!hoa) { qaStatus.className = "status error"; qaStatus.textContent = "Select an HOA first."; return; }
+        if (!question) { qaStatus.className = "status error"; qaStatus.textContent = "Enter a question."; return; }
+        qaBtn.disabled = true;
+        qaStatus.className = "status"; qaStatus.textContent = "Thinking...";
+        qaAnswer.textContent = "";
+        qaCitations.innerHTML = "";
+        try {
+          const body = await Auth.fetchJson("/qa", {
+            method: "POST",
+            body: JSON.stringify({ hoa, question, k: 6 }),
+          });
+          qaAnswer.textContent = body.answer || "";
+          qaStatus.className = "status ok"; qaStatus.textContent = "Answer ready.";
+          const sources = (body.sources || []).filter((s, i, arr) =>
+            s && s.document && arr.findIndex(x => x.document === s.document) === i
+          );
+          if (sources.length) {
+            qaCitations.innerHTML = "<strong>Sources:</strong> " + sources.map(s => {
+              const href = "/hoas/" + encodeURIComponent(hoa) + "/documents/searchable?path=" + encodeURIComponent(s.document);
+              return '<a href="' + href + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(s.document) + " (pp. " + escapeHtml(s.pages || "?") + ")</a>";
+            }).join(" · ");
+          }
+        } catch (err) {
+          qaStatus.className = "status error"; qaStatus.textContent = err.message;
+        } finally {
+          qaBtn.disabled = false;
+        }
+      }
+
+      qaBtn.addEventListener("click", doQa);
+      qaInput.addEventListener("keydown", e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) doQa(); });
 
       claimBtn.addEventListener("click", claimHoa);
       loadHoaOptions();
