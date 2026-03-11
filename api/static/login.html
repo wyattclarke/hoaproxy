@@ -81,7 +81,10 @@
         <label for="email">Email</label>
         <input id="email" type="email" placeholder="you@example.com" autocomplete="email" />
         <label for="password">Password</label>
-        <input id="password" type="password" placeholder="Your password" autocomplete="current-password" />
+        <div style="position:relative">
+          <input id="password" type="password" placeholder="Your password" autocomplete="current-password" style="padding-right:60px" />
+          <button type="button" id="togglePassword" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:transparent;border:none;cursor:pointer;font-size:0.82rem;color:var(--muted);font-family:inherit;padding:4px 6px;">Show</button>
+        </div>
         <button class="btn" id="loginBtn" type="button">Log In</button>
         <div id="status" class="status"></div>
         <div class="footer">Don't have an account? <a class="link" href="/register">Register</a></div>
@@ -126,6 +129,12 @@
           loginBtn.disabled = false;
         }
       }
+
+      document.getElementById("togglePassword").addEventListener("click", function() {
+        const isPassword = passwordInput.type === "password";
+        passwordInput.type = isPassword ? "text" : "password";
+        this.textContent = isPassword ? "Hide" : "Show";
+      });
 
       loginBtn.addEventListener("click", doLogin);
       passwordInput.addEventListener("keydown", (e) => { if (e.key === "Enter") doLogin(); });

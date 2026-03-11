@@ -172,6 +172,14 @@ CREATE TABLE IF NOT EXISTS sessions (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS email_verification_tokens (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token TEXT NOT NULL UNIQUE,
+    expires_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS membership_claims (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL REFERENCES users(id),
@@ -1417,12 +1425,42 @@ def create_user(
     cur = conn.execute(
         """
         INSERT INTO users (email, password_hash, display_name, verified_at)
-        VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+        VALUES (?, ?, ?, NULL)
         """,
         (email.strip().lower(), password_hash, (display_name or "").strip() or None),
     )
     conn.commit()
     return int(cur.lastrowid)
+
+
+def create_verification_token(
+    conn: sqlite3.Connection,
+    *,
+    user_id: int,
+    token: str,
+    expires_at: str,
+) -> None:
+    conn.execute("DELETE FROM email_verification_tokens WHERE user_id = ?", (user_id,))
+    conn.execute(
+        "INSERT INTO email_verification_tokens (user_id, token, expires_at) VALUES (?, ?, ?)",
+        (user_id, token, expires_at),
+    )
+    conn.commit()
+
+
+def get_verification_token(conn: sqlite3.Connection, token: str) -> dict | None:
+    row = conn.execute(
+        "SELECT * FROM email_verification_tokens WHERE token = ?", (token,)
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def mark_user_verified(conn: sqlite3.Connection, user_id: int) -> None:
+    conn.execute(
+        "UPDATE users SET verified_at = CURRENT_TIMESTAMP WHERE id = ?", (user_id,)
+    )
+    conn.execute("DELETE FROM email_verification_tokens WHERE user_id = ?", (user_id,))
+    conn.commit()
 
 
 def get_user_by_email(conn: sqlite3.Connection, email: str) -> dict | None:

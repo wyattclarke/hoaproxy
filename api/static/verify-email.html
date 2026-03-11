@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HOAware | Verify Email</title>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Space+Grotesk:wght@600;700&display=swap");
+      :root { --bg: #eef5ff; --ink: #12233a; --muted: #587091; --line: #d3e0f4; --accent: #1662f3; --accent-strong: #0d49be; --ok: #177c45; --danger: #b62525; }
+      * { box-sizing: border-box; }
+      body { margin: 0; min-height: 100vh; font-family: "Manrope", sans-serif; color: var(--ink);
+        background: radial-gradient(95rem 60rem at 8% -22%, rgba(20,98,243,0.2), transparent 60%),
+                    linear-gradient(180deg, #f8fbff 0%, var(--bg) 54%, #edf3ff 100%);
+        display: flex; align-items: center; justify-content: center; }
+      .card { width: min(440px, 94vw); border: 1px solid var(--line); border-radius: 18px; background: rgba(255,255,255,0.94); box-shadow: 0 10px 32px rgba(16,40,73,0.09); padding: 36px 28px; text-align: center; }
+      .brand { display: inline-flex; align-items: baseline; gap: 0.12em; font-family: "Space Grotesk", sans-serif; font-size: 1.6rem; font-weight: 700; margin: 0 0 24px; text-decoration: none; }
+      .brand-hoa { color: #0f2f6d; } .brand-aware { color: #1a66ff; }
+      .icon { font-size: 3rem; margin-bottom: 12px; }
+      h2 { margin: 0 0 10px; font-family: "Space Grotesk", sans-serif; font-size: 1.25rem; }
+      p { color: var(--muted); margin: 0 0 20px; line-height: 1.6; }
+      .btn { display: inline-flex; align-items: center; justify-content: center; border-radius: 10px; border: 1px solid var(--accent); background: linear-gradient(180deg, var(--accent), var(--accent-strong)); color: #fff; padding: 11px 22px; font-family: inherit; font-size: 0.95rem; font-weight: 800; cursor: pointer; text-decoration: none; width: 100%; margin-bottom: 10px; }
+      .btn.ghost { background: #fff; color: var(--ink); border-color: var(--line); }
+      .status { font-size: 0.9rem; color: var(--muted); min-height: 1.2em; }
+      .status.ok { color: var(--ok); } .status.error { color: var(--danger); }
+      .spinner { display: inline-block; width: 18px; height: 18px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; margin-right: 8px; vertical-align: middle; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <a href="/" class="brand"><span class="brand-hoa">HOA</span><span class="brand-aware">ware</span></a>
+      <div id="loadingState">
+        <div class="icon">&#9203;</div>
+        <h2>Verifying your email...</h2>
+        <p><span class="spinner"></span>Please wait.</p>
+      </div>
+      <div id="successState" style="display:none">
+        <div class="icon">&#9989;</div>
+        <h2>Email verified!</h2>
+        <p>Your email address has been confirmed. You now have full access to HOAware.</p>
+        <a href="/dashboard" class="btn">Go to Dashboard</a>
+      </div>
+      <div id="errorState" style="display:none">
+        <div class="icon">&#10060;</div>
+        <h2>Verification failed</h2>
+        <p id="errorMsg">This link is invalid or has expired.</p>
+        <button class="btn" id="resendBtn" type="button" style="display:none">Resend verification email</button>
+        <a href="/dashboard" class="btn ghost">Back to Dashboard</a>
+        <div id="resendStatus" class="status"></div>
+      </div>
+    </div>
+
+    <script src="/static/js/auth.js"></script>
+    <script>
+      async function verify() {
+        const params = new URLSearchParams(window.location.search);
+        const token = params.get("token");
+
+        if (!token) {
+          showError("No verification token found in this link.");
+          return;
+        }
+
+        try {
+          const resp = await fetch("/auth/verify-email?token=" + encodeURIComponent(token));
+          if (resp.ok) {
+            document.getElementById("loadingState").style.display = "none";
+            document.getElementById("successState").style.display = "";
+            // Update cached user if logged in
+            if (Auth.isLoggedIn()) {
+              try {
+                const me = await Auth.fetchJson("/auth/me");
+                Auth.setCachedUser(me);
+              } catch (_) {}
+            }
+          } else {
+            const body = await resp.json().catch(() => ({}));
+            showError(body.detail || "Verification failed.");
+          }
+        } catch (err) {
+          showError("Network error. Please try again.");
+        }
+      }
+
+      function showError(msg) {
+        document.getElementById("loadingState").style.display = "none";
+        document.getElementById("errorState").style.display = "";
+        document.getElementById("errorMsg").textContent = msg;
+        if (Auth.isLoggedIn()) {
+          document.getElementById("resendBtn").style.display = "";
+        }
+      }
+
+      document.getElementById("resendBtn").addEventListener("click", async () => {
+        const btn = document.getElementById("resendBtn");
+        const status = document.getElementById("resendStatus");
+        btn.disabled = true;
+        status.className = "status";
+        status.textContent = "Sending...";
+        try {
+          await Auth.fetchJson("/auth/resend-verification", { method: "POST", body: "{}" });
+          status.className = "status ok";
+          status.textContent = "Verification email sent! Check your inbox.";
+        } catch (err) {
+          status.className = "status error";
+          status.textContent = err.message;
+          btn.disabled = false;
+        }
+      });
+
+      verify();
+    </script>
+  </body>
+</html>

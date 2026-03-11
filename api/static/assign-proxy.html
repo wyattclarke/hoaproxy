@@ -34,6 +34,10 @@
         <a href="/" style="text-decoration:none"><div class="brand"><span class="brand-hoa">HOA</span><span class="brand-aware">ware</span></div></a>
         <div style="margin-bottom:16px"><a class="nav" href="/dashboard"><span style="color:var(--accent);font-weight:700;text-decoration:none">Back to Dashboard</span></a></div>
         <h2>Assign Your Proxy</h2>
+        <div style="background:#f5f8ff;border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:0.87rem;color:var(--muted);line-height:1.6">
+          <strong style="color:var(--ink)">What is a proxy?</strong> A proxy lets someone you trust vote on your behalf at HOA meetings when you can't attend.
+          Your chosen <strong>delegate</strong> will cast your vote. You can revoke this proxy at any time before the meeting from your <a href="/my-proxies" style="color:var(--accent);font-weight:700;text-decoration:none">proxies page</a>.
+        </div>
 
         <label for="hoaSelect">HOA</label>
         <select id="hoaSelect"><option value="">Loading...</option></select>
@@ -45,6 +49,10 @@
         <div class="radio-group">
           <label><input type="radio" name="direction" value="directed" checked /> Directed</label>
           <label><input type="radio" name="direction" value="undirected" /> Undirected</label>
+        </div>
+        <div style="font-size:0.82rem;color:var(--muted);margin-top:6px;line-height:1.5">
+          <strong>Directed:</strong> Your delegate must follow your voting instructions.
+          <strong>Undirected:</strong> Your delegate votes at their discretion.
         </div>
 
         <div id="votingSection">
@@ -98,17 +106,22 @@
         const hoaId = hoaSelect.value;
         if (!hoaId) { delegateSelect.innerHTML = '<option value="">Select HOA first</option>'; return; }
         try {
-          const delegates = await Auth.fetchJson("/hoas/" + hoaId + "/delegates");
-          if (!delegates.length) {
-            delegateSelect.innerHTML = '<option value="">No delegates for this HOA</option>';
+          const [delegates, me] = await Promise.all([
+            Auth.fetchJson("/hoas/" + hoaId + "/delegates"),
+            Auth.getCachedUser() ? Promise.resolve(Auth.getCachedUser()) : Auth.fetchJson("/auth/me"),
+          ]);
+          const myUserId = me && me.user_id;
+          // Filter out the current user — cannot assign proxy to yourself
+          const eligible = delegates.filter(d => d.user_id !== myUserId);
+          if (!eligible.length) {
+            delegateSelect.innerHTML = '<option value="">No eligible delegates for this HOA</option>';
             return;
           }
           delegateSelect.innerHTML = '<option value="">Select delegate...</option>' +
-            delegates.map(d => '<option value="' + d.user_id + '">' + (d.display_name || 'Delegate #' + d.id) + '</option>').join("");
+            eligible.map(d => '<option value="' + d.user_id + '">' + (d.display_name || 'Delegate #' + d.id) + '</option>').join("");
           const pre = params.get("delegate_id");
           if (pre) {
-            // Find user_id for this delegate_id
-            const match = delegates.find(d => String(d.id) === pre);
+            const match = eligible.find(d => String(d.id) === pre);
             if (match) delegateSelect.value = match.user_id;
           }
         } catch (err) {
@@ -136,7 +149,7 @@
             voting_instructions: votingInstructions.value.trim() || null,
           };
           const proxy = await Auth.fetchJson("/proxies", { method: "POST", body: JSON.stringify(payload) });
-          status.className = "status ok"; status.textContent = "Proxy created! Redirecting to sign...";
+          status.className = "status ok"; status.textContent = "Proxy saved as draft. Review and sign it on the next page to make it official.";
           setTimeout(() => { window.location.href = "/proxy-sign/" + proxy.id; }, 800);
         } catch (err) {
           status.className = "status error"; status.textContent = err.message;

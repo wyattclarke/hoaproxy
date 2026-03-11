@@ -110,7 +110,10 @@
       }
 
       // Extract HOA name from URL: /participation/{hoa_name}
-      const hoaName = decodeURIComponent(window.location.pathname.replace(/^\/participation\//, ""));
+      const hoaName = decodeURIComponent(window.location.pathname.replace(/^\/participation\/?/, ""));
+      if (!hoaName || hoaName === "/participation" || hoaName === "") {
+        window.location.href = "/dashboard";
+      }
       document.getElementById("hoaTitle").textContent = hoaName || "Participation History";
       document.getElementById("hoaMeta").textContent = "Meeting attendance and voting data for " + hoaName;
 
@@ -164,7 +167,7 @@
 
         if (!hoaId) {
           document.getElementById("tableWrapper").innerHTML =
-            '<div class="empty">Could not find HOA. <a href="/">Return home</a></div>';
+            '<div class="empty">Could not find HOA &ldquo;' + hoaName + '&rdquo;. <a href="/dashboard">Return to dashboard</a></div>';
           return;
         }
 

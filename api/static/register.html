@@ -71,7 +71,10 @@
         <label for="email">Email</label>
         <input id="email" type="email" placeholder="you@example.com" autocomplete="email" />
         <label for="password">Password</label>
-        <input id="password" type="password" placeholder="At least 8 characters" autocomplete="new-password" />
+        <div style="position:relative">
+          <input id="password" type="password" placeholder="At least 8 characters" autocomplete="new-password" style="padding-right:60px" />
+          <button type="button" id="togglePassword" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:transparent;border:none;cursor:pointer;font-size:0.82rem;color:var(--muted);font-family:inherit;padding:4px 6px;">Show</button>
+        </div>
         <div class="tos-row">
           <input id="tosCheck" type="checkbox" required />
           <label for="tosCheck" style="margin:0; font-weight:400;">
@@ -133,6 +136,12 @@
           registerBtn.disabled = false;
         }
       }
+
+      document.getElementById("togglePassword").addEventListener("click", function() {
+        const isPassword = passwordInput.type === "password";
+        passwordInput.type = isPassword ? "text" : "password";
+        this.textContent = isPassword ? "Hide" : "Show";
+      });
 
       registerBtn.addEventListener("click", doRegister);
       passwordInput.addEventListener("keydown", (e) => { if (e.key === "Enter") doRegister(); });

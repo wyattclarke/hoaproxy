@@ -262,6 +262,27 @@ def notify_grantor(proxy_id: int, event: str) -> bool:
     return _send_email(to=[grantor_email], subject=subject, html=_proxy_status_html(proxy, event))
 
 
+def send_verification_email(*, email: str, token: str, base_url: str) -> bool:
+    """Send an email verification link to a newly registered user."""
+    verify_url = f"{base_url.rstrip('/')}/verify-email?token={token}"
+    html = f"""
+    <html><body style="font-family:sans-serif;max-width:600px;margin:0 auto">
+    <h2>Verify your HOAware email address</h2>
+    <p>Click the link below to verify your email address and activate your account:</p>
+    <p><a href="{verify_url}" style="display:inline-block;padding:12px 24px;background:#1662f3;color:#fff;text-decoration:none;border-radius:8px;font-weight:bold">Verify Email Address</a></p>
+    <p>Or copy and paste this link: {verify_url}</p>
+    <p>This link expires in 24 hours.</p>
+    <hr>
+    <p style="font-size:12px;color:#666">If you didn't create a HOAware account, you can ignore this email.</p>
+    </body></html>
+    """
+    return _send_email(
+        to=[email],
+        subject="Verify your HOAware email address",
+        html=html,
+    )
+
+
 def notify_delegate(proxy_id: int, event: str) -> bool:
     """Send a notification to the delegate (new_proxy, revoked)."""
     settings = load_settings()

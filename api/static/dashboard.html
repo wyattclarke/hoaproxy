@@ -75,10 +75,28 @@
       .claim-row { display: flex; gap: 8px; margin-top: 10px; align-items: center; flex-wrap: wrap; }
       .claim-row select, .claim-row input { border: 1px solid var(--line); border-radius: 8px; padding: 8px; font: inherit; }
       .claim-row select { flex: 1; min-width: 160px; }
-      .claim-row input { width: 120px; }
 
       .link { color: var(--accent); font-weight: 700; text-decoration: none; }
       .link:hover { text-decoration: underline; }
+
+      .banner {
+        border-radius: 12px; padding: 12px 16px; margin-bottom: 14px;
+        display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+        font-size: 0.9rem;
+      }
+      .banner.warn { background: #fff8e1; border: 1px solid #f0c040; color: #7a5700; }
+      .banner-actions { display: flex; gap: 8px; margin-left: auto; flex-shrink: 0; }
+      .banner-btn { border: 1px solid currentColor; background: transparent; border-radius: 8px; padding: 5px 10px; font: inherit; font-size: 0.82rem; font-weight: 700; cursor: pointer; color: inherit; }
+
+      .search-row { display: flex; gap: 8px; margin-bottom: 8px; }
+      .search-row input { flex: 1; border: 1px solid var(--line); border-radius: 8px; padding: 8px; font: inherit; }
+      .search-row button { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; font: inherit; font-weight: 700; cursor: pointer; background: #fff; }
+      .search-results { margin-bottom: 8px; max-height: 180px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; display: none; }
+      .search-result-item { padding: 8px 12px; cursor: pointer; font-size: 0.9rem; border-bottom: 1px solid var(--line); }
+      .search-result-item:last-child { border-bottom: none; }
+      .search-result-item:hover { background: #f0f6ff; }
+      .search-result-name { font-weight: 700; }
+      .search-result-meta { color: var(--muted); font-size: 0.8rem; }
     </style>
   </head>
   <body>
@@ -92,14 +110,27 @@
         <div id="pageStatus" class="status"></div>
       </section>
 
+      <div id="verifyBanner" style="display:none" class="banner warn">
+        <span>&#9888; Please verify your email address to get full access.</span>
+        <div class="banner-actions">
+          <button class="banner-btn" id="resendVerifyBtn" type="button">Resend email</button>
+        </div>
+      </div>
+      <div id="resendStatus" class="status" style="margin-bottom:8px"></div>
+
       <h2>My HOA Memberships</h2>
       <div id="hoaList" class="grid"></div>
 
       <div class="card" style="margin-top:14px">
         <h3>Claim Membership in an HOA</h3>
+        <p style="color:var(--muted);font-size:0.88rem;margin:0 0 10px">Search by HOA name or your street address to find your community.</p>
+        <div class="search-row">
+          <input id="hoaSearch" type="text" placeholder="e.g. Sunset Pines HOA or 123 Main St, Charlotte NC" autocomplete="off" />
+          <button id="searchBtn" type="button">Search</button>
+        </div>
+        <div id="searchResults" class="search-results"></div>
         <div class="claim-row">
-          <select id="hoaSelect"><option value="">Loading HOAs...</option></select>
-          <input id="unitInput" placeholder="Unit # (optional)" />
+          <select id="hoaSelect"><option value="">— or pick from all HOAs —</option></select>
           <button class="btn primary" id="claimBtn" type="button">Claim</button>
         </div>
         <div id="claimStatus" class="status"></div>
@@ -117,13 +148,105 @@
       const pageStatus = document.getElementById("pageStatus");
       const hoaList = document.getElementById("hoaList");
       const hoaSelect = document.getElementById("hoaSelect");
-      const unitInput = document.getElementById("unitInput");
       const claimBtn = document.getElementById("claimBtn");
       const claimStatus = document.getElementById("claimStatus");
       const delegateSection = document.getElementById("delegateSection");
       const navContainer = document.getElementById("navContainer");
+      const verifyBanner = document.getElementById("verifyBanner");
+      const resendVerifyBtn = document.getElementById("resendVerifyBtn");
+      const resendStatus = document.getElementById("resendStatus");
+      const hoaSearch = document.getElementById("hoaSearch");
+      const searchBtn = document.getElementById("searchBtn");
+      const searchResults = document.getElementById("searchResults");
 
       Auth.renderNav(navContainer);
+
+      // Email verification banner
+      resendVerifyBtn.addEventListener("click", async () => {
+        resendVerifyBtn.disabled = true;
+        resendStatus.className = "status";
+        resendStatus.textContent = "Sending...";
+        try {
+          await Auth.fetchJson("/auth/resend-verification", { method: "POST", body: "{}" });
+          resendStatus.className = "status ok";
+          resendStatus.textContent = "Verification email sent! Check your inbox.";
+        } catch (err) {
+          resendStatus.className = "status error";
+          resendStatus.textContent = err.message;
+          resendVerifyBtn.disabled = false;
+        }
+      });
+
+      // HOA address/name search
+      let _selectedHoaName = null;
+
+      async function doSearch() {
+        const q = hoaSearch.value.trim();
+        if (!q) return;
+        searchBtn.disabled = true;
+        searchBtn.textContent = "...";
+        searchResults.style.display = "none";
+        searchResults.innerHTML = "";
+        try {
+          const res = await fetch("/lookup/universal", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ query: q }),
+          });
+          if (!res.ok) throw new Error("Search failed");
+          const data = await res.json();
+          const items = [];
+          if (data.hoa_matches && data.hoa_matches.length) {
+            data.hoa_matches.forEach(m => items.push({ name: m.name, meta: "HOA name match" }));
+          }
+          if (data.suggestions && data.suggestions.length) {
+            data.suggestions.forEach(s => {
+              if (!items.find(i => i.name === s.name)) {
+                const dist = s.distance_km ? ` · ${s.distance_km.toFixed(1)} km away` : "";
+                items.push({ name: s.name, meta: (s.city || "") + dist });
+              }
+            });
+          }
+          if (!items.length) {
+            searchResults.innerHTML = '<div class="search-result-item" style="color:var(--muted)">No HOAs found. Try a different search or pick from the list below.</div>';
+          } else {
+            searchResults.innerHTML = items.map(item =>
+              `<div class="search-result-item" data-name="${escapeHtml(item.name)}">
+                <div class="search-result-name">${escapeHtml(item.name)}</div>
+                ${item.meta ? `<div class="search-result-meta">${escapeHtml(item.meta)}</div>` : ""}
+              </div>`
+            ).join("");
+            searchResults.querySelectorAll(".search-result-item[data-name]").forEach(el => {
+              el.addEventListener("click", () => {
+                const name = el.dataset.name;
+                hoaSearch.value = name;
+                _selectedHoaName = name;
+                // Also select in dropdown if present
+                for (const opt of hoaSelect.options) {
+                  if (opt.value === name) { hoaSelect.value = name; break; }
+                }
+                searchResults.style.display = "none";
+              });
+            });
+          }
+          searchResults.style.display = "";
+        } catch (err) {
+          searchResults.innerHTML = `<div class="search-result-item" style="color:var(--danger)">${escapeHtml(err.message)}</div>`;
+          searchResults.style.display = "";
+        } finally {
+          searchBtn.disabled = false;
+          searchBtn.textContent = "Search";
+        }
+      }
+
+      searchBtn.addEventListener("click", doSearch);
+      hoaSearch.addEventListener("keydown", e => { if (e.key === "Enter") doSearch(); });
+      // Close search results when clicking away
+      document.addEventListener("click", e => {
+        if (!hoaSearch.contains(e.target) && !searchResults.contains(e.target) && e.target !== searchBtn) {
+          searchResults.style.display = "none";
+        }
+      });
 
       function escapeHtml(text) {
         return String(text).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;");
@@ -139,6 +262,10 @@
           Auth.setCachedUser(me);
           greeting.textContent = `Welcome, ${me.display_name || me.email}`;
 
+          if (!me.email_verified) {
+            verifyBanner.style.display = "";
+          }
+
           if (!me.hoas.length) {
             hoaList.innerHTML = '<div class="empty">You haven\'t claimed any HOA memberships yet. Use the form below to get started.</div>';
           } else {
@@ -146,7 +273,7 @@
               '<div class="card">' +
               '<h3><a class="link" href="/hoa/' + slugify(h.hoa_name) + '">' + escapeHtml(h.hoa_name) + '</a></h3>' +
               (h.unit_number ? '<span class="pill">Unit ' + escapeHtml(h.unit_number) + '</span>' : '') +
-              '<span class="pill">' + escapeHtml(h.status) + '</span>' +
+              '<span class="pill">' + (h.status === 'self_declared' ? 'Pending verification' : escapeHtml(h.status)) + '</span>' +
               '<div style="margin-top:8px"><a class="link" href="/become-delegate?hoa_id=' + h.hoa_id + '">Become a delegate</a></div>' +
               '</div>'
             ).join("");
@@ -176,7 +303,7 @@
             }
           } catch (_) {}
         }
-        delegateSection.innerHTML = delegateHtml || '<div class="empty">Not registered as a delegate for any HOA. <a class="link" href="/become-delegate">Become a delegate</a></div>';
+        delegateSection.innerHTML = delegateHtml || '<div class="empty">Not registered as a delegate for any HOA.</div>';
       }
 
       async function loadHoaOptions() {
@@ -194,10 +321,10 @@
       }
 
       async function claimHoa() {
-        const hoaName = hoaSelect.value;
+        const hoaName = _selectedHoaName || hoaSelect.value;
         if (!hoaName) {
           claimStatus.className = "status error";
-          claimStatus.textContent = "Select an HOA.";
+          claimStatus.textContent = "Search for or select an HOA above.";
           return;
         }
         claimBtn.disabled = true;
@@ -229,7 +356,7 @@
           // a dedicated lookup. Let's use a trick: POST to a name-based claim.
           const res = await Auth.fetchJson("/user/hoas/claim-by-name", {
             method: "POST",
-            body: JSON.stringify({ hoa_name: hoaName, unit_number: unitInput.value.trim() || null }),
+            body: JSON.stringify({ hoa_name: hoaName }),
           });
           claimStatus.className = "status ok";
           claimStatus.textContent = "Membership claimed!";

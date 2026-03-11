@@ -98,11 +98,13 @@ const Auth = (() => {
       container.innerHTML =
         '<a class="btn" href="/dashboard">Dashboard</a>' +
         '<a class="btn" href="/my-proxies">My Proxies</a>' +
+        '<a class="btn" href="/legal">Legal</a>' +
         '<a class="btn" id="logoutBtn">Logout</a>';
       const logoutBtn = container.querySelector("#logoutBtn");
       if (logoutBtn) logoutBtn.addEventListener("click", logout);
     } else {
       container.innerHTML =
+        '<a class="btn" href="/legal">Legal</a>' +
         '<a class="btn" href="/login">Login</a>' +
         '<a class="btn primary" href="/register">Register</a>';
     }

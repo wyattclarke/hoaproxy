@@ -583,6 +583,73 @@ Milestones 6 and 7 can be worked in parallel — they have no dependencies on ea
 
 ---
 
+## Post-Code Manual Steps (Launch Checklist)
+
+All 8 milestones are code-complete and deployed. These items require manual action outside the codebase.
+
+### Render Environment Secrets (set via dashboard or Render API upsert script)
+
+| Key | Where to get it | Priority |
+|-----|----------------|----------|
+| `RESEND_API_KEY` | resend.com → API Keys | Required for real email delivery |
+| `DOCUMENSO_API_KEY` | app.documenso.com or self-hosted | Required for Documenso e-sign |
+| `DOCUMENSO_WEBHOOK_SECRET` | Documenso → Webhook settings | Required for Documenso e-sign |
+| `OPENAI_API_KEY` | platform.openai.com | Already set ✓ |
+| `JWT_SECRET` | Already set (Mar 2026) ✓ | Already set ✓ |
+
+When RESEND_API_KEY is set, also change `EMAIL_PROVIDER` from `stub` to `resend` on Render.
+
+### Email Delivery Activation
+
+1. Sign up at [resend.com](https://resend.com) (100 emails/day free tier)
+2. Add and verify the `hoaware.app` domain in Resend (add DNS TXT + MX records)
+3. Set `RESEND_API_KEY` on Render
+4. Set `EMAIL_PROVIDER=resend` on Render
+5. Trigger a test proxy delivery to confirm email arrives
+
+### Documenso E-Signature Activation (optional — click-to-sign works without it)
+
+**Option A — Documenso Cloud:**
+1. Sign up at app.documenso.com
+2. Get API key from settings
+3. Set `DOCUMENSO_API_KEY` on Render
+4. Set up webhook: URL = `https://<your-render-url>/webhooks/documenso`, copy the secret
+5. Set `DOCUMENSO_WEBHOOK_SECRET` on Render
+
+**Option B — Self-hosted Documenso:**
+1. Run `docker-compose --profile esign up` locally to test
+2. Deploy Documenso as a separate Render service or VPS
+3. Set `DOCUMENSO_API_URL` to point at your instance
+
+### DNS / Domain
+
+- Point a custom domain at the Render service (e.g. hoaware.app)
+- Add domain in Render dashboard → Settings → Custom Domains
+- Render provisions TLS automatically
+
+### GCP Service Account (for Document AI)
+
+- The key file `hoaware-598872615131.json` must be uploaded to Render as a Secret File at path `/etc/secrets/gcp-service-account.json`
+- Render dashboard → Environment → Secret Files
+
+### First-Time Database
+
+On first deploy to a fresh Render disk, the `lifespan` startup hook runs `db.SCHEMA` automatically — no manual migration needed. The health check at `/healthz` will return 503 until the DB is initialized (which happens on first request).
+
+### Monitoring (optional but recommended)
+
+- **Sentry**: sign up at sentry.io (free tier), add `SENTRY_DSN` env var, add `sentry-sdk[fastapi]` to requirements.txt and initialize in `api/main.py`
+- **Render uptime alerts**: enable in Render dashboard → Notifications
+- **Log drain**: Render can forward logs to Datadog, Papertrail, etc. via dashboard → Log Streams
+
+### Legal / Operational
+
+- Register `dmca@hoaware.com` and `privacy@hoaware.com` email addresses (or forwards)
+- Review Terms of Service and Privacy Policy with a lawyer before public launch
+- Set up a way to receive and respond to DMCA takedown requests
+
+---
+
 ## What's NOT in This Plan (Future Work)
 
 These are deferred to post-launch based on user feedback and adoption:

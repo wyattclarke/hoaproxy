@@ -383,6 +383,7 @@ class UserMeResponse(BaseModel):
     email: str
     display_name: str | None = None
     hoas: list[dict] = []
+    email_verified: bool = False
 
 
 class MembershipClaimRequest(BaseModel):
@@ -1275,6 +1276,22 @@ def privacy_page() -> FileResponse:
     return _serve_static_page("privacy.html")
 
 
+@app.get("/legal", include_in_schema=False)
+def legal_page() -> FileResponse:
+    return _serve_static_page("legal.html")
+
+
+@app.get("/verify-email", include_in_schema=False)
+def verify_email_page() -> FileResponse:
+    return _serve_static_page("verify-email.html")
+
+
+@app.get("/proxy-form", include_in_schema=False)
+def proxy_form_redirect():
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/assign-proxy", status_code=302)
+
+
 @app.post("/hoas/{hoa_id}/participation")
 def post_participation(
     hoa_id: int,
@@ -1337,6 +1354,12 @@ def add_participation_page() -> FileResponse:
     return _serve_static_page("add-participation.html")
 
 
+@app.get("/participation", include_in_schema=False)
+def participation_redirect():
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/dashboard", status_code=302)
+
+
 @app.get("/participation/{hoa_name:path}", include_in_schema=False)
 def participation_page(hoa_name: str) -> FileResponse:
     return _serve_static_page("participation.html")
@@ -1376,8 +1399,11 @@ def health() -> dict:
 # ---------------------------------------------------------------------------
 
 @app.post("/auth/register", response_model=AuthResponse)
-def register(request: Request, body: RegisterRequest):
+def register(request: Request, body: RegisterRequest, background_tasks: BackgroundTasks):
     _check_rate_limit(request, limit=10)
+    import secrets as _secrets
+    from datetime import timedelta
+    from hoaware.email_service import send_verification_email
     settings = load_settings()
     display_name = body.display_name.strip() if body.display_name else None
     with db.get_connection(settings.db_path) as conn:
@@ -1388,6 +1414,17 @@ def register(request: Request, body: RegisterRequest):
         user_id = db.create_user(conn, email=body.email, password_hash=pw_hash, display_name=display_name)
         token, jti, expires = create_access_token(user_id, settings)
         db.create_session(conn, user_id=user_id, token_jti=jti, expires_at=expires.isoformat())
+        # Create email verification token (24-hour expiry)
+        verify_token = _secrets.token_urlsafe(32)
+        verify_expires = (datetime.now(timezone.utc) + timedelta(hours=24)).isoformat()
+        db.create_verification_token(conn, user_id=user_id, token=verify_token, expires_at=verify_expires)
+    # Send verification email in background (non-blocking)
+    background_tasks.add_task(
+        send_verification_email,
+        email=body.email,
+        token=verify_token,
+        base_url=settings.app_base_url,
+    )
     return AuthResponse(user_id=user_id, token=token)
 
 
@@ -1412,16 +1449,57 @@ def logout(user: dict = Depends(get_current_user)):
     return {"ok": True}
 
 
+@app.get("/auth/verify-email")
+def verify_email(token: str):
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        record = db.get_verification_token(conn, token)
+        if not record:
+            raise HTTPException(status_code=400, detail="Invalid or expired verification link")
+        expires_at = datetime.fromisoformat(record["expires_at"].replace("Z", "+00:00"))
+        if expires_at < datetime.now(timezone.utc):
+            raise HTTPException(status_code=400, detail="Verification link has expired. Please request a new one.")
+        db.mark_user_verified(conn, record["user_id"])
+    return {"ok": True}
+
+
+@app.post("/auth/resend-verification")
+def resend_verification(request: Request, background_tasks: BackgroundTasks, user: dict = Depends(get_current_user)):
+    import secrets as _secrets
+    from datetime import timedelta
+    from hoaware.email_service import send_verification_email
+    _check_rate_limit(request, limit=5)
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        user_row = db.get_user_by_id(conn, user["id"])
+        if not user_row:
+            raise HTTPException(status_code=404, detail="User not found")
+        if user_row.get("verified_at"):
+            return {"ok": True, "already_verified": True}
+        verify_token = _secrets.token_urlsafe(32)
+        verify_expires = (datetime.now(timezone.utc) + timedelta(hours=24)).isoformat()
+        db.create_verification_token(conn, user_id=user["id"], token=verify_token, expires_at=verify_expires)
+    background_tasks.add_task(
+        send_verification_email,
+        email=user_row["email"],
+        token=verify_token,
+        base_url=settings.app_base_url,
+    )
+    return {"ok": True, "already_verified": False}
+
+
 @app.get("/auth/me", response_model=UserMeResponse)
 def me(user: dict = Depends(get_current_user)):
     settings = load_settings()
     with db.get_connection(settings.db_path) as conn:
         claims = db.list_membership_claims_for_user(conn, user["id"])
+        user_row = db.get_user_by_id(conn, user["id"])
     return UserMeResponse(
         user_id=user["id"],
         email=user["email"],
         display_name=user.get("display_name"),
         hoas=[{"hoa_id": c["hoa_id"], "hoa_name": c["hoa_name"], "unit_number": c["unit_number"], "status": c["status"]} for c in claims],
+        email_verified=bool(user_row and user_row.get("verified_at")),
     )
 
 

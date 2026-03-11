@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HOAware | Legal — HOA Proxy Voting Rights</title>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Space+Grotesk:wght@600;700&display=swap");
+
+      :root {
+        --bg: #eef5ff; --ink: #12233a; --muted: #587091; --line: #d3e0f4;
+        --accent: #1662f3; --accent-strong: #0d49be; --ok: #177c45; --danger: #b62525;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0; min-height: 100vh;
+        font-family: "Manrope", "Segoe UI", sans-serif; color: var(--ink);
+        background: radial-gradient(95rem 60rem at 8% -22%, rgba(20,98,243,0.2), transparent 60%),
+                    linear-gradient(180deg, #f8fbff 0%, var(--bg) 54%, #edf3ff 100%);
+      }
+
+      .shell { width: min(860px, 94vw); margin: 28px auto 56px; }
+
+      .hero {
+        border: 1px solid #c9dbfa; border-radius: 22px;
+        background: linear-gradient(118deg, rgba(255,255,255,0.95) 0%, rgba(227,240,255,0.95) 100%);
+        box-shadow: 0 16px 44px rgba(17,40,74,0.14); padding: 22px; margin-bottom: 24px;
+      }
+
+      .top-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+
+      .brand { display: inline-flex; align-items: baseline; gap: 0.12em;
+        font-family: "Space Grotesk", "Manrope", sans-serif;
+        font-size: clamp(1.5rem, 3vw, 2rem); font-weight: 700; margin: 0; }
+      .brand-link { color: inherit; text-decoration: none; }
+      .brand-hoa { color: #0f2f6d; } .brand-aware { color: #1a66ff; }
+
+      .nav { display: flex; gap: 8px; flex-wrap: wrap; }
+      .btn {
+        display: inline-flex; align-items: center; justify-content: center;
+        border-radius: 10px; border: 1px solid var(--line); background: #fff;
+        color: #1b355c; padding: 9px 14px; font-family: inherit;
+        font-size: 0.92rem; font-weight: 800; text-decoration: none; cursor: pointer;
+      }
+      .btn.primary { border-color: var(--accent); background: linear-gradient(180deg, var(--accent), var(--accent-strong)); color: #fff; }
+
+      h1 { font-family: "Space Grotesk", sans-serif; font-size: 1.5rem; margin: 16px 0 4px; }
+      h2 { font-family: "Space Grotesk", sans-serif; font-size: 1.1rem; margin: 0 0 10px; }
+
+      .card {
+        border: 1px solid var(--line); border-radius: 14px;
+        background: rgba(255,255,255,0.92); box-shadow: 0 6px 20px rgba(16,40,73,0.07);
+        padding: 20px; margin-bottom: 14px;
+      }
+
+      .intro { color: var(--muted); font-size: 0.95rem; margin: 6px 0 20px; line-height: 1.6; }
+
+      .lookup-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+      .lookup-row select { flex: 1; min-width: 160px; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font: inherit; }
+
+      .status { min-height: 1.2em; font-size: 0.9rem; color: var(--muted); margin-top: 8px; }
+      .status.error { color: var(--danger); }
+
+      .result-grid { display: grid; gap: 12px; grid-template-columns: 1fr 1fr; }
+      @media (max-width: 520px) { .result-grid { grid-template-columns: 1fr; } }
+
+      .result-item { background: #f5f8ff; border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+      .result-item .label { font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 4px; }
+      .result-item .value { font-size: 0.95rem; font-weight: 600; }
+      .value.yes { color: var(--ok); } .value.no { color: var(--danger); } .value.unknown { color: var(--muted); }
+
+      .disclaimer { font-size: 0.8rem; color: var(--muted); border-top: 1px solid var(--line); margin-top: 16px; padding-top: 12px; line-height: 1.5; }
+
+      .faq dt { font-weight: 700; margin: 14px 0 4px; }
+      .faq dd { margin: 0 0 8px; color: var(--muted); font-size: 0.93rem; line-height: 1.6; }
+
+      .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.75rem; font-weight: 700; background: #e8f0ff; color: #244a7f; border: 1px solid #cae0ff; }
+
+      #resultBox { display: none; }
+
+      .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; margin-right: 6px; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <div class="top-row">
+          <h1 style="margin:0"><a class="brand brand-link" href="/"><span class="brand-hoa">HOA</span><span class="brand-aware">ware</span></a></h1>
+          <div class="nav" id="navContainer"></div>
+        </div>
+        <h1>Proxy Voting Rights</h1>
+        <p class="intro" style="margin-top:4px">
+          HOA members have legal rights to vote by proxy. These rights are governed by state law and your HOA's governing documents.
+          Look up the rules for your state below.
+        </p>
+      </section>
+
+      <div class="card">
+        <h2>Look Up Your State's Rules</h2>
+        <div class="lookup-row">
+          <select id="stateSelect"><option value="">Loading states...</option></select>
+          <button class="btn primary" id="lookupBtn" type="button">Look Up</button>
+        </div>
+        <div id="lookupStatus" class="status"></div>
+
+        <div id="resultBox">
+          <div class="result-grid">
+            <div class="result-item">
+              <div class="label">Electronic Proxies Allowed</div>
+              <div class="value" id="resElectronic">—</div>
+            </div>
+            <div class="result-item">
+              <div class="label">Electronic Signature Valid</div>
+              <div class="value" id="resEsign">—</div>
+            </div>
+            <div class="result-item">
+              <div class="label">Confidence</div>
+              <div class="value" id="resConfidence">—</div>
+            </div>
+            <div class="result-item">
+              <div class="label">Last Verified</div>
+              <div class="value" id="resVerified">—</div>
+            </div>
+          </div>
+          <div id="resDisclaimer" class="disclaimer"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Frequently Asked Questions</h2>
+        <dl class="faq">
+          <dt>What is a proxy vote?</dt>
+          <dd>A proxy is written authorization that allows another person (your "proxy holder" or "delegate") to vote on your behalf at an HOA meeting. This lets your vote count even when you can't attend in person.</dd>
+
+          <dt>What's the difference between a directed and undirected proxy?</dt>
+          <dd>A <strong>directed proxy</strong> tells your delegate exactly how to vote on specific agenda items — they must follow your instructions. An <strong>undirected proxy</strong> gives your delegate full discretion to vote as they see fit.</dd>
+
+          <dt>Does my state allow electronic proxies?</dt>
+          <dd>Most states do allow electronic proxy submission and electronic signatures for HOA proxies, thanks to the federal ESIGN Act and state UETA laws. Use the lookup above to check your state's specific rules.</dd>
+
+          <dt>Can a board member be my proxy holder?</dt>
+          <dd>State laws vary. Some states prohibit board members from serving as proxy holders for members whose votes they may count; others have no restriction. Check your HOA's bylaws and your state's HOA statutes.</dd>
+
+          <dt>When does a proxy expire?</dt>
+          <dd>Many states limit proxy validity to 11 months unless the proxy specifies a different duration, or limit proxies to a specific named meeting. HOAware marks proxies as expired automatically after 90 days.</dd>
+
+          <dt>Can I revoke a proxy?</dt>
+          <dd>Yes. A proxy can generally be revoked at any time before it is exercised — by sending written notice to the HOA secretary, by attending the meeting in person, or by submitting a later-dated proxy. HOAware supports proxy revocation from your dashboard.</dd>
+
+          <dt>What federal law governs electronic signatures on proxies?</dt>
+          <dd>The Electronic Signatures in Global and National Commerce Act (E-SIGN Act, 15 U.S.C. § 7001) and the Uniform Electronic Transactions Act (UETA), adopted in nearly every state, give electronic signatures the same legal effect as handwritten signatures on proxy forms.</dd>
+        </dl>
+      </div>
+
+      <div class="card" style="background:#f5f8ff">
+        <p style="margin:0;font-size:0.85rem;color:var(--muted);line-height:1.6">
+          <strong>Legal Disclaimer:</strong> The information on this page is for general informational purposes only and does not constitute legal advice. HOA laws vary significantly by state and are subject to change. Always consult a licensed attorney or your HOA's governing documents for advice specific to your situation.
+          <br><br>
+          Legal data sourced from official state statutes and verified aggregators. Last pipeline run: Mar 2026.
+        </p>
+      </div>
+    </main>
+
+    <script src="/static/js/auth.js"></script>
+    <script>
+      Auth.renderNav(document.getElementById("navContainer"));
+
+      const stateSelect = document.getElementById("stateSelect");
+      const lookupBtn = document.getElementById("lookupBtn");
+      const lookupStatus = document.getElementById("lookupStatus");
+      const resultBox = document.getElementById("resultBox");
+
+      async function loadStates() {
+        try {
+          const jurisdictions = await fetch("/law/jurisdictions").then(r => r.ok ? r.json() : []);
+          if (!jurisdictions.length) {
+            stateSelect.innerHTML = '<option value="">No data available</option>';
+            return;
+          }
+          stateSelect.innerHTML = '<option value="">Select a state...</option>' +
+            jurisdictions.map(j => '<option value="' + j.jurisdiction + '">' + j.jurisdiction + ' (' + j.rule_count + ' rules)</option>').join("");
+
+          // Pre-select from URL param
+          const params = new URLSearchParams(window.location.search);
+          const pre = params.get("state");
+          if (pre) { stateSelect.value = pre; doLookup(); }
+        } catch (_) {
+          stateSelect.innerHTML = '<option value="">Failed to load</option>';
+        }
+      }
+
+      async function doLookup() {
+        const state = stateSelect.value;
+        if (!state) {
+          lookupStatus.className = "status error";
+          lookupStatus.textContent = "Select a state first.";
+          return;
+        }
+        lookupStatus.className = "status";
+        lookupStatus.innerHTML = '<span class="spinner"></span>Looking up ' + state + '...';
+        resultBox.style.display = "none";
+
+        try {
+          const data = await fetch("/law/" + encodeURIComponent(state) + "/proxy-electronic").then(r => {
+            if (!r.ok) throw new Error(r.status === 404 ? "No data for " + state : "Error " + r.status);
+            return r.json();
+          });
+
+          function yesNo(val) {
+            if (val === true || val === "yes") return '<span class="yes">Yes</span>';
+            if (val === false || val === "no") return '<span class="no">No</span>';
+            return '<span class="unknown">Unknown</span>';
+          }
+
+          document.getElementById("resElectronic").innerHTML = yesNo(data.electronic_assignment);
+          document.getElementById("resEsign").innerHTML = yesNo(data.electronic_signature);
+          document.getElementById("resConfidence").innerHTML = '<span class="pill">' + (data.confidence || "unknown") + '</span>';
+          document.getElementById("resVerified").textContent = data.last_verified_date || "—";
+          document.getElementById("resDisclaimer").textContent = data.disclaimer || "";
+
+          resultBox.style.display = "";
+          lookupStatus.className = "status";
+          lookupStatus.textContent = "";
+        } catch (err) {
+          lookupStatus.className = "status error";
+          lookupStatus.textContent = err.message;
+        }
+      }
+
+      lookupBtn.addEventListener("click", doLookup);
+      loadStates();
+    </script>
+  </body>
+</html>
