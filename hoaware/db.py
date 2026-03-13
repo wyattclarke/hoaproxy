@@ -1929,6 +1929,9 @@ def seed_legal_data(conn: sqlite3.Connection) -> int:
             rows = [json.loads(line) for line in f if line.strip()]
         for row in rows:
             row.pop("id", None)
+            # source_id / section_id reference tables not present on fresh DBs
+            row["source_id"] = None
+            row["section_id"] = None
             cols = list(row.keys())
             placeholders = ", ".join("?" for _ in cols)
             conn.execute(
