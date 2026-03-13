@@ -315,6 +315,10 @@ def get_connection(db_path: Path) -> sqlite3.Connection:
     _ensure_table_column(conn, "hoas", "board_email", "TEXT")
     _ensure_table_column(conn, "proxy_assignments", "documenso_document_id", "TEXT")
     _ensure_table_column(conn, "proxy_assignments", "documenso_signing_url", "TEXT")
+    # Proposal location fields
+    _ensure_table_column(conn, "proposals", "lat", "REAL")
+    _ensure_table_column(conn, "proposals", "lng", "REAL")
+    _ensure_table_column(conn, "proposals", "location_description", "TEXT")
     return conn
 
 
@@ -1969,20 +1973,24 @@ def create_proposal(
     title: str,
     description: str,
     category: str = "Other",
+    lat: float | None = None,
+    lng: float | None = None,
+    location_description: str | None = None,
 ) -> int:
     share_code = _generate_share_code(conn)
     cur = conn.execute(
         """
-        INSERT INTO proposals (hoa_id, creator_user_id, title, description, category, share_code)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO proposals (hoa_id, creator_user_id, title, description, category, share_code, lat, lng, location_description)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (int(hoa_id), int(creator_user_id), title.strip(), description.strip(), category.strip(), share_code),
+        (int(hoa_id), int(creator_user_id), title.strip(), description.strip(), category.strip(), share_code, lat, lng, location_description),
     )
     conn.commit()
     return int(cur.lastrowid)
 
 
 def _row_to_proposal(row: sqlite3.Row) -> dict:
+    keys = row.keys()
     return {
         "id": int(row["id"]),
         "hoa_id": int(row["hoa_id"]),
@@ -1996,6 +2004,9 @@ def _row_to_proposal(row: sqlite3.Row) -> dict:
         "upvote_count": int(row["upvote_count"]),
         "created_at": str(row["created_at"]) if row["created_at"] else None,
         "published_at": str(row["published_at"]) if row["published_at"] else None,
+        "lat": float(row["lat"]) if "lat" in keys and row["lat"] is not None else None,
+        "lng": float(row["lng"]) if "lng" in keys and row["lng"] is not None else None,
+        "location_description": str(row["location_description"]) if "location_description" in keys and row["location_description"] else None,
     }
 
 

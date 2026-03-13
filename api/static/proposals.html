@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>HOAproxy | Resident Proposals</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
     <style>
       @import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Space+Grotesk:wght@600;700&display=swap");
       :root { --bg: #eef5ff; --ink: #12233a; --muted: #587091; --line: #d3e0f4; --accent: #1662f3; --accent-strong: #0d49be; --ok: #177c45; --danger: #b62525; }
@@ -45,6 +46,13 @@
       .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
       details summary { cursor: pointer; font-weight: 700; color: var(--accent); margin-top: 16px; }
       .section-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+      #np-map { height: 260px; border-radius: 10px; border: 1px solid var(--line); margin-top: 8px; }
+      #proposal-map { height: 420px; border-radius: 14px; border: 1px solid var(--line); margin-top: 4px; }
+      .tab-bar { display: flex; gap: 0; border-bottom: 2px solid var(--line); margin-bottom: 12px; }
+      .tab-btn { background: none; border: none; border-bottom: 3px solid transparent; margin-bottom: -2px; padding: 7px 18px; font-family: inherit; font-size: 0.92rem; font-weight: 700; color: var(--muted); cursor: pointer; }
+      .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+      .location-link { color: var(--muted); font-size: 0.83rem; text-decoration: none; }
+      .location-link:hover { color: var(--accent); }
     </style>
   </head>
   <body>
@@ -82,6 +90,17 @@
           </select>
           <label for="npDesc">Description</label>
           <textarea id="npDesc" maxlength="5000" placeholder="Describe the idea and why it would benefit the community…"></textarea>
+          <details id="locationDetails" style="margin-top:10px">
+            <summary style="font-size:0.88rem;font-weight:600;color:var(--muted)">&#128205; Add location (optional)</summary>
+            <div style="margin-top:8px">
+              <label for="npLocationDesc" style="margin-top:0">Location description</label>
+              <input id="npLocationDesc" type="text" maxlength="200" placeholder="e.g. Corner of Cary Pkwy and Appomattox" />
+              <div id="np-map"></div>
+              <p class="meta" style="margin:6px 0 0">Click the map to drop a pin. Click again to move it.</p>
+              <input type="hidden" id="npLat" />
+              <input type="hidden" id="npLng" />
+            </div>
+          </details>
           <div class="row">
             <button class="btn primary" id="submitProposalBtn">Submit Proposal</button>
           </div>
@@ -119,7 +138,15 @@
             <input type="checkbox" id="showArchivedChk" /> Show archived
           </label>
         </div>
+        <div class="tab-bar">
+          <button class="tab-btn active" id="tabFeedBtn">Feed</button>
+          <button class="tab-btn" id="tabMapBtn">Map</button>
+        </div>
         <div id="proposalFeed"><p class="meta">Select an HOA above.</p></div>
+        <div id="proposalMapPane" style="display:none">
+          <div id="proposal-map"></div>
+          <p class="meta" style="margin-top:6px">Showing proposals with pinned locations. Click a marker for details.</p>
+        </div>
       </div>
 
       <!-- My Proposals -->
@@ -129,6 +156,7 @@
       </div>
     </main>
 
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <script src="/static/js/auth.js"></script>
     <script>
       if (!Auth.requireAuth()) throw new Error("redirect");
@@ -150,6 +178,51 @@
       const proposalFeed = document.getElementById("proposalFeed");
       const myProposalsFeed = document.getElementById("myProposalsFeed");
       const showArchivedChk = document.getElementById("showArchivedChk");
+      const tabFeedBtn = document.getElementById("tabFeedBtn");
+      const tabMapBtn = document.getElementById("tabMapBtn");
+      const proposalMapPane = document.getElementById("proposalMapPane");
+      const npLocationDesc = document.getElementById("npLocationDesc");
+      const npLat = document.getElementById("npLat");
+      const npLng = document.getElementById("npLng");
+
+      // Create-form pin-drop map (initialized once when location section is opened)
+      let npMap = null, npMarker = null;
+      document.getElementById("locationDetails").addEventListener("toggle", function() {
+        if (this.open && !npMap) {
+          npMap = L.map("np-map", { zoomControl: true }).setView([35.78, -78.64], 7);
+          L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            maxZoom: 19,
+            attribution: "&copy; OpenStreetMap contributors",
+          }).addTo(npMap);
+          npMap.on("click", function(e) {
+            npLat.value = e.latlng.lat.toFixed(6);
+            npLng.value = e.latlng.lng.toFixed(6);
+            if (npMarker) npMarker.remove();
+            npMarker = L.marker([e.latlng.lat, e.latlng.lng]).addTo(npMap);
+          });
+        }
+      });
+
+      // Public proposals map tab
+      let pubMap = null, pubMapInitialized = false;
+
+      tabFeedBtn.addEventListener("click", () => {
+        tabFeedBtn.classList.add("active"); tabMapBtn.classList.remove("active");
+        proposalFeed.style.display = ""; proposalMapPane.style.display = "none";
+      });
+      tabMapBtn.addEventListener("click", () => {
+        tabMapBtn.classList.add("active"); tabFeedBtn.classList.remove("active");
+        proposalFeed.style.display = "none"; proposalMapPane.style.display = "";
+        if (!pubMapInitialized) {
+          pubMapInitialized = true;
+          pubMap = L.map("proposal-map", { zoomControl: true }).setView([35.78, -78.64], 12);
+          L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            maxZoom: 19,
+            attribution: "&copy; OpenStreetMap contributors",
+          }).addTo(pubMap);
+        }
+        renderPublicMapMarkers();
+      });
 
       function escapeHtml(s) {
         return String(s || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
@@ -157,6 +230,7 @@
 
       let currentHoaId = null;
       let meData = null;
+      let currentProposals = [];
 
       // Load HOA options from user's memberships
       async function init() {
@@ -196,14 +270,38 @@
         try {
           const include = showArchivedChk.checked ? "?include_archived=true" : "";
           const proposals = await Auth.fetchJson("/hoas/" + hoaId + "/proposals" + include);
+          currentProposals = proposals;
           if (!proposals.length) {
             proposalFeed.innerHTML = '<div class="empty">No public proposals yet.</div>';
             return;
           }
           proposalFeed.innerHTML = proposals.map(p => renderProposalCard(p, false)).join("");
           attachFeedListeners();
+          if (pubMapInitialized) renderPublicMapMarkers();
         } catch (err) {
           proposalFeed.innerHTML = `<p class="meta" style="color:var(--danger)">${escapeHtml(err.message)}</p>`;
+        }
+      }
+
+      let pubMapMarkers = [];
+      function renderPublicMapMarkers() {
+        if (!pubMap) return;
+        pubMapMarkers.forEach(m => m.remove());
+        pubMapMarkers = [];
+        const pinned = currentProposals.filter(p => p.lat != null && p.lng != null);
+        if (!pinned.length) return;
+        const bounds = [];
+        pinned.forEach(p => {
+          const label = escapeHtml(p.location_description || p.title);
+          const popup = `<strong>${escapeHtml(p.title)}</strong><br><span style="font-size:0.85em;color:#587091">${escapeHtml(p.category)}</span><br>▲ ${p.upvote_count}`;
+          const m = L.marker([p.lat, p.lng]).addTo(pubMap).bindPopup(popup);
+          pubMapMarkers.push(m);
+          bounds.push([p.lat, p.lng]);
+        });
+        if (bounds.length === 1) {
+          pubMap.setView(bounds[0], 16);
+        } else {
+          pubMap.fitBounds(bounds, { padding: [30, 30], maxZoom: 17 });
         }
       }
 
@@ -240,6 +338,13 @@
             <div id="expand-${p.id}" style="display:none;margin-top:4px" class="meta">${escapeHtml(p.description)}</div>`;
         }
 
+        let locationHtml = '';
+        if (p.lat != null && p.lng != null) {
+          const osmUrl = `https://www.openstreetmap.org/?mlat=${p.lat}&mlon=${p.lng}&zoom=17`;
+          const locLabel = p.location_description ? escapeHtml(p.location_description) : 'View location';
+          locationHtml = `<div style="margin-top:5px"><a class="location-link" href="${osmUrl}" target="_blank" rel="noopener">&#128205; ${locLabel}</a></div>`;
+        }
+
         return `<div class="card${isArchived ? ' archived' : ''}" id="pcard-${p.id}">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap">
             <div>
@@ -248,8 +353,9 @@
             </div>
             <div style="display:flex;align-items:center;gap:4px">${upvoteHtml}${withdrawHtml}</div>
           </div>
-          <div class="meta" style="margin:6px 0">${escapeHtml(meta)}</div>
+          <div class="meta" style="margin:6px 0">${meta}</div>
           <div class="meta">${escapeHtml(excerpt)}${expandHtml}</div>
+          ${locationHtml}
           ${shareCodeHtml}
         </div>`;
       }
@@ -325,12 +431,20 @@
         submitProposalBtn.disabled = true;
         npStatus.className = "status"; npStatus.textContent = "Submitting…";
         try {
+          const body = { hoa_id: hoaId, title, description: desc, category };
+          const locDesc = npLocationDesc.value.trim();
+          const lat = parseFloat(npLat.value);
+          const lng = parseFloat(npLng.value);
+          if (!isNaN(lat) && !isNaN(lng)) { body.lat = lat; body.lng = lng; }
+          if (locDesc) body.location_description = locDesc;
           const p = await Auth.fetchJson("/proposals", {
             method: "POST",
-            body: JSON.stringify({ hoa_id: hoaId, title, description: desc, category }),
+            body: JSON.stringify(body),
           });
           npStatus.className = "status ok"; npStatus.textContent = "Proposal created!";
           npTitle.value = ""; npDesc.value = "";
+          npLocationDesc.value = ""; npLat.value = ""; npLng.value = "";
+          if (npMarker) { npMarker.remove(); npMarker = null; }
           shareCodeDisplay.textContent = p.share_code;
           shareCodeReveal.style.display = "";
           await loadMyProposals();

@@ -489,6 +489,9 @@ class CreateProposalRequest(BaseModel):
     title: str = Field(..., min_length=3, max_length=200)
     description: str = Field(..., min_length=10, max_length=5000)
     category: str = "Other"
+    lat: float | None = None
+    lng: float | None = None
+    location_description: str | None = Field(None, max_length=200)
 
 
 class ProposalResponse(BaseModel):
@@ -507,6 +510,9 @@ class ProposalResponse(BaseModel):
     user_upvoted: bool = False
     created_at: str | None = None
     published_at: str | None = None
+    lat: float | None = None
+    lng: float | None = None
+    location_description: str | None = None
 
 
 class ParticipationRequest(BaseModel):
@@ -2583,6 +2589,9 @@ def _proposal_to_response(
         user_upvoted=user_upvoted,
         created_at=p.get("created_at"),
         published_at=p.get("published_at"),
+        lat=p.get("lat"),
+        lng=p.get("lng"),
+        location_description=p.get("location_description"),
     )
 
 
@@ -2599,6 +2608,14 @@ def create_proposal(body: CreateProposalRequest, request: Request, user: dict = 
         existing = db.get_active_proposal_for_user(conn, user["id"])
         if existing:
             raise HTTPException(status_code=409, detail="You already have an active proposal; withdraw it before creating another")
+        # Validate location: both lat+lng must be provided together
+        lat, lng = body.lat, body.lng
+        if (lat is None) != (lng is None):
+            raise HTTPException(status_code=422, detail="lat and lng must both be provided or both omitted")
+        if lat is not None and not (-90 <= lat <= 90):
+            raise HTTPException(status_code=422, detail="lat must be between -90 and 90")
+        if lng is not None and not (-180 <= lng <= 180):
+            raise HTTPException(status_code=422, detail="lng must be between -180 and 180")
         proposal_id = db.create_proposal(
             conn,
             hoa_id=body.hoa_id,
@@ -2606,6 +2623,9 @@ def create_proposal(body: CreateProposalRequest, request: Request, user: dict = 
             title=body.title.strip(),
             description=body.description.strip(),
             category=body.category,
+            lat=lat,
+            lng=lng,
+            location_description=body.location_description.strip() if body.location_description else None,
         )
         p = db.get_proposal(conn, proposal_id)
         hoa_row = conn.execute("SELECT name FROM hoas WHERE id = ?", (body.hoa_id,)).fetchone()

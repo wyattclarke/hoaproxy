@@ -503,6 +503,84 @@ def test_share_code_from_other_hoa_returns_404():
 # Helpers
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Location tests
+# ---------------------------------------------------------------------------
+
+def test_create_proposal_with_location():
+    h1, _, _, _, _, _, hoa_id = _setup_users_and_hoa()
+    r = client.post("/proposals", json={
+        "hoa_id": hoa_id,
+        "title": "Fix the broken sidewalk",
+        "description": "The sidewalk on the north side is cracked and a tripping hazard.",
+        "lat": 35.7796,
+        "lng": -78.6382,
+        "location_description": "North sidewalk near building 4",
+    }, headers=h1)
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["lat"] == pytest.approx(35.7796)
+    assert data["lng"] == pytest.approx(-78.6382)
+    assert data["location_description"] == "North sidewalk near building 4"
+
+
+def test_create_proposal_without_location():
+    h1, _, _, _, _, _, hoa_id = _setup_users_and_hoa()
+    r = client.post("/proposals", json={
+        "hoa_id": hoa_id,
+        "title": "Paint the clubhouse",
+        "description": "The clubhouse exterior paint is peeling badly.",
+    }, headers=h1)
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["lat"] is None
+    assert data["lng"] is None
+    assert data["location_description"] is None
+
+
+def test_create_proposal_partial_coords_rejected():
+    h1, _, _, _, _, _, hoa_id = _setup_users_and_hoa()
+    r = client.post("/proposals", json={
+        "hoa_id": hoa_id,
+        "title": "Partial location test",
+        "description": "Only lat provided, no lng — should fail.",
+        "lat": 35.7796,
+    }, headers=h1)
+    assert r.status_code == 422
+
+
+def test_create_proposal_invalid_lat_rejected():
+    h1, _, _, _, _, _, hoa_id = _setup_users_and_hoa()
+    r = client.post("/proposals", json={
+        "hoa_id": hoa_id,
+        "title": "Bad coordinates test",
+        "description": "Latitude out of range should be rejected.",
+        "lat": 999.0,
+        "lng": -78.6382,
+    }, headers=h1)
+    assert r.status_code == 422
+
+
+def test_location_preserved_in_feed():
+    h1, _, h2, _, h3, _, hoa_id = _setup_users_and_hoa()
+    r = client.post("/proposals", json={
+        "hoa_id": hoa_id,
+        "title": "Location in feed test",
+        "description": "This proposal has a location that should appear in the public feed.",
+        "lat": 35.78,
+        "lng": -78.64,
+        "location_description": "Corner of Cary Pkwy and Appomattox",
+    }, headers=h1)
+    code = r.json()["share_code"]
+    client.post(f"/proposals/cosign/{code}", headers=h2)
+    client.post(f"/proposals/cosign/{code}", headers=h3)
+    feed = client.get(f"/hoas/{hoa_id}/proposals", headers=h2).json()
+    assert len(feed) == 1
+    assert feed[0]["lat"] == pytest.approx(35.78)
+    assert feed[0]["lng"] == pytest.approx(-78.64)
+    assert feed[0]["location_description"] == "Corner of Cary Pkwy and Appomattox"
+
+
 def _publish_proposal(creator_h, cosigner1_h, cosigner2_h, hoa_id, title, description):
     """Create a proposal and get it to 'public' status with 2 co-signers."""
     p = client.post("/proposals", json={
