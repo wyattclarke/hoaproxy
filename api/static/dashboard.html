@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>HOAware | Dashboard</title>
+    <title>HOAproxy | Dashboard</title>
     <style>
       @import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Space+Grotesk:wght@600;700&display=swap");
 
@@ -145,6 +145,11 @@
 
       <h2>Delegate Status</h2>
       <div id="delegateSection"></div>
+
+      <h2>Resident Proposals</h2>
+      <div id="proposalsSection">
+        <p class="meta">Loading proposals…</p>
+      </div>
 
       <h2>Ask Your HOA Docs</h2>
       <div class="card">
@@ -302,6 +307,7 @@
           // Load delegate info
           await loadDelegateStatus(me);
           populateQaHoas(me.hoas);
+          loadTopProposals(me);
 
         } catch (err) {
           pageStatus.className = "status error";
@@ -442,6 +448,35 @@
 
       qaBtn.addEventListener("click", doQa);
       qaInput.addEventListener("keydown", e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) doQa(); });
+
+      async function loadTopProposals(me) {
+        const sec = document.getElementById("proposalsSection");
+        if (!me.hoas || !me.hoas.length) {
+          sec.innerHTML = '<p class="meta">Claim HOA membership to see proposals.</p>';
+          return;
+        }
+        const primaryHoa = me.hoas[0];
+        try {
+          const proposals = await Auth.fetchJson("/hoas/" + primaryHoa.hoa_id + "/proposals");
+          const top = proposals.slice(0, 3);
+          if (!top.length) {
+            sec.innerHTML = '<div class="card"><p class="meta" style="margin:0">No public proposals yet. <a class="link" href="/proposals">Post one.</a></p></div>';
+            return;
+          }
+          sec.innerHTML = top.map(p => {
+            const excerpt = p.description.length > 200 ? p.description.slice(0, 200) + "…" : p.description;
+            return '<div class="card" style="margin-bottom:10px">' +
+              '<strong>' + escapeHtml(p.title) + '</strong>' +
+              ' <span class="pill">' + escapeHtml(p.category) + '</span>' +
+              '<div class="meta" style="margin:4px 0">' + escapeHtml(excerpt) + '</div>' +
+              '<span class="pill">&#9650; ' + p.upvote_count + '</span>' +
+              '</div>';
+          }).join("") +
+          '<div style="margin-top:8px"><a class="btn" href="/proposals">View all proposals</a></div>';
+        } catch (_) {
+          sec.innerHTML = '<p class="meta">Could not load proposals.</p>';
+        }
+      }
 
       claimBtn.addEventListener("click", claimHoa);
       loadHoaOptions();

@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HOAware | Resident Proposals</title>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Space+Grotesk:wght@600;700&display=swap");
+      :root { --bg: #eef5ff; --ink: #12233a; --muted: #587091; --line: #d3e0f4; --accent: #1662f3; --accent-strong: #0d49be; --ok: #177c45; --danger: #b62525; }
+      * { box-sizing: border-box; }
+      body { margin: 0; min-height: 100vh; font-family: "Manrope", sans-serif; color: var(--ink);
+        background: radial-gradient(95rem 60rem at 8% -22%, rgba(20,98,243,0.2), transparent 60%),
+                    linear-gradient(180deg, #f8fbff 0%, var(--bg) 54%, #edf3ff 100%); }
+      .shell { width: min(820px, 94vw); margin: 28px auto 56px; }
+      .hero { border: 1px solid #c9dbfa; border-radius: 22px; background: linear-gradient(118deg, rgba(255,255,255,0.95), rgba(227,240,255,0.95)); box-shadow: 0 16px 44px rgba(17,40,74,0.14); padding: 22px; }
+      .top-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+      .brand { display: inline-flex; align-items: baseline; font-family: "Space Grotesk", sans-serif; font-size: clamp(1.5rem,3vw,2rem); font-weight: 700; margin: 0; }
+      .brand-link { color: inherit; text-decoration: none; }
+      .brand-hoa { color: #0f2f6d; } .brand-aware { color: #1a66ff; }
+      .nav { display: flex; gap: 8px; flex-wrap: wrap; }
+      .btn { display: inline-flex; align-items: center; justify-content: center; border-radius: 10px; border: 1px solid var(--line); background: #fff; color: #1b355c; padding: 9px 14px; font-family: inherit; font-size: 0.92rem; font-weight: 800; text-decoration: none; cursor: pointer; }
+      .btn.primary { border-color: var(--accent); background: linear-gradient(180deg, var(--accent), var(--accent-strong)); color: #fff; }
+      .btn.sm { font-size: 0.82rem; padding: 6px 10px; }
+      .btn.danger { border-color: var(--danger); color: var(--danger); background: #fff; }
+      .btn:disabled { opacity: 0.5; cursor: default; }
+      h2 { margin: 18px 0 10px; font-family: "Space Grotesk", sans-serif; font-size: 1.15rem; }
+      h3 { margin: 0 0 6px; font-size: 1rem; }
+      .card { border: 1px solid var(--line); border-radius: 14px; background: rgba(255,255,255,0.92); box-shadow: 0 6px 20px rgba(16,40,73,0.07); padding: 16px; margin-bottom: 12px; }
+      .card.archived { opacity: 0.65; }
+      .pill { display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 0.78rem; font-weight: 700; background: #e8f0ff; color: #1b5ad4; margin-right: 4px; }
+      .pill.archived { background: #f0f0f0; color: #666; }
+      .pill.private { background: #fff3e0; color: #8a5e15; }
+      .pill.public { background: #e8f8ef; color: #1f6f42; }
+      .meta { color: var(--muted); font-size: 0.86rem; }
+      .link { color: var(--accent); font-weight: 700; text-decoration: none; }
+      .status { margin-top: 8px; font-size: 0.9rem; color: var(--muted); }
+      .status.ok { color: var(--ok); } .status.error { color: var(--danger); }
+      .empty { padding: 20px; text-align: center; color: var(--muted); }
+      .upvote-btn { font-size: 1rem; padding: 5px 12px; }
+      .upvote-btn.active { border-color: var(--accent); color: var(--accent); background: #e8f0ff; }
+      input, textarea, select { font-family: inherit; font-size: 0.95rem; border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; width: 100%; color: var(--ink); background: #fff; margin-top: 4px; }
+      textarea { resize: vertical; min-height: 80px; }
+      label { font-size: 0.9rem; font-weight: 600; display: block; margin-top: 10px; }
+      .share-code-box { font-family: monospace; font-size: 2rem; font-weight: 800; letter-spacing: 0.2em; color: var(--accent); background: #e8f0ff; border-radius: 8px; padding: 10px 18px; display: inline-block; margin: 8px 0; }
+      .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+      details summary { cursor: pointer; font-weight: 700; color: var(--accent); margin-top: 16px; }
+      .section-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <div class="top-row">
+          <h1 style="margin:0"><a class="brand brand-link" href="/"><span class="brand-hoa">HOA</span><span class="brand-aware">ware</span></a></h1>
+          <div class="nav" id="navContainer"></div>
+        </div>
+        <h2>Resident Proposals</h2>
+        <p class="meta" style="margin:0">Post an idea, gather 2 neighbors' co-signatures to publish, and let the community show support.</p>
+      </section>
+
+      <!-- HOA selector -->
+      <div style="margin-top:14px">
+        <label for="hoaSelect" style="font-size:0.9rem">Select your HOA</label>
+        <select id="hoaSelect" style="max-width:340px;margin-top:4px">
+          <option value="">Loading…</option>
+        </select>
+      </div>
+
+      <!-- New Proposal form -->
+      <details id="newProposalDetails" style="margin-top:16px">
+        <summary>+ New Proposal</summary>
+        <div class="card" style="margin-top:8px">
+          <label for="npTitle">Title</label>
+          <input id="npTitle" type="text" maxlength="200" placeholder="e.g. Add a dog run to the park area" />
+          <label for="npCategory">Category</label>
+          <select id="npCategory">
+            <option>Other</option>
+            <option>Maintenance</option>
+            <option>Amenities</option>
+            <option>Rules</option>
+            <option>Safety</option>
+          </select>
+          <label for="npDesc">Description</label>
+          <textarea id="npDesc" maxlength="5000" placeholder="Describe the idea and why it would benefit the community…"></textarea>
+          <div class="row">
+            <button class="btn primary" id="submitProposalBtn">Submit Proposal</button>
+          </div>
+          <div class="status" id="npStatus"></div>
+          <!-- Share code reveal -->
+          <div id="shareCodeReveal" style="display:none;margin-top:14px">
+            <p class="meta">Your proposal is <strong>private</strong>. Share this 4-character code with 2 neighbors to get co-signatures and publish it.</p>
+            <div class="share-code-box" id="shareCodeDisplay"></div>
+            <div class="row">
+              <button class="btn sm" id="copyCodeBtn">Copy code</button>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <!-- Co-sign flow -->
+      <details id="cosignDetails" style="margin-top:8px">
+        <summary>&#10003; Co-sign a Proposal</summary>
+        <div class="card" style="margin-top:8px">
+          <p class="meta">Enter the 4-character code a neighbor shared with you.</p>
+          <div class="row">
+            <input id="cosignCodeInput" type="text" maxlength="4" placeholder="ABCD" style="max-width:100px;text-transform:uppercase;font-size:1.2rem;letter-spacing:0.15em;font-weight:700;text-align:center" />
+            <button class="btn primary" id="lookupCodeBtn">Look up</button>
+          </div>
+          <div class="status" id="cosignLookupStatus"></div>
+          <div id="cosignPreview" style="display:none;margin-top:10px"></div>
+        </div>
+      </details>
+
+      <!-- Public feed -->
+      <div style="margin-top:20px">
+        <div class="section-head">
+          <h2 style="margin:0">Public Proposals</h2>
+          <label style="margin:0;font-weight:400;font-size:0.88rem">
+            <input type="checkbox" id="showArchivedChk" /> Show archived
+          </label>
+        </div>
+        <div id="proposalFeed"><p class="meta">Select an HOA above.</p></div>
+      </div>
+
+      <!-- My Proposals -->
+      <div style="margin-top:24px">
+        <h2>My Proposals</h2>
+        <div id="myProposalsFeed"><p class="meta">Loading…</p></div>
+      </div>
+    </main>
+
+    <script src="/static/js/auth.js"></script>
+    <script>
+      if (!Auth.requireAuth()) throw new Error("redirect");
+      Auth.renderNav(document.getElementById("navContainer"));
+
+      const hoaSelect = document.getElementById("hoaSelect");
+      const npTitle = document.getElementById("npTitle");
+      const npCategory = document.getElementById("npCategory");
+      const npDesc = document.getElementById("npDesc");
+      const submitProposalBtn = document.getElementById("submitProposalBtn");
+      const npStatus = document.getElementById("npStatus");
+      const shareCodeReveal = document.getElementById("shareCodeReveal");
+      const shareCodeDisplay = document.getElementById("shareCodeDisplay");
+      const copyCodeBtn = document.getElementById("copyCodeBtn");
+      const cosignCodeInput = document.getElementById("cosignCodeInput");
+      const lookupCodeBtn = document.getElementById("lookupCodeBtn");
+      const cosignLookupStatus = document.getElementById("cosignLookupStatus");
+      const cosignPreview = document.getElementById("cosignPreview");
+      const proposalFeed = document.getElementById("proposalFeed");
+      const myProposalsFeed = document.getElementById("myProposalsFeed");
+      const showArchivedChk = document.getElementById("showArchivedChk");
+
+      function escapeHtml(s) {
+        return String(s || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+      }
+
+      let currentHoaId = null;
+      let meData = null;
+
+      // Load HOA options from user's memberships
+      async function init() {
+        try {
+          meData = await Auth.fetchJson("/auth/me");
+          if (!meData.hoas || !meData.hoas.length) {
+            hoaSelect.innerHTML = '<option value="">No HOA memberships found</option>';
+            proposalFeed.innerHTML = '<p class="meta">Claim HOA membership to see proposals.</p>';
+            return;
+          }
+          hoaSelect.innerHTML = meData.hoas.map(h =>
+            `<option value="${h.hoa_id}">${escapeHtml(h.hoa_name)}</option>`
+          ).join("");
+          // Auto-select if only one
+          currentHoaId = parseInt(hoaSelect.value);
+          if (meData.hoas.length === 1) {
+            await loadProposals(currentHoaId);
+          }
+          await loadMyProposals();
+        } catch (err) {
+          proposalFeed.innerHTML = `<p class="meta" style="color:var(--danger)">${escapeHtml(err.message)}</p>`;
+        }
+      }
+
+      hoaSelect.addEventListener("change", async () => {
+        currentHoaId = parseInt(hoaSelect.value) || null;
+        if (currentHoaId) await loadProposals(currentHoaId);
+        else proposalFeed.innerHTML = '<p class="meta">Select an HOA above.</p>';
+      });
+
+      showArchivedChk.addEventListener("change", async () => {
+        if (currentHoaId) await loadProposals(currentHoaId);
+      });
+
+      async function loadProposals(hoaId) {
+        proposalFeed.innerHTML = '<p class="meta">Loading…</p>';
+        try {
+          const include = showArchivedChk.checked ? "?include_archived=true" : "";
+          const proposals = await Auth.fetchJson("/hoas/" + hoaId + "/proposals" + include);
+          if (!proposals.length) {
+            proposalFeed.innerHTML = '<div class="empty">No public proposals yet.</div>';
+            return;
+          }
+          proposalFeed.innerHTML = proposals.map(p => renderProposalCard(p, false)).join("");
+          attachFeedListeners();
+        } catch (err) {
+          proposalFeed.innerHTML = `<p class="meta" style="color:var(--danger)">${escapeHtml(err.message)}</p>`;
+        }
+      }
+
+      function renderProposalCard(p, isMine) {
+        const isArchived = p.status === "archived";
+        const excerpt = p.description.length > 200 ? p.description.slice(0, 200) + "…" : p.description;
+        const fullDesc = p.description.length > 200 ? p.description : null;
+
+        let badges = `<span class="pill ${isArchived ? 'archived' : ''}">${escapeHtml(p.category)}</span>`;
+        if (isArchived) badges += '<span class="pill archived">Archived</span>';
+
+        let meta = isMine
+          ? `<span class="pill ${p.status}">${p.status}</span> · ${p.cosigner_count}/2 co-signers`
+          : 'Posted by a verified resident';
+
+        let shareCodeHtml = '';
+        if (isMine && p.status === 'private' && p.share_code) {
+          shareCodeHtml = `<div style="margin-top:8px" class="meta">Share code: <strong style="font-family:monospace;font-size:1.1rem;letter-spacing:0.1em;color:var(--accent)">${escapeHtml(p.share_code)}</strong> <button class="btn sm" onclick="navigator.clipboard.writeText('${escapeHtml(p.share_code)}')">Copy</button></div>`;
+        }
+
+        const upvoteActive = p.user_upvoted ? 'active' : '';
+        const upvoteLabel = p.user_upvoted ? '▲ ' + p.upvote_count : '▲ ' + p.upvote_count;
+        const upvoteHtml = !isArchived
+          ? `<button class="btn sm upvote-btn ${upvoteActive}" data-id="${p.id}" data-upvoted="${p.user_upvoted}">${upvoteLabel}</button>`
+          : `<span class="pill archived">▲ ${p.upvote_count}</span>`;
+
+        const withdrawHtml = isMine && p.status !== 'archived'
+          ? `<button class="btn sm danger" data-withdraw="${p.id}" style="margin-left:4px">Withdraw</button>`
+          : '';
+
+        let expandHtml = '';
+        if (fullDesc) {
+          expandHtml = `<span class="link" style="font-size:0.83rem;cursor:pointer" data-expand="${p.id}"> Read more</span>
+            <div id="expand-${p.id}" style="display:none;margin-top:4px" class="meta">${escapeHtml(p.description)}</div>`;
+        }
+
+        return `<div class="card${isArchived ? ' archived' : ''}" id="pcard-${p.id}">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap">
+            <div>
+              <h3>${escapeHtml(p.title)}</h3>
+              ${badges}
+            </div>
+            <div style="display:flex;align-items:center;gap:4px">${upvoteHtml}${withdrawHtml}</div>
+          </div>
+          <div class="meta" style="margin:6px 0">${escapeHtml(meta)}</div>
+          <div class="meta">${escapeHtml(excerpt)}${expandHtml}</div>
+          ${shareCodeHtml}
+        </div>`;
+      }
+
+      function attachFeedListeners() {
+        // Upvote buttons
+        document.querySelectorAll(".upvote-btn").forEach(btn => {
+          btn.addEventListener("click", async () => {
+            const id = parseInt(btn.dataset.id);
+            const wasUpvoted = btn.dataset.upvoted === "true";
+            btn.disabled = true;
+            try {
+              if (wasUpvoted) {
+                await Auth.fetchJson("/proposals/" + id + "/upvote", { method: "DELETE" });
+              } else {
+                await Auth.fetchJson("/proposals/" + id + "/upvote", { method: "POST" });
+              }
+              if (currentHoaId) await loadProposals(currentHoaId);
+            } catch (err) {
+              alert(err.message);
+              btn.disabled = false;
+            }
+          });
+        });
+        // Expand links
+        document.querySelectorAll("[data-expand]").forEach(link => {
+          link.addEventListener("click", () => {
+            const id = link.dataset.expand;
+            const el = document.getElementById("expand-" + id);
+            if (el) { el.style.display = el.style.display === "none" ? "" : "none"; }
+          });
+        });
+        // Withdraw buttons
+        document.querySelectorAll("[data-withdraw]").forEach(btn => {
+          btn.addEventListener("click", async () => {
+            if (!confirm("Withdraw this proposal? It will be archived.")) return;
+            const id = parseInt(btn.dataset.withdraw);
+            try {
+              await Auth.fetchJson("/proposals/" + id, { method: "DELETE" });
+              await loadMyProposals();
+              if (currentHoaId) await loadProposals(currentHoaId);
+            } catch (err) {
+              alert(err.message);
+            }
+          });
+        });
+      }
+
+      async function loadMyProposals() {
+        myProposalsFeed.innerHTML = '<p class="meta">Loading…</p>';
+        try {
+          const proposals = await Auth.fetchJson("/proposals/mine");
+          if (!proposals.length) {
+            myProposalsFeed.innerHTML = '<div class="empty">No proposals yet.</div>';
+            return;
+          }
+          myProposalsFeed.innerHTML = proposals.map(p => renderProposalCard(p, true)).join("");
+          attachFeedListeners();
+        } catch (err) {
+          myProposalsFeed.innerHTML = `<p class="meta" style="color:var(--danger)">${escapeHtml(err.message)}</p>`;
+        }
+      }
+
+      // New proposal submission
+      submitProposalBtn.addEventListener("click", async () => {
+        const hoaId = parseInt(hoaSelect.value);
+        if (!hoaId) { npStatus.className = "status error"; npStatus.textContent = "Select an HOA first."; return; }
+        const title = npTitle.value.trim();
+        const desc = npDesc.value.trim();
+        const category = npCategory.value;
+        if (!title || title.length < 3) { npStatus.className = "status error"; npStatus.textContent = "Title must be at least 3 characters."; return; }
+        if (!desc || desc.length < 10) { npStatus.className = "status error"; npStatus.textContent = "Description must be at least 10 characters."; return; }
+        submitProposalBtn.disabled = true;
+        npStatus.className = "status"; npStatus.textContent = "Submitting…";
+        try {
+          const p = await Auth.fetchJson("/proposals", {
+            method: "POST",
+            body: JSON.stringify({ hoa_id: hoaId, title, description: desc, category }),
+          });
+          npStatus.className = "status ok"; npStatus.textContent = "Proposal created!";
+          npTitle.value = ""; npDesc.value = "";
+          shareCodeDisplay.textContent = p.share_code;
+          shareCodeReveal.style.display = "";
+          await loadMyProposals();
+        } catch (err) {
+          npStatus.className = "status error"; npStatus.textContent = err.message;
+        } finally {
+          submitProposalBtn.disabled = false;
+        }
+      });
+
+      copyCodeBtn.addEventListener("click", () => {
+        navigator.clipboard.writeText(shareCodeDisplay.textContent).then(() => {
+          copyCodeBtn.textContent = "Copied!";
+          setTimeout(() => { copyCodeBtn.textContent = "Copy code"; }, 2000);
+        });
+      });
+
+      // Co-sign lookup
+      lookupCodeBtn.addEventListener("click", async () => {
+        const code = cosignCodeInput.value.trim().toUpperCase();
+        if (code.length !== 4) { cosignLookupStatus.className = "status error"; cosignLookupStatus.textContent = "Enter a 4-character code."; return; }
+        lookupCodeBtn.disabled = true;
+        cosignLookupStatus.className = "status"; cosignLookupStatus.textContent = "Looking up…";
+        cosignPreview.style.display = "none";
+        try {
+          const p = await Auth.fetchJson("/proposals/cosign/" + code, { method: "POST" });
+          cosignLookupStatus.className = "status ok"; cosignLookupStatus.textContent = "Co-signed successfully!";
+          cosignPreview.style.display = "";
+          cosignPreview.innerHTML = `<div class="card">
+            <h3>${escapeHtml(p.title)}</h3>
+            <span class="pill">${escapeHtml(p.category)}</span>
+            <div class="meta" style="margin-top:6px">${escapeHtml(p.description)}</div>
+            <div class="meta" style="margin-top:6px">Co-signers: ${p.cosigner_count}/2 · Status: <strong>${p.status}</strong></div>
+          </div>`;
+          if (currentHoaId) await loadProposals(currentHoaId);
+        } catch (err) {
+          cosignLookupStatus.className = "status error"; cosignLookupStatus.textContent = err.message;
+        } finally {
+          lookupCodeBtn.disabled = false;
+        }
+      });
+
+      cosignCodeInput.addEventListener("keydown", e => { if (e.key === "Enter") lookupCodeBtn.click(); });
+
+      init();
+    </script>
+  </body>
+</html>

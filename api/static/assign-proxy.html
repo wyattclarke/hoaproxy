@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>HOAware | Assign Proxy</title>
+    <title>HOAproxy | Assign Proxy</title>
     <style>
       @import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Space+Grotesk:wght@600;700&display=swap");
       :root { --bg: #eef5ff; --ink: #12233a; --muted: #587091; --line: #d3e0f4; --accent: #1662f3; --accent-strong: #0d49be; --ok: #177c45; --danger: #b62525; }
@@ -26,6 +26,12 @@
       .nav a { color: var(--accent); font-weight: 700; text-decoration: none; font-size: 0.9rem; }
       .radio-group { display: flex; gap: 16px; margin-top: 4px; }
       .radio-group label { display: inline-flex; align-items: center; gap: 6px; margin: 0; font-weight: 600; }
+      .instr-row { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; margin-bottom: 6px; }
+      .instr-row input { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; font: inherit; background: #fff; }
+      .instr-row select { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; font: inherit; background: #fff; min-width: 140px; }
+      .instr-row button { border: 1px solid var(--danger); background: #fff; color: var(--danger); border-radius: 8px; padding: 7px 10px; font: inherit; font-size: 0.85rem; cursor: pointer; }
+      .add-item-btn { display: inline-flex; align-items: center; gap: 5px; border: 1px dashed var(--accent); background: #f5f8ff; color: var(--accent); border-radius: 8px; padding: 7px 14px; font: inherit; font-size: 0.88rem; font-weight: 700; cursor: pointer; margin-top: 4px; }
+      .add-item-btn:hover { background: #e8f0ff; }
     </style>
   </head>
   <body>
@@ -56,8 +62,12 @@
         </div>
 
         <div id="votingSection">
-          <label for="votingInstructions">Voting Instructions (JSON, optional)</label>
-          <textarea id="votingInstructions" placeholder='[{"agenda_item": "Budget", "vote": "For"}]'></textarea>
+          <label>Voting Instructions <span style="font-weight:400;color:var(--muted)">(optional — add known agenda items)</span></label>
+          <div style="font-size:0.82rem;color:var(--muted);margin-bottom:8px;line-height:1.5">
+            Specify how your delegate should vote on known items. For any item not listed, your delegate will vote at their discretion.
+          </div>
+          <div id="instrRows"></div>
+          <button type="button" class="add-item-btn" id="addItemBtn">+ Add agenda item</button>
         </div>
 
         <label for="meetingDate">Meeting Date (optional)</label>
@@ -74,11 +84,49 @@
       const hoaSelect = document.getElementById("hoaSelect");
       const delegateSelect = document.getElementById("delegateSelect");
       const meetingDate = document.getElementById("meetingDate");
-      const votingInstructions = document.getElementById("votingInstructions");
       const votingSection = document.getElementById("votingSection");
+      const instrRows = document.getElementById("instrRows");
+      const addItemBtn = document.getElementById("addItemBtn");
       const createBtn = document.getElementById("createBtn");
       const status = document.getElementById("status");
       const params = new URLSearchParams(window.location.search);
+
+      const VOTE_OPTIONS = ["For", "Against", "Abstain", "Delegate's Discretion"];
+
+      function addInstructionRow(agendaItem = "", vote = "For") {
+        const row = document.createElement("div");
+        row.className = "instr-row";
+        const input = document.createElement("input");
+        input.type = "text";
+        input.placeholder = "e.g. Board election, Budget approval…";
+        input.value = agendaItem;
+        const sel = document.createElement("select");
+        VOTE_OPTIONS.forEach(opt => {
+          const o = document.createElement("option");
+          o.value = opt; o.textContent = opt;
+          if (opt === vote) o.selected = true;
+          sel.appendChild(o);
+        });
+        const del = document.createElement("button");
+        del.type = "button"; del.textContent = "✕";
+        del.addEventListener("click", () => row.remove());
+        row.appendChild(input); row.appendChild(sel); row.appendChild(del);
+        instrRows.appendChild(row);
+        input.focus();
+      }
+
+      function getVotingInstructions() {
+        const rows = instrRows.querySelectorAll(".instr-row");
+        const items = [];
+        rows.forEach(row => {
+          const agenda = row.querySelector("input").value.trim();
+          const vote = row.querySelector("select").value;
+          if (agenda) items.push({ agenda_item: agenda, vote });
+        });
+        return items.length ? items : null;
+      }
+
+      addItemBtn.addEventListener("click", () => addInstructionRow());
 
       document.querySelectorAll('input[name="direction"]').forEach(r => {
         r.addEventListener("change", () => {
@@ -141,12 +189,13 @@
         createBtn.disabled = true;
         status.className = "status"; status.textContent = "Creating proxy...";
         try {
+          const instrItems = direction === "directed" ? getVotingInstructions() : null;
           const payload = {
             delegate_user_id: parseInt(delegateUserId),
             hoa_id: parseInt(hoaId),
             direction,
             for_meeting_date: meetingDate.value || null,
-            voting_instructions: votingInstructions.value.trim() || null,
+            voting_instructions: instrItems ? JSON.stringify(instrItems) : null,
           };
           const proxy = await Auth.fetchJson("/proxies", { method: "POST", body: JSON.stringify(payload) });
           status.className = "status ok"; status.textContent = "Proxy saved as draft. Review and sign it on the next page to make it official.";

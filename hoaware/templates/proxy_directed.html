@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Voting Instructions — {{ jurisdiction }}</title>
+  <style>
+    body { font-family: "Manrope", "Segoe UI", sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; color: #12233a; line-height: 1.6; }
+    h1 { font-family: "Space Grotesk", sans-serif; font-size: 1.3rem; margin-bottom: 4px; }
+    h2 { font-family: "Space Grotesk", sans-serif; font-size: 1.1rem; margin-top: 24px; border-bottom: 2px solid #1662f3; padding-bottom: 4px; }
+    .header { border: 2px solid #1662f3; border-radius: 12px; padding: 16px; background: #f6f9ff; margin-bottom: 24px; }
+    .citation { color: #587091; font-size: 0.88rem; font-style: italic; }
+    .field { margin: 10px 0; }
+    .field-label { font-weight: 700; font-size: 0.88rem; color: #587091; display: block; margin-bottom: 2px; }
+    .field-value { border-bottom: 1px solid #d3e0f4; padding: 4px 0; min-height: 1.4em; }
+    .field-value.filled { font-weight: 600; }
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .warning { background: #fff9e6; border: 1px solid #f0dbb4; border-radius: 8px; padding: 12px; margin: 16px 0; font-size: 0.9rem; }
+    .instructions-table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+    .instructions-table th { background: #f0f4fb; font-size: 0.88rem; font-weight: 700; padding: 8px 12px; text-align: left; border: 1px solid #d3e0f4; }
+    .instructions-table td { padding: 10px 12px; border: 1px solid #d3e0f4; vertical-align: top; }
+    .instructions-table tr:nth-child(even) td { background: #f8fbff; }
+    .vote-badge { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 0.82rem; font-weight: 700; }
+    .vote-for { background: #e8f8ef; color: #177c45; }
+    .vote-against { background: #fff0f0; color: #b62525; }
+    .vote-abstain { background: #f0f4fb; color: #587091; }
+    .vote-discretion { background: #fff9e6; color: #8a5e15; }
+    .blank-row td { min-height: 2.5em; }
+    .separator { border: none; border-top: 2px dashed #d3e0f4; margin: 24px 0; }
+    .signature-block { border: 2px solid #12233a; border-radius: 12px; padding: 20px; margin-top: 24px; }
+    .signature-line { border-bottom: 1px solid #12233a; margin: 24px 0 4px; min-height: 30px; }
+    .disclaimer { margin-top: 24px; padding: 12px; background: #f0f4fa; border-radius: 8px; font-size: 0.8rem; color: #587091; }
+    .ca-note { background: #fff0f0; border: 1px solid #f0b4b4; border-radius: 8px; padding: 12px; margin: 16px 0; font-size: 0.88rem; }
+  </style>
+</head>
+<body>
+  {% if jurisdiction == 'CA' %}
+  <div class="ca-note">
+    <strong>California Notice:</strong> Under California law, voting instructions for a directed proxy must appear on a
+    <em>separate page</em> detached from the proxy form itself. This document serves as that separate voting instruction sheet.
+    Detach this page from the proxy authorization form before submitting. (Corp. Code § 7613(b))
+  </div>
+  {% endif %}
+
+  <div class="header">
+    <h1>Directed Proxy — Voting Instructions</h1>
+    <div class="citation">
+      {{ jurisdiction }} — {{ community_type_display }}
+      {% if statutory_citation %}<br>Statutory Authority: {{ statutory_citation }}{% endif %}
+    </div>
+  </div>
+
+  <div class="two-col">
+    <div class="field">
+      <span class="field-label">Grantor (Proxy Assignor)</span>
+      <div class="field-value{% if grantor_name %} filled{% endif %}">{{ grantor_name or '___________________________' }}</div>
+    </div>
+    <div class="field">
+      <span class="field-label">Unit / Address</span>
+      <div class="field-value{% if grantor_unit %} filled{% endif %}">{{ grantor_unit or '___________________________' }}</div>
+    </div>
+  </div>
+
+  <div class="two-col">
+    <div class="field">
+      <span class="field-label">Proxy Holder (Delegate)</span>
+      <div class="field-value{% if delegate_name %} filled{% endif %}">{{ delegate_name or '___________________________' }}</div>
+    </div>
+    <div class="field">
+      <span class="field-label">HOA Name</span>
+      <div class="field-value{% if hoa_name %} filled{% endif %}">{{ hoa_name or '___________________________' }}</div>
+    </div>
+  </div>
+
+  {% if meeting_date %}
+  <div class="field">
+    <span class="field-label">Meeting Date</span>
+    <div class="field-value filled">{{ meeting_date }}</div>
+  </div>
+  {% endif %}
+
+  <h2>Voting Instructions</h2>
+  <p style="font-size:0.9rem;color:#587091;">
+    I, <strong>{{ grantor_name or '(Grantor)' }}</strong>, direct my proxy holder to vote as follows on the agenda items listed below.
+    For any matter not listed, my proxy holder shall
+    <strong>{{ 'vote at their discretion' if undirected_fallback else 'abstain' }}</strong>.
+  </p>
+
+  {% if voting_instructions and voting_instructions|length > 0 %}
+  <table class="instructions-table">
+    <thead>
+      <tr>
+        <th style="width:55%">Agenda Item / Motion</th>
+        <th style="width:25%">My Vote</th>
+        <th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in voting_instructions %}
+      <tr>
+        <td>{{ item.agenda_item }}</td>
+        <td>
+          {% set v = item.vote | lower %}
+          {% if v == 'for' or v == 'yes' %}
+            <span class="vote-badge vote-for">For</span>
+          {% elif v == 'against' or v == 'no' %}
+            <span class="vote-badge vote-against">Against</span>
+          {% elif v == 'abstain' %}
+            <span class="vote-badge vote-abstain">Abstain</span>
+          {% else %}
+            <span class="vote-badge vote-discretion">{{ item.vote }}</span>
+          {% endif %}
+        </td>
+        <td>{{ item.notes or '' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <table class="instructions-table">
+    <thead>
+      <tr>
+        <th style="width:55%">Agenda Item / Motion</th>
+        <th style="width:25%">My Vote (For / Against / Abstain)</th>
+        <th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr class="blank-row"><td></td><td></td><td></td></tr>
+      <tr class="blank-row"><td></td><td></td><td></td></tr>
+      <tr class="blank-row"><td></td><td></td><td></td></tr>
+      <tr class="blank-row"><td></td><td></td><td></td></tr>
+    </tbody>
+  </table>
+  {% endif %}
+
+  <div class="warning">
+    <strong>Default for unlisted items:</strong>
+    For any agenda item not listed above, my proxy holder shall
+    <strong>{{ 'vote at their discretion' if undirected_fallback else 'abstain from voting' }}</strong>.
+  </div>
+
+  <hr class="separator" />
+
+  <div class="signature-block">
+    <h2 style="margin-top:0; border:none;">Grantor Confirmation</h2>
+    <p style="font-size:0.9rem;">
+      I confirm that the voting instructions above reflect my intentions and that I have appointed
+      <strong>{{ delegate_name or '(Delegate)' }}</strong> as my proxy holder for the meeting of
+      <strong>{{ hoa_name or '(HOA)' }}</strong>{% if meeting_date %} on <strong>{{ meeting_date }}</strong>{% endif %}.
+    </p>
+    <div class="two-col">
+      <div>
+        <div class="signature-line"></div>
+        <span class="field-label">Grantor Signature</span>
+      </div>
+      <div>
+        <div class="signature-line"></div>
+        <span class="field-label">Date</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="disclaimer">
+    This voting instruction sheet is part of a directed proxy assignment generated by HOAproxy.
+    It does not constitute legal advice. Generated on {{ generated_date }}.
+  </div>
+</body>
+</html>

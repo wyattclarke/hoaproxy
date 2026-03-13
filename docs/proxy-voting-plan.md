@@ -1,4 +1,4 @@
-# HOAware Proxy Voting: Implementation Plan
+# HOAproxy Proxy Voting: Implementation Plan
 
 **Reference:** [Proxy Voting Design Memo](proxy-voting-design-memo.md)
 **Build order:** Auth → Proxy Assignment MVP → Participation Dashboard
@@ -337,7 +337,7 @@ A logged-in resident can: select a delegate → choose directed/undirected → r
 ## Milestone 5: Frontend Polish & End-to-End Testing (Weeks 10–11)
 
 ### Goal
-The full proxy flow works smoothly in a browser. All pages are styled consistently with existing HOAware pages. Error handling is solid.
+The full proxy flow works smoothly in a browser. All pages are styled consistently with existing HOAproxy pages. Error handling is solid.
 
 ### Work Items
 

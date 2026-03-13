@@ -136,6 +136,9 @@ async def lifespan(app: FastAPI):
         seeded = db.seed_legal_data(conn)
         if seeded:
             logger.info("Seeded %d legal rows from bundled seed files", seeded)
+        archived = db.archive_stale_proposals(conn, days=60)
+        if archived:
+            logger.info("Archived %d stale proposals on startup", archived)
     _run_expiry_sweep()
     yield
 
@@ -472,6 +475,38 @@ class ProxyStatsResponse(BaseModel):
     total: int
     signed: int
     delivered: int
+
+
+# ---------------------------------------------------------------------------
+# Proposal models
+# ---------------------------------------------------------------------------
+
+PROPOSAL_CATEGORIES = {"Maintenance", "Amenities", "Rules", "Safety", "Other"}
+
+
+class CreateProposalRequest(BaseModel):
+    hoa_id: int
+    title: str = Field(..., min_length=3, max_length=200)
+    description: str = Field(..., min_length=10, max_length=5000)
+    category: str = "Other"
+
+
+class ProposalResponse(BaseModel):
+    id: int
+    hoa_id: int
+    hoa_name: str | None = None
+    creator_user_id: int
+    title: str
+    description: str
+    category: str
+    status: str
+    cosigner_count: int = 0
+    upvote_count: int = 0
+    share_code: str | None = None
+    user_cosigned: bool = False
+    user_upvoted: bool = False
+    created_at: str | None = None
+    published_at: str | None = None
 
 
 class ParticipationRequest(BaseModel):
@@ -1389,7 +1424,8 @@ def hoa_profile_page(hoa_name: str) -> FileResponse:
 def health() -> dict:
     settings = load_settings()
     required_tables = {"hoas", "users", "sessions", "membership_claims", "delegates",
-                       "proxy_assignments", "proxy_audit"}
+                       "proxy_assignments", "proxy_audit",
+                       "proposals", "proposal_cosigners", "proposal_upvotes"}
     try:
         with db.get_connection(settings.db_path) as conn:
             rows = conn.execute(
@@ -2508,3 +2544,219 @@ def law_proxy_electronic_summary(
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     return [ElectronicProxySummaryItem(**row) for row in rows]
+
+
+# ---------------------------------------------------------------------------
+# Proposals — page routes
+# ---------------------------------------------------------------------------
+
+@app.get("/proposals", include_in_schema=False)
+def proposals_page() -> FileResponse:
+    return _serve_static_page("proposals.html")
+
+
+# ---------------------------------------------------------------------------
+# Proposals — API
+# ---------------------------------------------------------------------------
+
+def _proposal_to_response(
+    p: dict,
+    *,
+    hoa_name: str | None = None,
+    share_code: str | None = None,
+    user_cosigned: bool = False,
+    user_upvoted: bool = False,
+) -> ProposalResponse:
+    return ProposalResponse(
+        id=p["id"],
+        hoa_id=p["hoa_id"],
+        hoa_name=hoa_name,
+        creator_user_id=p["creator_user_id"],
+        title=p["title"],
+        description=p["description"],
+        category=p["category"],
+        status=p["status"],
+        cosigner_count=p["cosigner_count"],
+        upvote_count=p["upvote_count"],
+        share_code=share_code,
+        user_cosigned=user_cosigned,
+        user_upvoted=user_upvoted,
+        created_at=p.get("created_at"),
+        published_at=p.get("published_at"),
+    )
+
+
+@app.post("/proposals", response_model=ProposalResponse)
+def create_proposal(body: CreateProposalRequest, request: Request, user: dict = Depends(get_current_user)):
+    _check_rate_limit(request, limit=10)
+    if body.category not in PROPOSAL_CATEGORIES:
+        raise HTTPException(status_code=422, detail=f"category must be one of {sorted(PROPOSAL_CATEGORIES)}")
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        claim = db.get_membership_claim(conn, user["id"], body.hoa_id)
+        if not claim:
+            raise HTTPException(status_code=403, detail="You must be a member of this HOA to create a proposal")
+        existing = db.get_active_proposal_for_user(conn, user["id"])
+        if existing:
+            raise HTTPException(status_code=409, detail="You already have an active proposal; withdraw it before creating another")
+        proposal_id = db.create_proposal(
+            conn,
+            hoa_id=body.hoa_id,
+            creator_user_id=user["id"],
+            title=body.title.strip(),
+            description=body.description.strip(),
+            category=body.category,
+        )
+        p = db.get_proposal(conn, proposal_id)
+        hoa_row = conn.execute("SELECT name FROM hoas WHERE id = ?", (body.hoa_id,)).fetchone()
+        hoa_name = str(hoa_row["name"]) if hoa_row else None
+    return _proposal_to_response(p, hoa_name=hoa_name, share_code=p["share_code"])
+
+
+@app.get("/proposals/mine")
+def list_my_proposals(user: dict = Depends(get_current_user)):
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        proposals = db.list_proposals_for_user(conn, user["id"])
+        result = []
+        for p in proposals:
+            hoa_row = conn.execute("SELECT name FROM hoas WHERE id = ?", (p["hoa_id"],)).fetchone()
+            hoa_name = str(hoa_row["name"]) if hoa_row else None
+            share_code = p["share_code"] if p["status"] == "private" else None
+            result.append(_proposal_to_response(p, hoa_name=hoa_name, share_code=share_code))
+    return result
+
+
+@app.post("/proposals/cosign/{share_code}", response_model=ProposalResponse)
+def cosign_proposal(share_code: str, request: Request, user: dict = Depends(get_current_user)):
+    _check_rate_limit(request, limit=30)
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        p = db.get_proposal_by_share_code(conn, share_code)
+        if not p:
+            raise HTTPException(status_code=404, detail="Proposal not found")
+        # Must be in same HOA
+        claim = db.get_membership_claim(conn, user["id"], p["hoa_id"])
+        if not claim:
+            raise HTTPException(status_code=404, detail="Proposal not found")
+        # Cannot co-sign own proposal
+        if p["creator_user_id"] == user["id"]:
+            raise HTTPException(status_code=403, detail="Cannot co-sign your own proposal")
+        # Must be private to accept co-signers
+        if p["status"] != "private":
+            raise HTTPException(status_code=400, detail="Proposal is no longer accepting co-signers")
+        import sqlite3 as _sqlite3
+        try:
+            db.create_cosigner(conn, proposal_id=p["id"], user_id=user["id"])
+        except _sqlite3.IntegrityError:
+            raise HTTPException(status_code=409, detail="You have already co-signed this proposal")
+        p = db.get_proposal(conn, p["id"])
+        hoa_row = conn.execute("SELECT name FROM hoas WHERE id = ?", (p["hoa_id"],)).fetchone()
+        hoa_name = str(hoa_row["name"]) if hoa_row else None
+        user_cosigned = db.get_cosigner(conn, p["id"], user["id"]) is not None
+    return _proposal_to_response(p, hoa_name=hoa_name, user_cosigned=user_cosigned)
+
+
+@app.delete("/proposals/{proposal_id}/cosign")
+def withdraw_cosign(proposal_id: int, user: dict = Depends(get_current_user)):
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        deleted = db.delete_cosigner(conn, proposal_id=proposal_id, user_id=user["id"])
+    if not deleted:
+        raise HTTPException(status_code=404, detail="No co-signature found to withdraw")
+    return {"ok": True}
+
+
+@app.post("/proposals/{proposal_id}/upvote", response_model=ProposalResponse)
+def upvote_proposal(proposal_id: int, request: Request, user: dict = Depends(get_current_user)):
+    _check_rate_limit(request, limit=30)
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        p = db.get_proposal(conn, proposal_id)
+        if not p:
+            raise HTTPException(status_code=404, detail="Proposal not found")
+        claim = db.get_membership_claim(conn, user["id"], p["hoa_id"])
+        if not claim:
+            raise HTTPException(status_code=403, detail="You must be a member of this HOA")
+        if p["status"] != "public":
+            raise HTTPException(status_code=400, detail="Can only upvote public proposals")
+        import sqlite3 as _sqlite3
+        try:
+            db.create_upvote(conn, proposal_id=proposal_id, user_id=user["id"])
+        except _sqlite3.IntegrityError:
+            raise HTTPException(status_code=409, detail="You have already upvoted this proposal")
+        p = db.get_proposal(conn, proposal_id)
+        hoa_row = conn.execute("SELECT name FROM hoas WHERE id = ?", (p["hoa_id"],)).fetchone()
+        hoa_name = str(hoa_row["name"]) if hoa_row else None
+    return _proposal_to_response(p, hoa_name=hoa_name, user_upvoted=True)
+
+
+@app.delete("/proposals/{proposal_id}/upvote")
+def withdraw_upvote(proposal_id: int, user: dict = Depends(get_current_user)):
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        deleted = db.delete_upvote(conn, proposal_id=proposal_id, user_id=user["id"])
+    if not deleted:
+        raise HTTPException(status_code=404, detail="No upvote found to withdraw")
+    return {"ok": True}
+
+
+@app.delete("/proposals/{proposal_id}")
+def withdraw_proposal(proposal_id: int, request: Request, user: dict = Depends(get_current_user)):
+    _check_rate_limit(request, limit=20)
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        p = db.get_proposal(conn, proposal_id)
+        if not p:
+            raise HTTPException(status_code=404, detail="Proposal not found")
+        if p["creator_user_id"] != user["id"]:
+            raise HTTPException(status_code=403, detail="Only the creator can withdraw this proposal")
+        if p["status"] == "archived":
+            raise HTTPException(status_code=400, detail="Proposal is already archived")
+        db.archive_proposal(conn, proposal_id)
+    return {"ok": True}
+
+
+@app.get("/proposals/{proposal_id}", response_model=ProposalResponse)
+def get_proposal_route(proposal_id: int, user: dict = Depends(get_current_user)):
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        p = db.get_proposal(conn, proposal_id)
+        if not p:
+            raise HTTPException(status_code=404, detail="Proposal not found")
+        # Membership check
+        claim = db.get_membership_claim(conn, user["id"], p["hoa_id"])
+        if not claim:
+            raise HTTPException(status_code=403, detail="You must be a member of this HOA")
+        # Private proposals: only visible to creator and co-signers
+        if p["status"] == "private":
+            if p["creator_user_id"] != user["id"] and not db.get_cosigner(conn, proposal_id, user["id"]):
+                raise HTTPException(status_code=404, detail="Proposal not found")
+        hoa_row = conn.execute("SELECT name FROM hoas WHERE id = ?", (p["hoa_id"],)).fetchone()
+        hoa_name = str(hoa_row["name"]) if hoa_row else None
+        user_cosigned = db.get_cosigner(conn, proposal_id, user["id"]) is not None
+        user_upvoted = db.get_upvote(conn, proposal_id, user["id"]) is not None
+        share_code = p["share_code"] if p["creator_user_id"] == user["id"] and p["status"] == "private" else None
+    return _proposal_to_response(p, hoa_name=hoa_name, share_code=share_code,
+                                  user_cosigned=user_cosigned, user_upvoted=user_upvoted)
+
+
+@app.get("/hoas/{hoa_id}/proposals")
+def list_hoa_proposals(
+    hoa_id: int,
+    include_archived: bool = False,
+    user: dict = Depends(get_current_user),
+):
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        claim = db.get_membership_claim(conn, user["id"], hoa_id)
+        if not claim:
+            raise HTTPException(status_code=403, detail="You must be a member of this HOA")
+        proposals = db.list_proposals_for_hoa(conn, hoa_id, include_archived=include_archived)
+        hoa_row = conn.execute("SELECT name FROM hoas WHERE id = ?", (hoa_id,)).fetchone()
+        hoa_name = str(hoa_row["name"]) if hoa_row else None
+        result = []
+        for p in proposals:
+            user_upvoted = db.get_upvote(conn, p["id"], user["id"]) is not None
+            result.append(_proposal_to_response(p, hoa_name=hoa_name, user_upvoted=user_upvoted))
+    return result

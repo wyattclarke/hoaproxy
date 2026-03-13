@@ -1,4 +1,4 @@
-# HOAware UX Fix List
+# HOAproxy UX Fix List
 
 Issues and improvements identified during exploratory testing (Mar 2026).
 

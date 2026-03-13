@@ -98,6 +98,7 @@ const Auth = (() => {
       container.innerHTML =
         '<a class="btn" href="/dashboard">Dashboard</a>' +
         '<a class="btn" href="/my-proxies">My Proxies</a>' +
+        '<a class="btn" href="/proposals">Proposals</a>' +
         '<a class="btn" href="/legal">Legal</a>' +
         '<a class="btn" id="logoutBtn">Logout</a>';
       const logoutBtn = container.querySelector("#logoutBtn");

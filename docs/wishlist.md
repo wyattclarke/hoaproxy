@@ -1,4 +1,4 @@
-# HOAware Wish List
+# HOAproxy Wish List
 
 Long-term ideas that aren't actively being worked on.
 
@@ -6,7 +6,7 @@ Long-term ideas that aren't actively being worked on.
 
 ## Mobile App
 
-Make HOAware available as a native mobile app on Android and iOS.
+Make HOAproxy available as a native mobile app on Android and iOS.
 
 **Options (in order of effort):**
 1. **PWA** — Add `manifest.json` + service worker to existing site. ~1–2 days. No app store, but installable to home screen on both platforms.
@@ -54,6 +54,50 @@ Many HOAs publish their governing documents (CC&Rs, bylaws, rules) on publicly a
 - `robots.txt` compliance and rate limiting are essential
 - PDFs from county recorders are unambiguously public record; HOA portal docs may have terms-of-service restrictions — legal review needed before large-scale scraping
 - Quality signal: prefer documents where the HOA name matches a known registered HOA
+
+---
+
+## Meeting & Agenda Model → Directed Proxies
+
+Currently, proxies are undirected — a homeowner grants general voting authority to a delegate without specifying how to vote on individual questions. This is the right default for now, and `proxy_type` is already in the schema to support expansion later.
+
+The full path to directed proxies requires:
+
+**Step 1 — Meeting/agenda model.** Add a lightweight `meetings` table (date, description, HOA ID) and an `agenda_items` table (text description, meeting ID, order). Even free-text agenda items are enough to make directed proxies meaningful — a homeowner can say "on the special assessment item, vote NO."
+
+**Step 2 — Scope proxies to meetings.** Associate each proxy with a specific upcoming meeting rather than floating in the abstract. This also enables automatic expiry (proxy lapses if the meeting passes) and improves the audit trail.
+
+**Step 3 — Re-enable directed proxies.** With agenda items as named entities, a directed proxy can reference a specific item and carry a vote instruction (`yes` / `no` / `abstain`). This also satisfies state statutes (CA, FL, TX, and others) that explicitly distinguish general vs. limited/directed proxies and may require one form or the other depending on the vote type.
+
+**Community Pulse** (see separate wish-list item) is the natural engagement layer: a Pulse item that gains enough support could be promoted to a formal agenda item, closing the loop from member sentiment → official vote → proxy delegation.
+
+---
+
+## Postal Address Verification
+
+To confirm that a registered user actually lives at the HOA address they claim, send a physical postcard to that address containing a short verification code. The user enters the code in the app to complete verification.
+
+**Why it matters:** Proxy voting and resident proposals carry real governance weight. A resident who can't prove they live at an address shouldn't be able to vote on behalf of that unit or submit proposals on its behalf. Postal verification is the gold standard for address proof — it's the same mechanism banks and the IRS use.
+
+**Flow:**
+1. After registration (or on-demand from profile), resident submits their unit address
+2. System generates a short random code (6–8 alphanumeric), stores it with an expiry (e.g., 21 days), and queues a postcard via a mail API
+3. Postcard arrives addressed to "HOAproxy Resident" at the unit address, containing the code and a URL/QR code to verify
+4. Resident enters the code; `address_verified_at` timestamp is recorded on their account
+5. Unverified residents can browse but are blocked from proxy grant/accept and proposal submission
+
+**Implementation options:**
+- **Lob.com** — postcard API, ~$1/card, handles printing + USPS delivery; straightforward REST integration
+- **PostGrid** — similar, slightly cheaper at volume
+- **DIY** — generate a PDF, hand off to a local print + mail service; works but not automated
+
+**Edge cases to plan for:**
+- Resend flow (postcard lost or expired)
+- Multi-unit buildings where the address alone is ambiguous — include unit number on the card
+- Renters vs. owners — verification confirms address, not ownership; ownership verification is a separate problem (title records)
+- HOA admin override — board members should be able to manually verify a resident (e.g., they know the person)
+
+**Good trouble protection:** address verification should not be a gatekeeping tool against legitimate residents. The resend flow must be frictionless, and there should be a clear appeals path if a resident has mail delivery issues (e.g., USPS holdback, new construction).
 
 ---
 

@@ -1,6 +1,6 @@
-# HOAware
+# HOAproxy
 
-HOAware is a semantic search and proxy voting coordination platform for homeowner associations. Residents can upload HOA governing documents, ask grounded Q&A questions with citations, browse state law summaries for HOA records and proxy voting rules, and coordinate proxy assignments with e-signature support for any HOA meeting.
+HOAproxy is a semantic search and proxy voting coordination platform for homeowner associations. Residents can upload HOA governing documents, ask grounded Q&A questions with citations, browse state law summaries for HOA records and proxy voting rules, and coordinate proxy assignments with e-signature support for any HOA meeting.
 
 ## Features
 
@@ -111,4 +111,4 @@ python3 scripts/legal/run_pipeline.py --skip-validate --include-aggregators
 
 MIT License. See `LICENSE` file for details.
 
-HOAware is an informational tool only. Nothing on this platform constitutes legal advice.
+HOAproxy is an informational tool only. Nothing on this platform constitutes legal advice.

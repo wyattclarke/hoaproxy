@@ -1,7 +1,7 @@
-# HOAware — Claude Code Instructions
+# HOAproxy — Claude Code Instructions
 
 ## Project Overview
-HOAware is a semantic search / Q&A platform for HOA documents, with a proxy voting system and legal corpus. Stack: FastAPI, SQLite (WAL mode), Qdrant vector DB, OpenAI embeddings.
+HOAproxy is a semantic search / Q&A platform for HOA documents, with a proxy voting system and legal corpus. Stack: FastAPI, SQLite (WAL mode), Qdrant vector DB, OpenAI embeddings.
 
 **Key files:**
 - `api/main.py` — FastAPI app (all routes)
@@ -67,7 +67,7 @@ Vanilla HTML/CSS/JS — no build step, no framework. Match existing style:
 - Auth: always load `/static/js/auth.js`, use `Auth.renderNav()`, `Auth.requireAuth()`, `Auth.fetchJson()`
 
 ## Proxy Voting System — ALL 8 MILESTONES COMPLETE
-See `docs/implementation-plan.md` for full details. 129 tests, all passing.
+See `docs/proxy-voting-plan.md` for full details. 129 tests, all passing.
 
 **Key patterns:**
 - DB startup migration: `lifespan` handler in `api/main.py` runs `db.SCHEMA` + expiry sweep on boot

@@ -248,6 +248,44 @@ CREATE TABLE IF NOT EXISTS participation_records (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(hoa_id, meeting_date, meeting_type)
 );
+
+CREATE TABLE IF NOT EXISTS proposals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    hoa_id INTEGER NOT NULL REFERENCES hoas(id),
+    creator_user_id INTEGER NOT NULL REFERENCES users(id),
+    title TEXT NOT NULL,
+    description TEXT NOT NULL,
+    category TEXT NOT NULL DEFAULT 'Other',
+    status TEXT NOT NULL DEFAULT 'private',
+    share_code TEXT NOT NULL UNIQUE,
+    cosigner_count INTEGER NOT NULL DEFAULT 0,
+    upvote_count INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    published_at TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_proposals_hoa ON proposals(hoa_id, status);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_proposals_share_code ON proposals(share_code);
+
+CREATE TABLE IF NOT EXISTS proposal_cosigners (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    proposal_id INTEGER NOT NULL REFERENCES proposals(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(proposal_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_proposal_cosigners_proposal ON proposal_cosigners(proposal_id);
+
+CREATE TABLE IF NOT EXISTS proposal_upvotes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    proposal_id INTEGER NOT NULL REFERENCES proposals(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(proposal_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_proposal_upvotes_proposal ON proposal_upvotes(proposal_id);
 """
 
 
@@ -1901,3 +1939,248 @@ def seed_legal_data(conn: sqlite3.Connection) -> int:
         inserted += len(rows)
 
     return inserted
+
+
+# ---------------------------------------------------------------------------
+# Proposals
+# ---------------------------------------------------------------------------
+
+_SHARE_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # 32 chars, no 0/O/I/1
+
+
+def _generate_share_code(conn: sqlite3.Connection) -> str:
+    import random
+    for _ in range(20):
+        code = "".join(random.choices(_SHARE_CODE_ALPHABET, k=4))
+        row = conn.execute("SELECT id FROM proposals WHERE share_code = ?", (code,)).fetchone()
+        if row is None:
+            return code
+    raise RuntimeError("Could not generate unique share code after 20 attempts")
+
+
+def create_proposal(
+    conn: sqlite3.Connection,
+    *,
+    hoa_id: int,
+    creator_user_id: int,
+    title: str,
+    description: str,
+    category: str = "Other",
+) -> int:
+    share_code = _generate_share_code(conn)
+    cur = conn.execute(
+        """
+        INSERT INTO proposals (hoa_id, creator_user_id, title, description, category, share_code)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (int(hoa_id), int(creator_user_id), title.strip(), description.strip(), category.strip(), share_code),
+    )
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def _row_to_proposal(row: sqlite3.Row) -> dict:
+    return {
+        "id": int(row["id"]),
+        "hoa_id": int(row["hoa_id"]),
+        "creator_user_id": int(row["creator_user_id"]),
+        "title": str(row["title"]),
+        "description": str(row["description"]),
+        "category": str(row["category"]),
+        "status": str(row["status"]),
+        "share_code": str(row["share_code"]),
+        "cosigner_count": int(row["cosigner_count"]),
+        "upvote_count": int(row["upvote_count"]),
+        "created_at": str(row["created_at"]) if row["created_at"] else None,
+        "published_at": str(row["published_at"]) if row["published_at"] else None,
+    }
+
+
+def get_proposal(conn: sqlite3.Connection, proposal_id: int) -> dict | None:
+    row = conn.execute(
+        "SELECT * FROM proposals WHERE id = ?", (int(proposal_id),)
+    ).fetchone()
+    if not row:
+        return None
+    return _row_to_proposal(row)
+
+
+def get_proposal_by_share_code(conn: sqlite3.Connection, share_code: str) -> dict | None:
+    row = conn.execute(
+        "SELECT * FROM proposals WHERE share_code = ?", (share_code.upper(),)
+    ).fetchone()
+    if not row:
+        return None
+    return _row_to_proposal(row)
+
+
+def list_proposals_for_hoa(
+    conn: sqlite3.Connection, hoa_id: int, *, include_archived: bool = False
+) -> list[dict]:
+    if include_archived:
+        rows = conn.execute(
+            """
+            SELECT * FROM proposals
+            WHERE hoa_id = ? AND status IN ('public', 'archived')
+            ORDER BY upvote_count DESC, created_at DESC
+            """,
+            (int(hoa_id),),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """
+            SELECT * FROM proposals
+            WHERE hoa_id = ? AND status = 'public'
+            ORDER BY upvote_count DESC, created_at DESC
+            """,
+            (int(hoa_id),),
+        ).fetchall()
+    return [_row_to_proposal(r) for r in rows]
+
+
+def list_proposals_for_user(conn: sqlite3.Connection, user_id: int) -> list[dict]:
+    rows = conn.execute(
+        """
+        SELECT * FROM proposals
+        WHERE creator_user_id = ?
+        ORDER BY created_at DESC
+        """,
+        (int(user_id),),
+    ).fetchall()
+    return [_row_to_proposal(r) for r in rows]
+
+
+def get_active_proposal_for_user(conn: sqlite3.Connection, user_id: int) -> dict | None:
+    row = conn.execute(
+        """
+        SELECT * FROM proposals
+        WHERE creator_user_id = ? AND status IN ('private', 'public')
+        LIMIT 1
+        """,
+        (int(user_id),),
+    ).fetchone()
+    if not row:
+        return None
+    return _row_to_proposal(row)
+
+
+def archive_proposal(conn: sqlite3.Connection, proposal_id: int) -> None:
+    conn.execute(
+        "UPDATE proposals SET status = 'archived' WHERE id = ?",
+        (int(proposal_id),),
+    )
+    conn.commit()
+
+
+def archive_stale_proposals(conn: sqlite3.Connection, days: int = 60) -> int:
+    cur = conn.execute(
+        """
+        UPDATE proposals
+        SET status = 'archived'
+        WHERE status = 'public'
+          AND published_at IS NOT NULL
+          AND published_at < datetime('now', ? || ' days')
+        """,
+        (f"-{days}",),
+    )
+    conn.commit()
+    return cur.rowcount
+
+
+def create_cosigner(conn: sqlite3.Connection, *, proposal_id: int, user_id: int) -> None:
+    conn.execute(
+        "INSERT INTO proposal_cosigners (proposal_id, user_id) VALUES (?, ?)",
+        (int(proposal_id), int(user_id)),
+    )
+    conn.execute(
+        "UPDATE proposals SET cosigner_count = cosigner_count + 1 WHERE id = ?",
+        (int(proposal_id),),
+    )
+    # Check if threshold reached (2 co-signers = cosigner_count now 2)
+    row = conn.execute("SELECT cosigner_count FROM proposals WHERE id = ?", (int(proposal_id),)).fetchone()
+    if row and int(row["cosigner_count"]) >= 2:
+        conn.execute(
+            """
+            UPDATE proposals
+            SET status = 'public', published_at = CURRENT_TIMESTAMP
+            WHERE id = ? AND status = 'private'
+            """,
+            (int(proposal_id),),
+        )
+    conn.commit()
+
+
+def delete_cosigner(conn: sqlite3.Connection, *, proposal_id: int, user_id: int) -> bool:
+    cur = conn.execute(
+        "DELETE FROM proposal_cosigners WHERE proposal_id = ? AND user_id = ?",
+        (int(proposal_id), int(user_id)),
+    )
+    if cur.rowcount == 0:
+        conn.commit()
+        return False
+    conn.execute(
+        "UPDATE proposals SET cosigner_count = MAX(0, cosigner_count - 1) WHERE id = ?",
+        (int(proposal_id),),
+    )
+    row = conn.execute(
+        "SELECT cosigner_count, status FROM proposals WHERE id = ?", (int(proposal_id),)
+    ).fetchone()
+    if row and int(row["cosigner_count"]) < 2 and str(row["status"]) == "public":
+        conn.execute(
+            "UPDATE proposals SET status = 'private', published_at = NULL WHERE id = ?",
+            (int(proposal_id),),
+        )
+    conn.commit()
+    return True
+
+
+def get_cosigner(conn: sqlite3.Connection, proposal_id: int, user_id: int) -> dict | None:
+    row = conn.execute(
+        "SELECT * FROM proposal_cosigners WHERE proposal_id = ? AND user_id = ?",
+        (int(proposal_id), int(user_id)),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def list_cosigners(conn: sqlite3.Connection, proposal_id: int) -> list[dict]:
+    rows = conn.execute(
+        "SELECT user_id, created_at FROM proposal_cosigners WHERE proposal_id = ? ORDER BY created_at",
+        (int(proposal_id),),
+    ).fetchall()
+    return [{"user_id": int(r["user_id"]), "cosigned_at": str(r["created_at"])} for r in rows]
+
+
+def create_upvote(conn: sqlite3.Connection, *, proposal_id: int, user_id: int) -> None:
+    conn.execute(
+        "INSERT INTO proposal_upvotes (proposal_id, user_id) VALUES (?, ?)",
+        (int(proposal_id), int(user_id)),
+    )
+    conn.execute(
+        "UPDATE proposals SET upvote_count = upvote_count + 1 WHERE id = ?",
+        (int(proposal_id),),
+    )
+    conn.commit()
+
+
+def delete_upvote(conn: sqlite3.Connection, *, proposal_id: int, user_id: int) -> bool:
+    cur = conn.execute(
+        "DELETE FROM proposal_upvotes WHERE proposal_id = ? AND user_id = ?",
+        (int(proposal_id), int(user_id)),
+    )
+    if cur.rowcount == 0:
+        conn.commit()
+        return False
+    conn.execute(
+        "UPDATE proposals SET upvote_count = MAX(0, upvote_count - 1) WHERE id = ?",
+        (int(proposal_id),),
+    )
+    conn.commit()
+    return True
+
+
+def get_upvote(conn: sqlite3.Connection, proposal_id: int, user_id: int) -> dict | None:
+    row = conn.execute(
+        "SELECT * FROM proposal_upvotes WHERE proposal_id = ? AND user_id = ?",
+        (int(proposal_id), int(user_id)),
+    ).fetchone()
+    return dict(row) if row else None

@@ -137,10 +137,10 @@ def _proxy_delivery_html(proxy: dict) -> str:
     for <strong>{meeting}</strong> at <strong>{hoa}</strong>.</p>
     <p>Please bring this proxy to the meeting and present it to the board secretary.
     The grantor may revoke this proxy at any time before the meeting
-    by logging into HOAware.</p>
+    by logging into HOAproxy.</p>
     <hr>
     <p style="font-size:12px;color:#666">
-    HOAware — This is not legal advice. Proxy validity is governed by your state's
+    HOAproxy — This is not legal advice. Proxy validity is governed by your state's
     HOA statutes and your community's governing documents.
     </p>
     </body></html>
@@ -162,7 +162,7 @@ def _proxy_status_html(proxy: dict, event: str) -> str:
     <p>{body}</p>
     <p><a href="https://hoaware.app/my-proxies">View your proxies</a></p>
     <hr>
-    <p style="font-size:12px;color:#666">HOAware — Not legal advice.</p>
+    <p style="font-size:12px;color:#666">HOAproxy — Not legal advice.</p>
     </body></html>
     """
 
@@ -182,7 +182,7 @@ def _delegate_notification_html(proxy: dict, event: str) -> str:
     <p>{body}</p>
     <p><a href="https://hoaware.app/delegate-dashboard">View your delegate dashboard</a></p>
     <hr>
-    <p style="font-size:12px;color:#666">HOAware — Not legal advice.</p>
+    <p style="font-size:12px;color:#666">HOAproxy — Not legal advice.</p>
     </body></html>
     """
 
@@ -267,18 +267,18 @@ def send_verification_email(*, email: str, token: str, base_url: str) -> bool:
     verify_url = f"{base_url.rstrip('/')}/verify-email?token={token}"
     html = f"""
     <html><body style="font-family:sans-serif;max-width:600px;margin:0 auto">
-    <h2>Verify your HOAware email address</h2>
+    <h2>Verify your HOAproxy email address</h2>
     <p>Click the link below to verify your email address and activate your account:</p>
     <p><a href="{verify_url}" style="display:inline-block;padding:12px 24px;background:#1662f3;color:#fff;text-decoration:none;border-radius:8px;font-weight:bold">Verify Email Address</a></p>
     <p>Or copy and paste this link: {verify_url}</p>
     <p>This link expires in 24 hours.</p>
     <hr>
-    <p style="font-size:12px;color:#666">If you didn't create a HOAware account, you can ignore this email.</p>
+    <p style="font-size:12px;color:#666">If you didn't create a HOAproxy account, you can ignore this email.</p>
     </body></html>
     """
     return _send_email(
         to=[email],
-        subject="Verify your HOAware email address",
+        subject="Verify your HOAproxy email address",
         html=html,
     )
 

@@ -1,11 +1,11 @@
 # HOA/Condo/Co-op State Law Corpus Plan
 
 Last updated: 2026-02-28
-Owner: HOAware project
+Owner: HOAproxy project
 Status: Planning in progress
 
 ## Goal
-Build a reliable, jurisdiction-based legal corpus so HOAware can consistently answer:
+Build a reliable, jurisdiction-based legal corpus so HOAproxy can consistently answer:
 
 1. What association documents/records are available to homeowners, and what legal controls limit sharing/use of those records?
 2. What are the rules for proxy voting (validity, assignment, directed vs. undirected proxies, recording/retention, revocation, scope, and meeting use)?

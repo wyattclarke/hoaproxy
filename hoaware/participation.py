@@ -1,4 +1,4 @@
-"""Participation tracking module for HOAware.
+"""Participation tracking module for HOAproxy.
 
 Provides functions for recording meeting attendance/voting data and
 computing the "magic number" — how many proxies could swing a typical vote.
