@@ -78,7 +78,10 @@
             '<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap">' +
             '<div><strong>' + escapeHtml(p.grantor_name || "Grantor") + '</strong> ' +
             '<span class="badge ' + p.status + '">' + p.status + '</span></div>' +
-            '<div class="meta">' + escapeHtml(p.hoa_name || "") + '</div></div>' +
+            '<div style="display:flex;gap:8px;align-items:center">' +
+            '<div class="meta">' + escapeHtml(p.hoa_name || "") + '</div>' +
+            (['signed','delivered'].includes(p.status) ? '<button class="btn" style="padding:5px 12px;font-size:0.82rem" onclick="printProxy(' + p.id + ')">Print for Meeting</button>' : '') +
+            '</div></div>' +
             '<div class="meta">' + p.direction +
             (p.for_meeting_date ? ' | Meeting: ' + p.for_meeting_date : '') +
             ' | Created: ' + (p.created_at || '') + '</div></div>'
@@ -88,6 +91,23 @@
         }
       }
 
+      async function printProxy(proxyId) {
+        try {
+          const token = Auth.getToken();
+          const resp = await fetch("/proxies/" + proxyId + "/form", {
+            headers: { Authorization: "Bearer " + token },
+          });
+          if (!resp.ok) throw new Error("Could not load form");
+          const html = await resp.text();
+          const win = window.open("", "_blank");
+          win.document.write(html);
+          win.document.close();
+          win.focus();
+          win.print();
+        } catch (err) { alert(err.message); }
+      }
+
+      window.printProxy = printProxy;
       load();
     </script>
   </body>

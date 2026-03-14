@@ -1861,6 +1861,11 @@ def sign_proxy(proxy_id: int, request: Request, user: dict = Depends(get_current
         raise HTTPException(status_code=403, detail="Only the grantor can sign this proxy")
     if proxy["status"] != "draft":
         raise HTTPException(status_code=400, detail=f"Proxy is already {proxy['status']}")
+    if not user.get("verified_at"):
+        raise HTTPException(
+            status_code=403,
+            detail="Email verification required before signing. Please verify your email address.",
+        )
 
     if settings.documenso_api_key:
         # Documenso path: create document, store signing URL, redirect user
@@ -1951,6 +1956,53 @@ def get_proxy_stats(hoa_id: int):
     with db.get_connection(settings.db_path) as conn:
         stats = db.count_proxies_for_hoa(conn, hoa_id)
     return ProxyStatsResponse(**stats)
+
+
+@app.get("/hoas/{hoa_id}/proxy-status")
+def get_hoa_proxy_status(hoa_id: int, user: dict = Depends(get_current_user)):
+    """Return the proxy_status and proxy_citation for an HOA as determined from its documents."""
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        hoa = db.get_hoa_by_id(conn, hoa_id)
+    if not hoa:
+        raise HTTPException(status_code=404, detail="HOA not found")
+    return {
+        "hoa_id": hoa_id,
+        "proxy_status": hoa.get("proxy_status") or "unknown",
+        "proxy_citation": hoa.get("proxy_citation"),
+    }
+
+
+@app.get("/verify-proxy", include_in_schema=False)
+def verify_proxy_page() -> FileResponse:
+    return _serve_static_page("verify-proxy.html")
+
+
+@app.get("/proxies/verify/{code}")
+def verify_proxy_by_code(code: str):
+    """Public endpoint — no auth required. Returns verification info for a signed proxy."""
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        proxy = db.get_proxy_by_verification_code(conn, code)
+    if not proxy:
+        raise HTTPException(status_code=404, detail="Verification code not found")
+    # Return only non-PII fields; show first name + last initial for grantor privacy
+    grantor_name: str = proxy.get("grantor_name") or ""
+    parts = grantor_name.split()
+    display_grantor = (
+        f"{parts[0]} {parts[-1][0]}." if len(parts) >= 2 else grantor_name
+    )
+    return {
+        "hoa_name": proxy.get("hoa_name"),
+        "grantor_display": display_grantor,
+        "delegate_name": proxy.get("delegate_name"),
+        "direction": proxy.get("direction"),
+        "for_meeting_date": proxy.get("for_meeting_date"),
+        "signed_at": proxy.get("signed_at"),
+        "status": proxy.get("status"),
+        "form_hash": proxy.get("form_hash"),
+        "verification_code": code,
+    }
 
 
 # ---------------------------------------------------------------------------

@@ -72,9 +72,10 @@
             '<div class="card"><div class="proxy-header">' +
             '<div><strong>' + escapeHtml(p.hoa_name || "HOA") + '</strong> ' +
             '<span class="badge ' + p.status + '">' + p.status + '</span></div>' +
-            '<div>' +
-            (p.status === 'draft' ? '<a class="link" href="/proxy-sign/' + p.id + '">Sign</a> ' : '') +
-            (p.status === 'signed' ? '<a class="link" href="/proxy-sign/' + p.id + '">Deliver</a> ' : '') +
+            '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
+            (p.status === 'draft' ? '<a class="link" href="/proxy-sign/' + p.id + '">Sign</a>' : '') +
+            (p.status === 'signed' ? '<a class="link" href="/proxy-sign/' + p.id + '">Deliver</a>' : '') +
+            (['signed','delivered'].includes(p.status) ? '<button class="btn" style="padding:5px 10px;font-size:0.8rem" onclick="printProxy(' + p.id + ')">Print</button>' : '') +
             (['draft','signed','delivered'].includes(p.status) ? '<button class="btn danger" onclick="revokeProxy(' + p.id + ')">Revoke</button>' : '') +
             '</div></div>' +
             '<div class="meta">Delegate: ' + escapeHtml(p.delegate_name || "Unknown") + ' | ' + p.direction +
@@ -87,6 +88,22 @@
         }
       }
 
+      async function printProxy(proxyId) {
+        try {
+          const token = Auth.getToken();
+          const resp = await fetch("/proxies/" + proxyId + "/form", {
+            headers: { Authorization: "Bearer " + token },
+          });
+          if (!resp.ok) throw new Error("Could not load form");
+          const html = await resp.text();
+          const win = window.open("", "_blank");
+          win.document.write(html);
+          win.document.close();
+          win.focus();
+          win.print();
+        } catch (err) { alert(err.message); }
+      }
+
       async function revokeProxy(proxyId) {
         if (!confirm("Are you sure you want to revoke this proxy?")) return;
         try {
@@ -97,7 +114,7 @@
         } catch (err) { alert(err.message); }
       }
 
-      // Make revokeProxy globally available
+      window.printProxy = printProxy;
       window.revokeProxy = revokeProxy;
       loadProxies();
     </script>

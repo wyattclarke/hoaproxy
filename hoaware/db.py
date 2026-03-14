@@ -319,6 +319,11 @@ def get_connection(db_path: Path) -> sqlite3.Connection:
     _ensure_table_column(conn, "proposals", "lat", "REAL")
     _ensure_table_column(conn, "proposals", "lng", "REAL")
     _ensure_table_column(conn, "proposals", "location_description", "TEXT")
+    # Proxy validity + verification
+    _ensure_table_column(conn, "hoas", "proxy_status", "TEXT DEFAULT 'unknown'")
+    _ensure_table_column(conn, "hoas", "proxy_citation", "TEXT")
+    _ensure_table_column(conn, "proxy_assignments", "verification_code", "TEXT")
+    _ensure_table_column(conn, "proxy_assignments", "form_hash", "TEXT")
     return conn
 
 
@@ -2245,6 +2250,48 @@ def list_cosigners(conn: sqlite3.Connection, proposal_id: int) -> list[dict]:
         (int(proposal_id),),
     ).fetchall()
     return [{"user_id": int(r["user_id"]), "cosigned_at": str(r["created_at"])} for r in rows]
+
+
+# ---------------------------------------------------------------------------
+# HOA proxy status (from document ingestion)
+# ---------------------------------------------------------------------------
+
+def get_hoa_by_id(conn: sqlite3.Connection, hoa_id: int) -> dict | None:
+    row = conn.execute("SELECT * FROM hoas WHERE id = ?", (int(hoa_id),)).fetchone()
+    return dict(row) if row else None
+
+
+def set_hoa_proxy_status(
+    conn: sqlite3.Connection,
+    hoa_id: int,
+    status: str,
+    citation: str | None = None,
+) -> None:
+    """Update the HOA's proxy_status determined from governing document analysis."""
+    conn.execute(
+        "UPDATE hoas SET proxy_status = ?, proxy_citation = ? WHERE id = ?",
+        (status, citation, int(hoa_id)),
+    )
+    conn.commit()
+
+
+def get_proxy_by_verification_code(conn: sqlite3.Connection, code: str) -> dict | None:
+    """Look up a signed proxy by its verification code. Returns None if not found."""
+    row = conn.execute(
+        """
+        SELECT pa.*,
+               gu.display_name AS grantor_name,
+               du.display_name AS delegate_name,
+               h.name AS hoa_name
+        FROM proxy_assignments pa
+        JOIN users gu ON gu.id = pa.grantor_user_id
+        JOIN users du ON du.id = pa.delegate_user_id
+        JOIN hoas h ON h.id = pa.hoa_id
+        WHERE pa.verification_code = ?
+        """,
+        (code,),
+    ).fetchone()
+    return dict(row) if row else None
 
 
 def create_upvote(conn: sqlite3.Connection, *, proposal_id: int, user_id: int) -> None:

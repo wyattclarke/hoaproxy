@@ -18,6 +18,7 @@ import json
 import logging
 from datetime import datetime, timezone
 
+
 import httpx
 from bs4 import BeautifulSoup
 
@@ -199,6 +200,48 @@ def verify_webhook_signature(payload_bytes: bytes, signature_header: str | None)
 # Click-to-sign (fallback)
 # ---------------------------------------------------------------------------
 
+def _compute_form_hash(form_html: str) -> str:
+    """SHA-256 hash of the original form HTML (before stamp injection)."""
+    return hashlib.sha256((form_html or "").encode()).hexdigest()
+
+
+def _compute_verification_code(proxy_id: int, signed_at: str, form_hash: str) -> str:
+    """Deterministic 20-char hex verification code stored on the proxy record."""
+    raw = f"{proxy_id}:{signed_at}:{form_hash}"
+    return hashlib.sha256(raw.encode()).hexdigest()[:20]
+
+
+def _inject_esig_stamp(
+    form_html: str,
+    grantor_name: str,
+    ip_address: str | None,
+    signed_at: str,
+    verification_code: str,
+    base_url: str = "",
+) -> str:
+    """Inject an electronic signature stamp into the proxy form HTML signature block."""
+    ip_line = f"IP Address: {ip_address}<br>" if ip_address else ""
+    verify_url = f"{base_url.rstrip('/')}/verify-proxy?code={verification_code}"
+    stamp_html = (
+        f'<div class="esig-stamp">'
+        f"<strong>&#10003; Electronically Signed via HOAproxy</strong><br>"
+        f"Signed by: {grantor_name}<br>"
+        f"Date/Time: {signed_at}<br>"
+        f"{ip_line}"
+        f"Method: Click-to-sign &#8212; ESIGN Act (15 U.S.C. &sect; 7001) compliant<br>"
+        f"Verification code: <strong>{verification_code}</strong><br>"
+        f"Verify at: {verify_url}"
+        f"</div>"
+    )
+    soup = BeautifulSoup(form_html or "", "html.parser")
+    sig_block = soup.find(class_="signature-block")
+    if sig_block:
+        sig_block.append(BeautifulSoup(stamp_html, "html.parser"))
+        return str(soup)
+    # Fallback: append before </body>
+    return form_html.replace("</body>", stamp_html + "</body>") if form_html else form_html
+
+
 def record_signature(
     proxy_id: int,
     user_id: int,
@@ -221,7 +264,24 @@ def record_signature(
             return False
 
         now = datetime.now(timezone.utc).isoformat()
-        db.update_proxy_status(conn, proxy_id, "signed", signed_at=now)
+        original_html = proxy.get("form_html") or ""
+        form_hash = _compute_form_hash(original_html)
+        verification_code = _compute_verification_code(proxy_id, now, form_hash)
+        signed_form_html = _inject_esig_stamp(
+            original_html,
+            grantor_name=proxy.get("grantor_name") or proxy.get("grantor_email") or "Grantor",
+            ip_address=ip_address,
+            signed_at=now,
+            verification_code=verification_code,
+            base_url=settings.app_base_url,
+        )
+        db.update_proxy_status(
+            conn, proxy_id, "signed",
+            signed_at=now,
+            form_html=signed_form_html,
+            verification_code=verification_code,
+            form_hash=form_hash,
+        )
         db.create_proxy_audit(
             conn,
             proxy_id=proxy_id,
@@ -232,6 +292,8 @@ def record_signature(
                 "ip_address": ip_address,
                 "user_agent": user_agent,
                 "timestamp": now,
+                "form_hash": form_hash,
+                "verification_code": verification_code,
                 "consent": (
                     "By clicking 'Sign,' I affirm my identity and intend this "
                     "to constitute my electronic signature under the ESIGN Act "

@@ -48,6 +48,12 @@
         <label for="hoaSelect">HOA</label>
         <select id="hoaSelect"><option value="">Loading...</option></select>
 
+        <div id="proxyNotAllowed" style="display:none;background:#fff0f0;border:1px solid #f0b4b4;border-radius:10px;padding:14px;margin:12px 0;font-size:0.9rem;line-height:1.5">
+          <strong style="color:var(--danger)">Proxy voting not available for this HOA.</strong>
+          <div id="proxyCitation" style="margin-top:6px;color:var(--ink)"></div>
+        </div>
+
+        <div id="proxyForm">
         <label for="delegateSelect">Delegate (Proxy Holder)</label>
         <select id="delegateSelect"><option value="">Select HOA first</option></select>
 
@@ -75,6 +81,7 @@
 
         <button class="btn" id="createBtn" type="button">Create Proxy</button>
         <div id="status" class="status"></div>
+        </div><!-- end proxyForm -->
       </div>
     </main>
     <script src="/static/js/auth.js"></script>
@@ -89,6 +96,9 @@
       const addItemBtn = document.getElementById("addItemBtn");
       const createBtn = document.getElementById("createBtn");
       const status = document.getElementById("status");
+      const proxyNotAllowed = document.getElementById("proxyNotAllowed");
+      const proxyCitation = document.getElementById("proxyCitation");
+      const proxyForm = document.getElementById("proxyForm");
       const params = new URLSearchParams(window.location.search);
 
       const VOTE_OPTIONS = ["For", "Against", "Abstain", "Delegate's Discretion"];
@@ -152,12 +162,27 @@
 
       async function loadDelegates() {
         const hoaId = hoaSelect.value;
+        proxyNotAllowed.style.display = "none";
+        proxyForm.style.display = "";
         if (!hoaId) { delegateSelect.innerHTML = '<option value="">Select HOA first</option>'; return; }
         try {
-          const [delegates, me] = await Promise.all([
+          const [delegates, me, proxyStatus] = await Promise.all([
             Auth.fetchJson("/hoas/" + hoaId + "/delegates"),
             Auth.getCachedUser() ? Promise.resolve(Auth.getCachedUser()) : Auth.fetchJson("/auth/me"),
+            Auth.fetchJson("/hoas/" + hoaId + "/proxy-status"),
           ]);
+
+          if (proxyStatus.proxy_status === "not_allowed") {
+            proxyNotAllowed.style.display = "";
+            proxyForm.style.display = "none";
+            if (proxyStatus.proxy_citation) {
+              proxyCitation.innerHTML = '<em>Governing document excerpt:</em> &ldquo;' +
+                proxyStatus.proxy_citation.replace(/&/g,"&amp;").replace(/</g,"&lt;") + '&rdquo;';
+            } else {
+              proxyCitation.textContent = "This HOA\u2019s governing documents do not permit proxy voting.";
+            }
+            return;
+          }
           const myUserId = me && me.user_id;
           // Filter out the current user — cannot assign proxy to yourself
           const eligible = delegates.filter(d => d.user_id !== myUserId);

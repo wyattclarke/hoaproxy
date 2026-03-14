@@ -45,6 +45,10 @@
           You may revoke this proxy at any time before the meeting from <a href="/my-proxies" style="color:var(--accent);font-weight:700;text-decoration:none">My Proxies</a>.
         </div>
 
+        <div id="verifyEmailNotice" style="display:none;background:#fff3e0;border:1px solid #f0c87a;border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:0.88rem;line-height:1.5">
+          <strong>Email verification required.</strong> Please <a href="/verify-email" style="color:var(--accent);font-weight:700">verify your email address</a> before signing this proxy.
+        </div>
+
         <div class="form-preview">
           <iframe id="formFrame" srcdoc="<p>Loading proxy form...</p>"></iframe>
         </div>
@@ -59,6 +63,7 @@
         <div class="btn-row">
           <button class="btn" id="signBtn" type="button" disabled>Sign Proxy</button>
           <button class="btn secondary" id="deliverBtn" type="button" style="display:none">Deliver to Board</button>
+          <button class="btn secondary" id="printBtn" type="button" style="display:none">Print Form</button>
         </div>
         <div id="status" class="status"></div>
         <div style="margin-top:12px"><a href="/my-proxies" style="color:var(--accent);font-weight:700;text-decoration:none">View all my proxies</a></div>
@@ -73,6 +78,7 @@
       const consentBlock = document.getElementById("consentBlock");
       const signBtn = document.getElementById("signBtn");
       const deliverBtn = document.getElementById("deliverBtn");
+      const printBtn = document.getElementById("printBtn");
       const statusBadge = document.getElementById("statusBadge");
       const proxyMeta = document.getElementById("proxyMeta");
       const status = document.getElementById("status");
@@ -87,6 +93,11 @@
       async function loadProxy() {
         try {
           const id = getProxyId();
+          const me = await Auth.fetchJson("/auth/me");
+          if (!me.email_verified) {
+            document.getElementById("verifyEmailNotice").style.display = "";
+            signBtn.disabled = true;
+          }
           const proxy = await Auth.fetchJson("/proxies/" + id);
 
           proxyMeta.textContent = (proxy.hoa_name || "HOA") + " | " +
@@ -110,8 +121,10 @@
           }
           if (proxy.status === "signed") {
             deliverBtn.style.display = "";
+            printBtn.style.display = "";
           }
           if (proxy.status === "delivered") {
+            printBtn.style.display = "";
             status.className = "status ok";
             status.textContent = "This proxy has been delivered.";
           }
@@ -145,8 +158,28 @@
         } finally { deliverBtn.disabled = false; }
       }
 
+      async function doPrint() {
+        try {
+          const token = Auth.getToken();
+          const resp = await fetch("/proxies/" + getProxyId() + "/form", {
+            headers: { Authorization: "Bearer " + token },
+          });
+          if (!resp.ok) throw new Error("Could not load form");
+          const html = await resp.text();
+          const win = window.open("", "_blank");
+          win.document.write(html);
+          win.document.close();
+          win.focus();
+          win.print();
+        } catch (err) {
+          status.className = "status error";
+          status.textContent = err.message;
+        }
+      }
+
       signBtn.addEventListener("click", doSign);
       deliverBtn.addEventListener("click", doDeliver);
+      printBtn.addEventListener("click", doPrint);
       loadProxy();
     </script>
   </body>

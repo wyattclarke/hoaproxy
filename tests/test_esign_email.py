@@ -55,6 +55,7 @@ def _setup_users_and_hoa():
         db.create_membership_claim(conn, user_id=grantor_reg["user_id"], hoa_id=hoa_id)
         db.create_membership_claim(conn, user_id=delegate_reg["user_id"], hoa_id=hoa_id)
         db.create_delegate(conn, user_id=delegate_reg["user_id"], hoa_id=hoa_id, bio="Test delegate")
+        db.mark_user_verified(conn, grantor_reg["user_id"])
 
     return grantor_headers, delegate_headers, hoa_id, delegate_reg["user_id"]
 

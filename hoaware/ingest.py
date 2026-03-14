@@ -24,8 +24,65 @@ from .vector_store import (
     upsert_chunks,
 )
 
+import json as _json
+
 logger = logging.getLogger(__name__)
 console = Console()
+
+_PROXY_KEYWORDS = {"proxy", "proxies", "absentee ballot", "vote in person", "in-person voting"}
+
+
+def _detect_proxy_rules(
+    chunks: list,
+    openai_client,
+    hoa_id: int,
+    conn,
+) -> None:
+    """Scan document chunks for proxy-related language and update HOA proxy_status.
+
+    Uses GPT-4o-mini to classify whether the governing documents allow, prohibit,
+    or are silent on proxy voting. Only runs when proxy-relevant text is found.
+    Updates hoas.proxy_status and hoas.proxy_citation in-place.
+    """
+    relevant = [
+        c.text for c in chunks
+        if any(kw in c.text.lower() for kw in _PROXY_KEYWORDS)
+    ]
+    if not relevant:
+        return
+
+    excerpt = "\n\n---\n\n".join(relevant[:6])  # cap at 6 chunks to limit tokens
+    prompt = (
+        "You are analyzing excerpts from HOA (Homeowners Association) governing documents "
+        "(bylaws, CC&Rs, or rules). Based only on these excerpts, determine whether proxy "
+        "voting is:\n"
+        '- "allowed": The documents explicitly permit members to vote by proxy\n'
+        '- "not_allowed": The documents explicitly prohibit or restrict proxy voting, '
+        "or require in-person voting\n"
+        '- "unknown": The excerpts don\'t clearly address proxy voting\n\n'
+        f"Excerpts:\n{excerpt}\n\n"
+        'Respond with JSON only, no other text: '
+        '{"status": "allowed" | "not_allowed" | "unknown", '
+        '"citation": "exact quote from the text that supports your determination, or null"}'
+    )
+    try:
+        resp = openai_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0,
+            max_tokens=200,
+        )
+        raw = resp.choices[0].message.content or ""
+        # Strip markdown code fences if present
+        raw = raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+        result = _json.loads(raw)
+        status = result.get("status", "unknown")
+        citation = result.get("citation") or None
+        if status in ("allowed", "not_allowed", "unknown"):
+            db.set_hoa_proxy_status(conn, hoa_id, status, citation)
+            logger.info("HOA %d proxy_status set to '%s'", hoa_id, status)
+    except Exception:
+        logger.exception("Proxy rule detection failed for HOA %d", hoa_id)
 
 
 @dataclass
@@ -120,6 +177,8 @@ def _ingest_pdf(
         delete_points(qdrant_client, collection, old_point_ids)
         db.replace_chunks(conn, doc_id, [])
         return True
+
+    _detect_proxy_rules(chunks, openai_client, hoa_id, conn)
 
     embeddings = batch_embeddings(
         [chunk.text for chunk in chunks],

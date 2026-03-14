@@ -58,6 +58,11 @@ def _setup_users_and_hoa():
     # Delegate registers as delegate
     client.post("/delegates/register", json={"hoa_id": hoa_id, "bio": "Reform!"}, headers=delegate_headers)
 
+    # Mark grantor email as verified (required to sign proxies)
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        db.mark_user_verified(conn, grantor_reg["user_id"])
+
     return grantor_headers, delegate_headers, hoa_id, delegate_reg["user_id"]
 
 
@@ -186,3 +191,132 @@ def test_proxy_stats():
     assert resp.status_code == 200
     data = resp.json()
     assert data["total"] >= 1
+
+
+# ---------------------------------------------------------------------------
+# Email verification enforcement
+# ---------------------------------------------------------------------------
+
+def test_sign_requires_email_verification():
+    """Unverified grantor cannot sign a proxy."""
+    grantor_reg = client.post("/auth/register", json={
+        "email": "unverified@example.com", "password": "password1234", "display_name": "Unverified",
+    }).json()
+    grantor_h = {"Authorization": f"Bearer {grantor_reg['token']}"}
+
+    delegate_reg = client.post("/auth/register", json={
+        "email": "delegate2@example.com", "password": "password1234", "display_name": "Delegate2",
+    }).json()
+
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        hoa_id = db.get_or_create_hoa(conn, "Unverified Test HOA")
+        db.create_membership_claim(conn, user_id=grantor_reg["user_id"], hoa_id=hoa_id)
+        db.create_membership_claim(conn, user_id=delegate_reg["user_id"], hoa_id=hoa_id)
+        db.create_delegate(conn, user_id=delegate_reg["user_id"], hoa_id=hoa_id, bio="Test")
+        # Deliberately do NOT mark grantor as verified
+
+    proxy = client.post("/proxies", json={
+        "delegate_user_id": delegate_reg["user_id"], "hoa_id": hoa_id,
+    }, headers=grantor_h).json()
+
+    resp = client.post(f"/proxies/{proxy['id']}/sign", json={}, headers=grantor_h)
+    assert resp.status_code == 403
+    assert "verification" in resp.json()["detail"].lower()
+
+
+# ---------------------------------------------------------------------------
+# Verification code + public verify endpoint
+# ---------------------------------------------------------------------------
+
+def test_signed_proxy_has_verification_code():
+    """Signing a proxy generates a verification_code stored on the record."""
+    grantor_h, _, hoa_id, delegate_uid = _setup_users_and_hoa()
+    proxy = client.post("/proxies", json={
+        "delegate_user_id": delegate_uid, "hoa_id": hoa_id,
+    }, headers=grantor_h).json()
+    client.post(f"/proxies/{proxy['id']}/sign", json={}, headers=grantor_h)
+
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        record = db.get_proxy_assignment(conn, proxy["id"])
+    assert record["verification_code"] is not None
+    assert record["form_hash"] is not None
+    assert len(record["verification_code"]) == 20
+
+
+def test_public_verify_endpoint():
+    """Public verify endpoint returns correct info; no auth required."""
+    grantor_h, _, hoa_id, delegate_uid = _setup_users_and_hoa()
+    proxy = client.post("/proxies", json={
+        "delegate_user_id": delegate_uid, "hoa_id": hoa_id,
+        "for_meeting_date": "2026-08-01",
+    }, headers=grantor_h).json()
+    client.post(f"/proxies/{proxy['id']}/sign", json={}, headers=grantor_h)
+
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        record = db.get_proxy_assignment(conn, proxy["id"])
+    code = record["verification_code"]
+
+    resp = client.get(f"/proxies/verify/{code}")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "signed"
+    assert data["hoa_name"] == "Proxy Test HOA"
+    assert data["for_meeting_date"] == "2026-08-01"
+    assert data["verification_code"] == code
+    assert data["form_hash"] == record["form_hash"]
+    # Grantor name is privacy-masked (first name + last initial)
+    assert "Grantor" in data["grantor_display"]
+
+
+def test_verify_invalid_code_returns_404():
+    resp = client.get("/proxies/verify/nonexistentcode123")
+    assert resp.status_code == 404
+
+
+def test_signed_form_contains_verification_code():
+    """The stored form HTML includes the verification code for printing."""
+    grantor_h, _, hoa_id, delegate_uid = _setup_users_and_hoa()
+    proxy = client.post("/proxies", json={
+        "delegate_user_id": delegate_uid, "hoa_id": hoa_id,
+    }, headers=grantor_h).json()
+    client.post(f"/proxies/{proxy['id']}/sign", json={}, headers=grantor_h)
+
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        record = db.get_proxy_assignment(conn, proxy["id"])
+    assert record["verification_code"] in (record["form_html"] or "")
+
+
+# ---------------------------------------------------------------------------
+# HOA proxy status
+# ---------------------------------------------------------------------------
+
+def test_hoa_proxy_status_defaults_unknown():
+    grantor_h, _, hoa_id, _ = _setup_users_and_hoa()
+    resp = client.get(f"/hoas/{hoa_id}/proxy-status", headers=grantor_h)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["proxy_status"] == "unknown"
+    assert data["proxy_citation"] is None
+
+
+def test_set_and_get_hoa_proxy_status():
+    grantor_h, _, hoa_id, _ = _setup_users_and_hoa()
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        db.set_hoa_proxy_status(conn, hoa_id, "not_allowed", "No proxy voting shall be permitted.")
+
+    resp = client.get(f"/hoas/{hoa_id}/proxy-status", headers=grantor_h)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["proxy_status"] == "not_allowed"
+    assert "No proxy voting" in data["proxy_citation"]
+
+
+def test_proxy_status_endpoint_requires_auth():
+    _, _, hoa_id, _ = _setup_users_and_hoa()
+    resp = client.get(f"/hoas/{hoa_id}/proxy-status")
+    assert resp.status_code == 401
