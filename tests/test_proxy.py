@@ -36,13 +36,13 @@ def _setup_users_and_hoa():
     """
     # Register grantor
     grantor_reg = client.post("/auth/register", json={
-        "email": "grantor@example.com", "password": "password1234", "display_name": "Grantor",
+        "email": "grantor@example.com", "password": "password1234", "display_name": "Grantor Owner",
     }).json()
     grantor_headers = {"Authorization": f"Bearer {grantor_reg['token']}"}
 
     # Register delegate user
     delegate_reg = client.post("/auth/register", json={
-        "email": "delegate@example.com", "password": "password1234", "display_name": "Delegate",
+        "email": "delegate@example.com", "password": "password1234", "display_name": "Delegate Holder",
     }).json()
     delegate_headers = {"Authorization": f"Bearer {delegate_reg['token']}"}
 
@@ -141,6 +141,35 @@ def test_revoke_already_revoked_fails():
     assert resp.status_code == 400
 
 
+def test_cannot_create_second_active_proxy_for_same_hoa():
+    grantor_h, _, hoa_id, delegate_uid = _setup_users_and_hoa()
+    first = client.post("/proxies", json={
+        "delegate_user_id": delegate_uid, "hoa_id": hoa_id,
+    }, headers=grantor_h)
+    assert first.status_code == 200
+
+    resp = client.post("/proxies", json={
+        "delegate_user_id": delegate_uid, "hoa_id": hoa_id,
+    }, headers=grantor_h)
+    assert resp.status_code == 409
+    assert "active proxy" in resp.json()["detail"].lower()
+
+
+def test_can_create_new_proxy_after_revoking_existing_one():
+    grantor_h, _, hoa_id, delegate_uid = _setup_users_and_hoa()
+    first = client.post("/proxies", json={
+        "delegate_user_id": delegate_uid, "hoa_id": hoa_id,
+    }, headers=grantor_h).json()
+    revoke = client.post(f"/proxies/{first['id']}/revoke", json={}, headers=grantor_h)
+    assert revoke.status_code == 200
+
+    resp = client.post("/proxies", json={
+        "delegate_user_id": delegate_uid, "hoa_id": hoa_id,
+    }, headers=grantor_h)
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "draft"
+
+
 def test_full_lifecycle():
     """draft → signed → delivered lifecycle."""
     grantor_h, delegate_h, hoa_id, delegate_uid = _setup_users_and_hoa()
@@ -198,12 +227,12 @@ def test_proxy_stats():
 def test_sign_requires_email_verification():
     """Unverified grantor cannot sign a proxy."""
     grantor_reg = client.post("/auth/register", json={
-        "email": "unverified@example.com", "password": "password1234", "display_name": "Unverified",
+        "email": "unverified@example.com", "password": "password1234", "display_name": "Una Verified",
     }).json()
     grantor_h = {"Authorization": f"Bearer {grantor_reg['token']}"}
 
     delegate_reg = client.post("/auth/register", json={
-        "email": "delegate2@example.com", "password": "password1234", "display_name": "Delegate2",
+        "email": "delegate2@example.com", "password": "password1234", "display_name": "Delegate Two",
     }).json()
 
     settings = load_settings()
@@ -272,6 +301,57 @@ def test_public_verify_endpoint():
 def test_verify_invalid_code_returns_404():
     resp = client.get("/proxies/verify/nonexistentcode123")
     assert resp.status_code == 404
+
+
+def test_create_proxy_requires_grantor_full_name():
+    grantor_reg = client.post("/auth/register", json={
+        "email": "singlegrantor@example.com", "password": "password1234", "display_name": "Grantor",
+    }).json()
+    grantor_h = {"Authorization": f"Bearer {grantor_reg['token']}"}
+
+    delegate_reg = client.post("/auth/register", json={
+        "email": "fullname_delegate@example.com", "password": "password1234", "display_name": "Delegate Person",
+    }).json()
+    delegate_h = {"Authorization": f"Bearer {delegate_reg['token']}"}
+
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        hoa_id = db.get_or_create_hoa(conn, "Name Gate HOA")
+        db.create_membership_claim(conn, user_id=grantor_reg["user_id"], hoa_id=hoa_id)
+        db.create_membership_claim(conn, user_id=delegate_reg["user_id"], hoa_id=hoa_id)
+        db.create_delegate(conn, user_id=delegate_reg["user_id"], hoa_id=hoa_id, bio="Test")
+        db.mark_user_verified(conn, grantor_reg["user_id"])
+
+    resp = client.post("/proxies", json={
+        "delegate_user_id": delegate_reg["user_id"], "hoa_id": hoa_id,
+    }, headers=grantor_h)
+    assert resp.status_code == 400
+    assert "full first and last name" in resp.json()["detail"].lower()
+
+
+def test_create_proxy_requires_delegate_full_name():
+    grantor_reg = client.post("/auth/register", json={
+        "email": "fullgrantor@example.com", "password": "password1234", "display_name": "Grantor Person",
+    }).json()
+    grantor_h = {"Authorization": f"Bearer {grantor_reg['token']}"}
+
+    delegate_reg = client.post("/auth/register", json={
+        "email": "singledelegate@example.com", "password": "password1234", "display_name": "Delegate",
+    }).json()
+
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        hoa_id = db.get_or_create_hoa(conn, "Delegate Name Gate HOA")
+        db.create_membership_claim(conn, user_id=grantor_reg["user_id"], hoa_id=hoa_id)
+        db.create_membership_claim(conn, user_id=delegate_reg["user_id"], hoa_id=hoa_id)
+        db.create_delegate(conn, user_id=delegate_reg["user_id"], hoa_id=hoa_id, bio="Test")
+        db.mark_user_verified(conn, grantor_reg["user_id"])
+
+    resp = client.post("/proxies", json={
+        "delegate_user_id": delegate_reg["user_id"], "hoa_id": hoa_id,
+    }, headers=grantor_h)
+    assert resp.status_code == 400
+    assert "selected delegate must have a full first and last name" in resp.json()["detail"].lower()
 
 
 def test_signed_form_contains_verification_code():

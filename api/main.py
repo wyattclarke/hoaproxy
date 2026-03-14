@@ -318,6 +318,15 @@ class UniversalLookupResponse(BaseModel):
 class UploadResponse(BaseModel):
     hoa: str
     saved_files: List[str]
+
+
+def _is_full_name(value: str | None) -> bool:
+    if not value:
+        return False
+    parts = [part for part in re.split(r"\s+", value.strip()) if part]
+    if len(parts) < 2:
+        return False
+    return all(any(ch.isalpha() for ch in part) for part in parts[:2])
     indexed: int
     skipped: int
     failed: int
@@ -1691,6 +1700,11 @@ def register_delegate(body: DelegateRegisterRequest, request: Request, user: dic
     settings = load_settings()
     bio = body.bio.strip() if body.bio else None
     contact_email = body.contact_email.strip() if body.contact_email else None
+    if not _is_full_name(user.get("display_name")):
+        raise HTTPException(
+            status_code=400,
+            detail="Delegates must have a full first and last name on their account before registering.",
+        )
     with db.get_connection(settings.db_path) as conn:
         # Must be a member of the HOA
         claim = db.get_membership_claim(conn, user["id"], body.hoa_id)
@@ -1802,11 +1816,22 @@ def create_proxy(body: CreateProxyRequest, request: Request, user: dict = Depend
     _check_rate_limit(request, limit=20)
     from hoaware.proxy_templates import render_proxy_form
     settings = load_settings()
+    if not _is_full_name(user.get("display_name")):
+        raise HTTPException(
+            status_code=400,
+            detail="Proxy grantors must have a full first and last name on their account before creating a proxy.",
+        )
     with db.get_connection(settings.db_path) as conn:
         # Verify grantor is a member of the HOA
         claim = db.get_membership_claim(conn, user["id"], body.hoa_id)
         if not claim:
             raise HTTPException(status_code=403, detail="You must be a member of this HOA to create a proxy")
+        existing_proxy = db.get_active_proxy_for_grantor_hoa(conn, user["id"], body.hoa_id)
+        if existing_proxy:
+            raise HTTPException(
+                status_code=409,
+                detail="You already have an active proxy for this HOA. Revoke it before creating another.",
+            )
         # Verify delegate exists for this HOA
         delegate_delegate = None
         delegates = db.list_delegates_for_hoa(conn, body.hoa_id)
@@ -1832,6 +1857,11 @@ def create_proxy(body: CreateProxyRequest, request: Request, user: dict = Depend
         # Render form
         grantor = db.get_user_by_id(conn, user["id"])
         delegate_user = db.get_user_by_id(conn, body.delegate_user_id)
+        if not _is_full_name(delegate_user.get("display_name")):
+            raise HTTPException(
+                status_code=400,
+                detail="The selected delegate must have a full first and last name before a proxy can be created.",
+            )
         form_html = render_proxy_form(
             jurisdiction=jurisdiction,
             community_type="hoa",

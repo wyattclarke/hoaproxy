@@ -1876,6 +1876,28 @@ def list_proxies_for_grantor(conn: sqlite3.Connection, user_id: int) -> list[dic
     return [dict(r) for r in rows]
 
 
+def get_active_proxy_for_grantor_hoa(
+    conn: sqlite3.Connection,
+    user_id: int,
+    hoa_id: int,
+) -> dict | None:
+    row = conn.execute(
+        """
+        SELECT pa.*, du.display_name AS delegate_name, h.name AS hoa_name
+        FROM proxy_assignments pa
+        JOIN users du ON du.id = pa.delegate_user_id
+        JOIN hoas h ON h.id = pa.hoa_id
+        WHERE pa.grantor_user_id = ?
+          AND pa.hoa_id = ?
+          AND pa.status NOT IN ('revoked', 'expired', 'purged')
+        ORDER BY pa.created_at DESC
+        LIMIT 1
+        """,
+        (int(user_id), int(hoa_id)),
+    ).fetchone()
+    return dict(row) if row else None
+
+
 def list_proxies_for_delegate(conn: sqlite3.Connection, user_id: int) -> list[dict]:
     rows = conn.execute(
         """

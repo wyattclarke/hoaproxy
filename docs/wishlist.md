@@ -101,6 +101,47 @@ To confirm that a registered user actually lives at the HOA address they claim, 
 
 ---
 
+## User Profile Page
+
+Residents should be able to view and edit their own profile instead of only seeing pieces of their account scattered across registration, dashboard, and proxy flows.
+
+**What it should include:**
+1. Full name and contact email
+2. Claimed HOA memberships and unit numbers
+3. Delegate status by HOA
+4. Email verification state
+5. Future address verification state if postcard verification ships
+
+**Editing actions:**
+1. Update full legal/display name
+2. Update contact email or start an email-change verification flow
+3. Edit unit number on a membership claim
+4. Manage delegate bio and contact info from the same place
+
+**Why it matters:** proxy documents, delegate listings, and proposal attribution all depend on accurate user identity data. Right now there is no obvious self-service place to confirm or correct that information.
+
+---
+
+## Google / Apple OAuth Sign-In
+
+Allow residents to sign in with their Google or Apple account instead of (or in addition to) an email/password.
+
+**What it requires:**
+1. Make `password_hash` nullable in the `users` table (OAuth users won't have one) — additive migration via `_ensure_table_column`
+2. New `user_oauth_providers` table: `(user_id, provider, provider_user_id, created_at)`
+3. Add `authlib` to handle the OAuth 2.0 / OIDC dance
+4. New routes: `GET /auth/oauth/{provider}` (redirect) and `GET /auth/oauth/{provider}/callback` (exchange code → issue JWT)
+5. "Sign in with Google / Apple" buttons on login and register pages
+6. Handle email collision: user registered with email+password then tries OAuth with same email → link accounts
+
+**Effort:**
+- Google: ~2–3 hours (straightforward OAuth 2.0 setup in Google Cloud Console)
+- Apple: ~4–6 hours (Apple's client secret is a short-lived JWT signed with a private key; developer account required)
+
+**Recommendation:** ship Google first, add Apple only if there's demand.
+
+---
+
 ## Manual Legal Corpus: Missing States
 
 Four states could not be scraped automatically because their legislature sites use JavaScript rendering or CAPTCHAs. Their proxy voting rules need to be added manually.

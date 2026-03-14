@@ -28,8 +28,9 @@ def _setup_db():
 
 def _register_and_claim(email, hoa_name):
     """Helper: register user, create HOA, claim membership. Returns (headers, hoa_id)."""
+    first = email.split("@")[0].replace("_", " ").replace(".", " ").title()
     reg = client.post("/auth/register", json={
-        "email": email, "password": "password1234", "display_name": email.split("@")[0],
+        "email": email, "password": "password1234", "display_name": f"{first} Member",
     }).json()
     headers = {"Authorization": f"Bearer {reg['token']}"}
 
@@ -54,7 +55,7 @@ def test_register_delegate():
 
 def test_register_delegate_no_membership():
     reg = client.post("/auth/register", json={
-        "email": "nomem@example.com", "password": "password1234",
+        "email": "nomem@example.com", "password": "password1234", "display_name": "No Member",
     }).json()
     headers = {"Authorization": f"Bearer {reg['token']}"}
     settings = load_settings()
@@ -118,3 +119,18 @@ def test_update_delegate_not_owner():
 
     resp = client.patch(f"/delegates/{delegate_id}", json={"bio": "Hacked"}, headers=headers2)
     assert resp.status_code == 403
+
+
+def test_register_delegate_requires_full_name():
+    reg = client.post("/auth/register", json={
+        "email": "single@example.com", "password": "password1234", "display_name": "Single",
+    }).json()
+    headers = {"Authorization": f"Bearer {reg['token']}"}
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        hoa_id = db.get_or_create_hoa(conn, "Single Name HOA")
+    client.post(f"/user/hoas/{hoa_id}/claim", json={}, headers=headers)
+
+    resp = client.post("/delegates/register", json={"hoa_id": hoa_id}, headers=headers)
+    assert resp.status_code == 400
+    assert "full first and last name" in resp.json()["detail"].lower()

@@ -40,12 +40,12 @@ def _setup_db():
 
 def _setup_users_and_hoa():
     grantor_reg = client.post("/auth/register", json={
-        "email": "grantor@example.com", "password": "password1234", "display_name": "Grantor",
+        "email": "grantor@example.com", "password": "password1234", "display_name": "Grantor Owner",
     }).json()
     grantor_headers = {"Authorization": f"Bearer {grantor_reg['token']}"}
 
     delegate_reg = client.post("/auth/register", json={
-        "email": "delegate@example.com", "password": "password1234", "display_name": "Delegate",
+        "email": "delegate@example.com", "password": "password1234", "display_name": "Delegate Holder",
     }).json()
     delegate_headers = {"Authorization": f"Bearer {delegate_reg['token']}"}
 
