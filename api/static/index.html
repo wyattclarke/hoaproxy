@@ -348,6 +348,14 @@
         grid-template-columns: minmax(420px, 1.25fr) minmax(320px, 1fr);
       }
 
+      .grid > [hidden] {
+        display: none;
+      }
+
+      .grid:has(> [hidden]) {
+        grid-template-columns: 1fr;
+      }
+
       .card {
         border: 1px solid var(--line);
         border-radius: 18px;
@@ -571,7 +579,7 @@
           <div id="map"></div>
         </article>
 
-        <article class="card">
+        <article class="card" id="directoryCard" hidden>
           <h2>HOA Directory</h2>
           <div class="list" id="hoaList"></div>
           <div id="pager" class="pager"></div>
@@ -855,6 +863,17 @@
       let _searchDebounceTimer = null;
 
       async function fetchSummaries() {
+        const directoryCard = document.getElementById("directoryCard");
+        const hasFilter = state.searchQuery || state.stateFilter;
+        if (!hasFilter) {
+          if (directoryCard) directoryCard.hidden = true;
+          state.filtered = [];
+          state.total = 0;
+          renderMarkers();
+          countMeta.textContent = "";
+          return;
+        }
+        if (directoryCard) directoryCard.hidden = false;
         const params = new URLSearchParams();
         if (state.searchQuery) params.set("q", state.searchQuery);
         if (state.stateFilter) params.set("state", state.stateFilter);
