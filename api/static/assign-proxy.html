@@ -23,6 +23,10 @@
       .status { margin-top: 10px; min-height: 1.2em; font-size: 0.9rem; color: var(--muted); }
       .status.ok { color: var(--ok); } .status.error { color: var(--danger); }
       .nav a { color: var(--accent); font-weight: 700; text-decoration: none; font-size: 0.9rem; }
+      .stepper { display: flex; gap: 10px; margin: 16px 0 18px; flex-wrap: wrap; }
+      .step { border: 1px solid var(--line); border-radius: 999px; padding: 7px 12px; background: #f8fbff; color: var(--muted); font-size: 0.83rem; font-weight: 700; }
+      .step.active { border-color: #9ec0ff; background: #eaf2ff; color: var(--ink); }
+      .summary-box { display:none; background:#f7fbf8; border:1px solid #cfe7d7; border-radius:10px; padding:12px 14px; margin-top:14px; font-size:0.9rem; line-height:1.55; color:var(--ink); }
     </style>
   </head>
   <body>
@@ -30,9 +34,14 @@
       <div class="card">
         <a href="/" style="text-decoration:none"><div class="brand"><span class="brand-hoa">HOA</span><span class="brand-proxy">proxy</span></div></a>
         <div style="margin-bottom:16px"><a class="nav" href="/dashboard"><span style="color:var(--accent);font-weight:700;text-decoration:none">Back to Dashboard</span></a></div>
-        <h2>Assign Your Proxy</h2>
+        <h2>Choose Who Can Vote for You</h2>
+        <div class="stepper">
+          <div class="step active">1. Confirm HOA</div>
+          <div class="step active">2. Choose a person who can vote for you</div>
+          <div class="step">3. Review and sign</div>
+        </div>
         <div style="background:#f5f8ff;border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:0.87rem;color:var(--muted);line-height:1.6">
-          Choose a delegate to hold your general proxy. You will review and sign the proxy on the next page before it becomes effective.
+          A proxy lets one trusted person act as your voting representative. On this page, you only need to choose your HOA and the person who can vote for you.
         </div>
 
         <label for="hoaSelect">HOA</label>
@@ -44,13 +53,14 @@
         </div>
 
         <div id="proxyForm">
-        <label for="delegateSelect">Delegate (Proxy Holder)</label>
+        <label for="delegateSelect">Person Who Can Vote for You</label>
         <select id="delegateSelect"><option value="">Select HOA first</option></select>
         <div style="font-size:0.84rem;color:var(--muted);margin-top:8px;line-height:1.5">
-          This creates a general proxy. Meeting-specific instructions are not part of the current workflow.
+          This creates a general proxy. You are choosing one person to act for you unless you later revoke it.
         </div>
+        <div id="selectionSummary" class="summary-box"></div>
 
-        <button class="btn" id="createBtn" type="button">Create Proxy</button>
+        <button class="btn" id="createBtn" type="button">Continue to Review</button>
         <div id="status" class="status"></div>
         </div><!-- end proxyForm -->
       </div>
@@ -66,6 +76,7 @@
       const proxyNotAllowed = document.getElementById("proxyNotAllowed");
       const proxyCitation = document.getElementById("proxyCitation");
       const proxyForm = document.getElementById("proxyForm");
+      const selectionSummary = document.getElementById("selectionSummary");
       const params = new URLSearchParams(window.location.search);
 
       async function loadMyHoas() {
@@ -121,12 +132,28 @@
             const match = eligible.find(d => String(d.id) === pre);
             if (match) delegateSelect.value = match.user_id;
           }
+          updateSummary();
         } catch (err) {
           delegateSelect.innerHTML = '<option value="">Error loading delegates</option>';
         }
       }
 
       hoaSelect.addEventListener("change", loadDelegates);
+      delegateSelect.addEventListener("change", updateSummary);
+
+      function updateSummary() {
+        const hoaName = hoaSelect.options[hoaSelect.selectedIndex] ? hoaSelect.options[hoaSelect.selectedIndex].textContent : "";
+        const delegateName = delegateSelect.options[delegateSelect.selectedIndex] ? delegateSelect.options[delegateSelect.selectedIndex].textContent : "";
+        if (!hoaSelect.value || !delegateSelect.value) {
+          selectionSummary.style.display = "none";
+          selectionSummary.innerHTML = "";
+          return;
+        }
+        selectionSummary.style.display = "block";
+        selectionSummary.innerHTML =
+          "<strong>You are about to choose " + delegateName + " as the person who can vote for you for " + hoaName + ".</strong>" +
+          "<div style='margin-top:6px;color:var(--muted)'>You will review the proxy document and sign it on the next page before it becomes active.</div>";
+      }
 
       async function createProxy() {
         const hoaId = hoaSelect.value;

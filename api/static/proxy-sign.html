@@ -19,6 +19,9 @@
       h1 { margin: 0; font-family: "Space Grotesk", sans-serif; font-size: 2rem; line-height: 1.05; }
       h2 { margin: 0 0 12px; font-family: "Space Grotesk", sans-serif; font-size: 1.2rem; }
       .lede { margin: 10px 0 0; color: var(--muted); font-size: 0.96rem; line-height: 1.55; max-width: 52ch; }
+      .stepper { display: flex; gap: 10px; margin: 18px 0 0; flex-wrap: wrap; }
+      .step { border: 1px solid var(--line); border-radius: 999px; padding: 7px 12px; background: #f8fbff; color: var(--muted); font-size: 0.83rem; font-weight: 700; }
+      .step.active { border-color: #9ec0ff; background: #eaf2ff; color: var(--ink); }
       .meta-strip { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
       .meta-pill { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 999px; padding: 8px 12px; background: #f8fbff; color: var(--ink); font-size: 0.92rem; font-weight: 700; }
       .meta-pill.muted { color: var(--muted); font-weight: 600; }
@@ -55,10 +58,16 @@
         <section>
           <div class="card">
             <a href="/" style="text-decoration:none"><div class="brand"><span class="brand-hoa">HOA</span><span class="brand-proxy">proxy</span></div></a>
-            <h1>Review & Sign Proxy</h1>
+            <h1>Review & Sign</h1>
             <p class="lede">
-              Review the proxy below. Signing approves this exact document.
+              Review the proxy below. Signing means you approve this exact document.
             </p>
+            <div class="stepper">
+              <span class="step">1. Choose representative</span>
+              <span class="step active">2. Review proxy</span>
+              <span class="step active">3. Sign</span>
+              <span class="step">4. Deliver</span>
+            </div>
             <div class="meta-strip">
               <span class="badge draft" id="statusBadge">draft</span>
               <span class="meta-pill" id="grantorPill">Grantor</span>
@@ -81,10 +90,15 @@
         </section>
 
         <aside class="card side-card">
-          <h2>Sign This Proxy</h2>
+          <h2>Finish This Proxy</h2>
 
           <div class="info-box">
             Your signature approves the document shown on this page.
+          </div>
+
+          <div class="info-box" style="margin-top:12px">
+            <strong style="color:var(--ink)">What happens next</strong><br />
+            After signing, you can print the proxy or mark it delivered. If you change your mind later, you can revoke it.
           </div>
 
           <div id="verifyEmailNotice" style="display:none;background:#fff3e0;border:1px solid #f0c87a;border-radius:10px;padding:12px 14px;margin-top:14px;font-size:0.88rem;line-height:1.5">

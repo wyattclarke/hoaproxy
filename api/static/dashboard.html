@@ -66,6 +66,25 @@
       }
 
       .grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+      .guide-grid { display: grid; gap: 14px; grid-template-columns: 1.2fr 1fr; margin-top: 16px; }
+      .intent-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+      .intent-card {
+        border: 1px solid var(--line); border-radius: 16px; background: rgba(255,255,255,0.95);
+        box-shadow: 0 6px 20px rgba(16,40,73,0.07); padding: 18px;
+      }
+      .intent-card p { margin: 8px 0 12px; color: var(--muted); font-size: 0.9rem; line-height: 1.55; }
+      .checklist { display: grid; gap: 10px; margin-top: 10px; }
+      .check-item {
+        display: flex; align-items: flex-start; gap: 10px; border: 1px solid var(--line);
+        border-radius: 12px; background: #fbfdff; padding: 11px 12px;
+      }
+      .check-dot {
+        width: 22px; height: 22px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center;
+        border: 1px solid #bdd1ee; background: #eef5ff; color: #587091; font-size: 0.8rem; font-weight: 800; flex-shrink: 0;
+      }
+      .check-item.done .check-dot { background: #e9f8ef; border-color: #b9e0c7; color: var(--ok); }
+      .check-copy strong { display: block; font-size: 0.92rem; }
+      .check-copy span { color: var(--muted); font-size: 0.84rem; line-height: 1.45; }
 
       .status { margin-top: 8px; min-height: 1.2em; font-size: 0.9rem; color: var(--muted); }
       .status.ok { color: var(--ok); } .status.error { color: var(--danger); }
@@ -104,6 +123,9 @@
       .search-result-item:hover { background: #f0f6ff; }
       .search-result-name { font-weight: 700; }
       .search-result-meta { color: var(--muted); font-size: 0.8rem; }
+      @media (max-width: 820px) {
+        .guide-grid { grid-template-columns: 1fr; }
+      }
     </style>
   </head>
   <body>
@@ -125,7 +147,22 @@
       </div>
       <div id="resendStatus" class="status" style="margin-bottom:8px"></div>
 
+      <div class="guide-grid">
+        <div class="card">
+          <h2 style="margin-top:0">Start Here</h2>
+          <p class="meta" style="margin:0 0 12px">Pick the path that matches what you want to do. You do not need to learn all the proxy terminology first.</p>
+          <div class="intent-grid" id="intentGrid"></div>
+        </div>
+
+        <div class="card">
+          <h2 style="margin-top:0">Getting Started</h2>
+          <p class="meta" style="margin:0">Follow these steps in order. We will keep this checklist current as you move through the flow.</p>
+          <div id="checklist" class="checklist"></div>
+        </div>
+      </div>
+
       <h2>My HOA Memberships</h2>
+      <p class="meta" style="margin:0 0 12px">First confirm your HOA. Everything else in the app depends on that.</p>
       <div id="hoaList" class="grid"></div>
 
       <div class="card" style="margin-top:14px">
@@ -142,7 +179,8 @@
         <div id="claimStatus" class="status"></div>
       </div>
 
-      <h2>Delegate Status</h2>
+      <h2>Represent Your Neighbors</h2>
+      <p class="meta" style="margin:0 0 12px">Use this if you want neighbors to choose you as their voting representative.</p>
       <div id="delegateSection"></div>
 
       <h2>Resident Proposals</h2>
@@ -181,6 +219,8 @@
       const hoaSearch = document.getElementById("hoaSearch");
       const searchBtn = document.getElementById("searchBtn");
       const searchResults = document.getElementById("searchResults");
+      const intentGrid = document.getElementById("intentGrid");
+      const checklist = document.getElementById("checklist");
 
       Auth.renderNav(navContainer);
 
@@ -275,6 +315,55 @@
         return String(name || "").trim().toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_-]/g, "").replaceAll("_", "-");
       }
 
+      function renderGuideCards(me, proxyCount, delegateCount) {
+        const hasHoa = me.hoas && me.hoas.length > 0;
+        intentGrid.innerHTML =
+          '<div class="intent-card">' +
+          '<h3>I want someone to vote for me</h3>' +
+          '<p>Choose one trusted person who can vote for you, then review and sign your proxy.</p>' +
+          '<a class="btn primary" href="' + (hasHoa ? '/assign-proxy' : '#claim') + '">' + (hasHoa ? 'Choose a representative' : 'Confirm your HOA first') + '</a>' +
+          '</div>' +
+          '<div class="intent-card">' +
+          '<h3>I want to represent my neighbors</h3>' +
+          '<p>Make yourself available so neighbors can choose you as the person who can vote for them.</p>' +
+          '<a class="btn" href="' + (hasHoa ? '/become-delegate' : '#claim') + '">' + (delegateCount ? 'Manage representative status' : 'Serve as a representative') + '</a>' +
+          '</div>';
+
+        const items = [
+          {
+            done: true,
+            title: 'Create your account',
+            detail: 'You are signed in.',
+          },
+          {
+            done: hasHoa,
+            title: 'Confirm your HOA',
+            detail: hasHoa ? 'Your HOA membership is on file.' : 'Search and claim your community below.',
+          },
+          {
+            done: !!me.email_verified,
+            title: 'Verify your email',
+            detail: me.email_verified ? 'Email confirmed.' : 'Required before signing a proxy.',
+          },
+          {
+            done: proxyCount > 0,
+            title: 'Choose a representative',
+            detail: proxyCount > 0 ? 'You already have a proxy in progress or on file.' : 'Pick one person who can vote for you.',
+          },
+          {
+            done: false,
+            title: 'Review and sign your proxy',
+            detail: proxyCount > 0 ? 'Open your proxy and sign it when you are ready.' : 'You will do this after choosing a representative.',
+          },
+        ];
+        checklist.innerHTML = items.map((item, index) =>
+          '<div class="check-item' + (item.done ? ' done' : '') + '">' +
+          '<span class="check-dot">' + (item.done ? '&#10003;' : (index + 1)) + '</span>' +
+          '<div class="check-copy"><strong>' + item.title + '</strong><span>' + item.detail + '</span></div>' +
+          '</div>'
+        ).join('');
+      }
+
       async function loadDashboard() {
         try {
           const me = await Auth.fetchJson("/auth/me");
@@ -293,13 +382,16 @@
               '<h3><a class="link" href="/hoa/' + slugify(h.hoa_name) + '">' + escapeHtml(h.hoa_name) + '</a></h3>' +
               (h.unit_number ? '<span class="pill">Unit ' + escapeHtml(h.unit_number) + '</span>' : '') +
               '<span class="pill">' + (h.status === 'self_declared' ? 'Pending verification' : escapeHtml(h.status)) + '</span>' +
-              '<div style="margin-top:8px"><a class="link" href="/become-delegate?hoa_id=' + h.hoa_id + '">Become a delegate</a></div>' +
+              '<div style="margin-top:8px"><a class="link" href="/become-delegate?hoa_id=' + h.hoa_id + '">Represent neighbors in this HOA</a></div>' +
               '</div>'
             ).join("");
           }
 
-          // Load delegate info
-          await loadDelegateStatus(me);
+          const [delegateCount, proxies] = await Promise.all([
+            loadDelegateStatus(me),
+            Auth.fetchJson("/proxies/mine"),
+          ]);
+          renderGuideCards(me, proxies.length, delegateCount);
           populateQaHoas(me.hoas);
           loadTopProposals(me);
 
@@ -312,19 +404,22 @@
       async function loadDelegateStatus(me) {
         // Check each claimed HOA for delegate status
         let delegateHtml = "";
+        let delegateCount = 0;
         for (const h of me.hoas) {
           try {
             const delegates = await Auth.fetchJson("/hoas/" + h.hoa_id + "/delegates");
             const myDelegate = delegates.find(d => d.user_id === me.user_id);
             if (myDelegate) {
-              delegateHtml += '<div class="card"><h3>Delegate for ' + escapeHtml(h.hoa_name) + '</h3>' +
+              delegateCount += 1;
+              delegateHtml += '<div class="card"><h3>Representative for ' + escapeHtml(h.hoa_name) + '</h3>' +
                 '<div class="meta">' + escapeHtml(myDelegate.bio || "No bio set") + '</div>' +
                 '<a class="link" href="/delegate/' + myDelegate.id + '">View profile</a> · ' +
-                '<a class="link" href="/delegate-dashboard">Incoming proxies</a></div>';
+                '<a class="link" href="/delegate-dashboard">See incoming proxies</a></div>';
             }
           } catch (_) {}
         }
-        delegateSection.innerHTML = delegateHtml || '<div class="empty">Not registered as a delegate for any HOA.</div>';
+        delegateSection.innerHTML = delegateHtml || '<div class="empty">You are not set up to represent neighbors in any HOA.</div>';
+        return delegateCount;
       }
 
       async function claimHoa() {
