@@ -365,6 +365,11 @@ class HoaSummary(BaseModel):
     boundary_geojson: dict | None = None
 
 
+class HoaSummaryPage(BaseModel):
+    results: List[HoaSummary]
+    total: int
+
+
 # ---------------------------------------------------------------------------
 # Auth models
 # ---------------------------------------------------------------------------
@@ -2052,12 +2057,45 @@ def list_hoas() -> list[str]:
         return db.list_hoa_names_with_documents(conn)
 
 
-@app.get("/hoas/summary", response_model=List[HoaSummary])
-def list_hoa_summary() -> List[HoaSummary]:
+@app.get("/hoas/summary", response_model=HoaSummaryPage)
+def list_hoa_summary(
+    q: str | None = None,
+    state: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> HoaSummaryPage:
+    limit = min(limit, 500)
     settings = load_settings()
     with db.get_connection(settings.db_path) as conn:
-        rows = db.list_hoa_summaries(conn)
-    return [HoaSummary(**row) for row in rows]
+        page = db.list_hoa_summaries(conn, q=q, state=state, limit=limit, offset=offset)
+    return HoaSummaryPage(
+        results=[HoaSummary(**row) for row in page["results"]],
+        total=page["total"],
+    )
+
+
+@app.get("/hoas/states", response_model=List[str])
+def list_hoa_states() -> List[str]:
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        return db.list_hoa_states(conn)
+
+
+class HoaResolveResponse(BaseModel):
+    hoa_id: int
+    hoa_name: str
+    city: str | None = None
+    state: str | None = None
+
+
+@app.get("/hoas/resolve/{slug}", response_model=HoaResolveResponse)
+def resolve_hoa_slug(slug: str) -> HoaResolveResponse:
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        result = db.resolve_hoa_by_slug(conn, slug)
+    if result is None:
+        raise HTTPException(status_code=404, detail="HOA not found")
+    return HoaResolveResponse(**result)
 
 
 @app.post("/lookup/universal", response_model=UniversalLookupResponse)

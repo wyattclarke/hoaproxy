@@ -137,7 +137,6 @@
         </div>
         <div id="searchResults" class="search-results"></div>
         <div class="claim-row">
-          <select id="hoaSelect"><option value="">— or pick from all HOAs —</option></select>
           <button class="btn primary" id="claimBtn" type="button">Claim</button>
         </div>
         <div id="claimStatus" class="status"></div>
@@ -172,7 +171,6 @@
       const greeting = document.getElementById("greeting");
       const pageStatus = document.getElementById("pageStatus");
       const hoaList = document.getElementById("hoaList");
-      const hoaSelect = document.getElementById("hoaSelect");
       const claimBtn = document.getElementById("claimBtn");
       const claimStatus = document.getElementById("claimStatus");
       const delegateSection = document.getElementById("delegateSection");
@@ -246,10 +244,6 @@
                 const name = el.dataset.name;
                 hoaSearch.value = name;
                 _selectedHoaName = name;
-                // Also select in dropdown if present
-                for (const opt of hoaSelect.options) {
-                  if (opt.value === name) { hoaSelect.value = name; break; }
-                }
                 searchResults.style.display = "none";
               });
             });
@@ -333,55 +327,18 @@
         delegateSection.innerHTML = delegateHtml || '<div class="empty">Not registered as a delegate for any HOA.</div>';
       }
 
-      async function loadHoaOptions() {
-        try {
-          const hoas = await Auth.fetchJson("/hoas/summary");
-          hoaSelect.innerHTML = '<option value="">Select an HOA...</option>' +
-            hoas.map(h => {
-              const row = h;
-              // We need the hoa_id. Summary doesn't include it, so we'll use name-based lookup.
-              return '<option value="' + escapeHtml(row.hoa) + '">' + escapeHtml(row.hoa) + '</option>';
-            }).join("");
-        } catch (err) {
-          hoaSelect.innerHTML = '<option value="">Failed to load HOAs</option>';
-        }
-      }
-
       async function claimHoa() {
-        const hoaName = _selectedHoaName || hoaSelect.value;
+        const hoaName = _selectedHoaName || hoaSearch.value.trim();
         if (!hoaName) {
           claimStatus.className = "status error";
-          claimStatus.textContent = "Search for or select an HOA above.";
+          claimStatus.textContent = "Search for an HOA above to find and claim your community.";
           return;
         }
         claimBtn.disabled = true;
         claimStatus.className = "status";
         claimStatus.textContent = "Claiming membership...";
         try {
-          // We need the hoa_id. Look it up by getting all HOAs with IDs.
-          // The /hoas endpoint returns names, but we need IDs. Let's use a direct query.
-          // Actually, we can use /hoas/summary but it doesn't have IDs either.
-          // We'll need to resolve by name via a small fetch.
-          const summaries = await Auth.fetchJson("/hoas/summary");
-          // We don't have hoa_id from summary. Let's just try to find or create it.
-          // Actually the claim endpoint takes hoa_id. We need another approach.
-          // Let's use a helper: fetch all hoas and find the matching one.
-          // Since the select value is the hoa name, let's search for its DB id.
-          const allHoas = await Auth.fetchJson("/hoas");
-          // We need the ID. The /hoas endpoint doesn't return IDs either.
-          // The simplest approach: make the claim endpoint accept name too, but
-          // the plan specifies /user/hoas/{hoa_id}/claim. Let's resolve via the location endpoint.
-          const locRes = await Auth.fetchJson("/hoas/" + encodeURIComponent(hoaName) + "/location");
-          // hoa_location has hoa name but not hoa_id. We need to expose hoa_id somewhere.
-          // Quick fix: use a direct resolution. Let me just add a helper in the API.
-          // Actually, let's just pass the name and let the API resolve it.
-          // For now, use a workaround: the /hoas/summary doesn't have IDs.
-          // The best approach: call a new mini-endpoint or modify claim to accept name.
-          // Let's just look up by querying each, or better: expose hoa_id on summary.
-          //
-          // Simplest: add an internal lookup. But for now, we can use the hoa_id from
-          // a dedicated lookup. Let's use a trick: POST to a name-based claim.
-          const res = await Auth.fetchJson("/user/hoas/claim-by-name", {
+          await Auth.fetchJson("/user/hoas/claim-by-name", {
             method: "POST",
             body: JSON.stringify({ hoa_name: hoaName }),
           });
@@ -479,7 +436,6 @@
       }
 
       claimBtn.addEventListener("click", claimHoa);
-      loadHoaOptions();
       loadDashboard();
     </script>
   </body>

@@ -451,9 +451,27 @@ def list_hoa_names_with_documents(conn: sqlite3.Connection) -> list[str]:
     return [str(row["name"]) for row in cur.fetchall()]
 
 
-def list_hoa_summaries(conn: sqlite3.Connection) -> list[dict]:
-    cur = conn.execute(
-        """
+def list_hoa_summaries(
+    conn: sqlite3.Connection,
+    q: str | None = None,
+    state: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> dict:
+    params: list[Any] = []
+    where_clauses: list[str] = []
+
+    if q:
+        like = f"%{q}%"
+        where_clauses.append("(h.name LIKE ? OR l.city LIKE ? OR l.state LIKE ?)")
+        params.extend([like, like, like])
+    if state:
+        where_clauses.append("l.state = ?")
+        params.append(state)
+
+    where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+
+    base_query = f"""
         WITH doc_stats AS (
             SELECT
                 hoa_id,
@@ -488,11 +506,18 @@ def list_hoa_summaries(conn: sqlite3.Connection) -> list[dict]:
         JOIN doc_stats ds ON ds.hoa_id = h.id
         LEFT JOIN chunk_stats cs ON cs.hoa_id = h.id
         LEFT JOIN hoa_locations l ON l.hoa_id = h.id
+        {where_sql}
         ORDER BY h.name COLLATE NOCASE
-        """
+    """
+
+    count_cur = conn.execute(
+        f"SELECT COUNT(*) FROM ({base_query})", params
     )
+    total = count_cur.fetchone()[0]
+
+    cur = conn.execute(base_query + " LIMIT ? OFFSET ?", params + [limit, offset])
     rows = cur.fetchall()
-    return [
+    results = [
         {
             "hoa_id": int(row["hoa_id"]),
             "hoa": str(row["hoa"]),
@@ -509,6 +534,62 @@ def list_hoa_summaries(conn: sqlite3.Connection) -> list[dict]:
         }
         for row in rows
     ]
+    return {"results": results, "total": total}
+
+
+def list_hoa_states(conn: sqlite3.Connection) -> list[str]:
+    cur = conn.execute(
+        """
+        SELECT DISTINCT l.state
+        FROM hoas h
+        JOIN hoa_locations l ON l.hoa_id = h.id
+        WHERE l.state IS NOT NULL
+        ORDER BY l.state
+        """
+    )
+    return [str(row[0]) for row in cur.fetchall()]
+
+
+def resolve_hoa_by_slug(conn: sqlite3.Connection, slug: str) -> dict | None:
+    cur = conn.execute(
+        """
+        SELECT h.id AS hoa_id, h.name AS hoa_name, l.city, l.state
+        FROM hoas h
+        LEFT JOIN hoa_locations l ON l.hoa_id = h.id
+        """
+    )
+    rows = cur.fetchall()
+
+    def slugify(name: str) -> str:
+        import re
+        s = name.strip().lower()
+        s = re.sub(r"\s+", "_", s)
+        s = re.sub(r"[^a-z0-9_-]", "", s)
+        return s
+
+    # exact match
+    for row in rows:
+        if row["hoa_name"].lower() == slug.lower():
+            return {
+                "hoa_id": int(row["hoa_id"]),
+                "hoa_name": str(row["hoa_name"]),
+                "city": str(row["city"]) if row["city"] else None,
+                "state": str(row["state"]) if row["state"] else None,
+            }
+
+    # slug match (underscores and dashes treated as equivalent)
+    normalized = slug.replace("-", "_")
+    for row in rows:
+        row_slug = slugify(row["hoa_name"])
+        if row_slug == normalized or row_slug.replace("_", "-") == slug:
+            return {
+                "hoa_id": int(row["hoa_id"]),
+                "hoa_name": str(row["hoa_name"]),
+                "city": str(row["city"]) if row["city"] else None,
+                "state": str(row["state"]) if row["state"] else None,
+            }
+
+    return None
 
 
 def get_hoa_location(conn: sqlite3.Connection, hoa_name: str) -> dict | None:

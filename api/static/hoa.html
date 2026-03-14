@@ -493,6 +493,9 @@
       const state = {
         hoaIdentifier: "",
         hoaName: "",
+        hoaId: null,
+        hoaCity: null,
+        hoaState: null,
         mode: "qa",
         map: null,
         marker: null,
@@ -607,23 +610,12 @@
           throw new Error("Missing HOA identifier in URL.");
         }
 
-        const hoas = await fetchJson("/hoas");
-        const ident = state.hoaIdentifier.toLowerCase();
-
-        let resolved = hoas.find((name) => name.toLowerCase() === ident);
-        if (!resolved) {
-          resolved = hoas.find((name) => {
-            const slug = slugify(name);
-            return slug === ident || slug.replaceAll("_", "-") === ident;
-          });
-        }
-
-        if (!resolved) {
-          resolved = state.hoaIdentifier.replace(/[-_]+/g, " ");
-        }
-
-        state.hoaName = resolved;
-        hoaTitle.textContent = resolved;
+        const resolved = await fetchJson("/hoas/resolve/" + encodeURIComponent(state.hoaIdentifier));
+        state.hoaName = resolved.hoa_name;
+        state.hoaId = resolved.hoa_id;
+        state.hoaCity = resolved.city || null;
+        state.hoaState = resolved.state || null;
+        hoaTitle.textContent = resolved.hoa_name;
       }
 
       function setMode(mode) {
@@ -693,8 +685,9 @@
       }
 
       async function loadHoaMeta() {
-        const rows = await fetchJson("/hoas/summary");
-        const item = rows.find((r) => r.hoa === state.hoaName);
+        if (!state.hoaName) return;
+        const page = await fetchJson("/hoas/summary?q=" + encodeURIComponent(state.hoaName) + "&limit=1");
+        const item = (page.results || []).find((r) => r.hoa === state.hoaName);
         if (!item) {
           hoaMeta.textContent = "No summary metadata available.";
           return;
@@ -704,7 +697,10 @@
         const websitePart = item.website_url
           ? ` · <a class="doc-link" href="${escapeHtml(item.website_url)}" target="_blank" rel="noopener noreferrer">HOA website</a>`
           : "";
-        hoaMeta.innerHTML = `${item.doc_count} docs · ${item.chunk_count} chunks · ${mb} MB indexed · ${escapeHtml(location)}${websitePart}`;
+        const stateBackLink = state.hoaState
+          ? ` · <a class="doc-link" href="/?state=${encodeURIComponent(state.hoaState)}">← ${escapeHtml(state.hoaState)} HOAs</a>`
+          : "";
+        hoaMeta.innerHTML = `${escapeHtml(location)}${stateBackLink} · ${item.doc_count} docs · ${item.chunk_count} chunks · ${mb} MB indexed${websitePart}`;
       }
 
       async function loadDocuments() {
@@ -937,13 +933,11 @@
         const delegatesList = document.getElementById("delegatesList");
         if (!delegatesList || !state.hoaName) return;
         try {
-          const summaries = await fetchJson("/hoas/summary");
-          const match = summaries.find(s => s.hoa === state.hoaName);
-          if (!match || !match.hoa_id) {
+          if (!state.hoaId) {
             delegatesList.innerHTML = '<div class="meta">Could not resolve HOA.</div>';
             return;
           }
-          const delegates = await fetchJson("/hoas/" + match.hoa_id + "/delegates");
+          const delegates = await fetchJson("/hoas/" + state.hoaId + "/delegates");
           if (!delegates.length) {
             delegatesList.innerHTML = '<div class="meta">No delegates registered for this HOA yet.</div>';
             return;
