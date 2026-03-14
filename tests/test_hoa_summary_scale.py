@@ -126,18 +126,27 @@ class TestHoaSummaryScale(unittest.TestCase):
     def test_states_contains_seeded_states(self) -> None:
         r = self.client.get("/hoas/states")
         data = r.json()
-        self.assertIn("GA", data)
-        self.assertIn("NC", data)
+        states = [d["state"] for d in data]
+        self.assertIn("GA", states)
+        self.assertIn("NC", states)
+
+    def test_states_has_count(self) -> None:
+        r = self.client.get("/hoas/states")
+        data = r.json()
+        nc = next(d for d in data if d["state"] == "NC")
+        self.assertEqual(nc["count"], 2)
 
     def test_states_sorted_alpha(self) -> None:
         r = self.client.get("/hoas/states")
         data = r.json()
-        self.assertEqual(data, sorted(data))
+        states = [d["state"] for d in data]
+        self.assertEqual(states, sorted(states))
 
     def test_states_no_duplicates(self) -> None:
         r = self.client.get("/hoas/states")
         data = r.json()
-        self.assertEqual(len(data), len(set(data)))
+        states = [d["state"] for d in data]
+        self.assertEqual(len(states), len(set(states)))
 
     # --- /hoas/resolve/{slug} ---
 

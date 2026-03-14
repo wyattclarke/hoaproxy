@@ -537,17 +537,19 @@ def list_hoa_summaries(
     return {"results": results, "total": total}
 
 
-def list_hoa_states(conn: sqlite3.Connection) -> list[str]:
+def list_hoa_states(conn: sqlite3.Connection) -> list[dict]:
     cur = conn.execute(
         """
-        SELECT DISTINCT l.state
+        SELECT l.state, COUNT(DISTINCT h.id) AS count
         FROM hoas h
         JOIN hoa_locations l ON l.hoa_id = h.id
+        JOIN documents d ON d.hoa_id = h.id
         WHERE l.state IS NOT NULL
+        GROUP BY l.state
         ORDER BY l.state
         """
     )
-    return [str(row[0]) for row in cur.fetchall()]
+    return [{"state": str(row[0]), "count": int(row[1])} for row in cur.fetchall()]
 
 
 def resolve_hoa_by_slug(conn: sqlite3.Connection, slug: str) -> dict | None:

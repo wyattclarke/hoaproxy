@@ -898,8 +898,8 @@
         try {
           const states = await fetchJson("/hoas/states");
           const allPill = `<button class="state-pill${state.stateFilter === null ? " active" : ""}" data-state="">All</button>`;
-          const statePills = states.map(s =>
-            `<button class="state-pill${state.stateFilter === s ? " active" : ""}" data-state="${escapeHtml(s)}">${escapeHtml(s)}</button>`
+          const statePills = states.map(({ state: s, count }) =>
+            `<button class="state-pill${state.stateFilter === s ? " active" : ""}" data-state="${escapeHtml(s)}">${escapeHtml(s)} <span style="opacity:0.65;font-weight:400">${count}</span></button>`
           ).join("");
           container.innerHTML = allPill + statePills;
           container.querySelectorAll(".state-pill").forEach(btn => {

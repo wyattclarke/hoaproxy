@@ -2074,11 +2074,16 @@ def list_hoa_summary(
     )
 
 
-@app.get("/hoas/states", response_model=List[str])
-def list_hoa_states() -> List[str]:
+class HoaStateCount(BaseModel):
+    state: str
+    count: int
+
+
+@app.get("/hoas/states", response_model=List[HoaStateCount])
+def list_hoa_states() -> List[HoaStateCount]:
     settings = load_settings()
     with db.get_connection(settings.db_path) as conn:
-        return db.list_hoa_states(conn)
+        return [HoaStateCount(**row) for row in db.list_hoa_states(conn)]
 
 
 class HoaResolveResponse(BaseModel):
