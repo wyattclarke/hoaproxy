@@ -124,6 +124,47 @@ def _run_expiry_sweep() -> None:
         logger.exception("Expiry sweep failed")
 
 
+def _run_verification_link_backfill() -> None:
+    """Repair legacy verification URLs embedded in stored signed proxy HTML."""
+    legacy_hosts = ("https://hoaware.app", "http://hoaware.app")
+    canonical_base = "https://hoaproxy.org"
+    try:
+        with db.get_connection(load_settings().db_path) as conn:
+            rows = conn.execute(
+                """
+                SELECT id, form_html, verification_code
+                FROM proxy_assignments
+                WHERE verification_code IS NOT NULL
+                  AND form_html IS NOT NULL
+                """
+            ).fetchall()
+            updated = 0
+            for row in rows:
+                code = row["verification_code"]
+                html = row["form_html"] or ""
+                new_url = f"{canonical_base}/verify-proxy?code={code}"
+                original = html
+                for host in legacy_hosts:
+                    old_url = f"{host}/verify-proxy?code={code}"
+                    html = html.replace(
+                        f"Verify at: {old_url}",
+                        'Verify at: '
+                        f'<a href="{new_url}" target="_blank" rel="noopener noreferrer">{new_url}</a>',
+                    )
+                    html = html.replace(old_url, new_url)
+                if html != original:
+                    conn.execute(
+                        "UPDATE proxy_assignments SET form_html = ? WHERE id = ?",
+                        (html, row["id"]),
+                    )
+                    updated += 1
+            if updated:
+                conn.commit()
+                logger.info("Repaired verification links for %d signed proxies", updated)
+    except Exception:
+        logger.exception("Verification link backfill failed")
+
+
 # ---------------------------------------------------------------------------
 # Startup: ensure all DB tables exist (safe to run on existing DB)
 # ---------------------------------------------------------------------------
@@ -203,6 +244,7 @@ async def lifespan(app: FastAPI):
         if archived:
             logger.info("Archived %d stale proposals on startup", archived)
     _run_expiry_sweep()
+    _run_verification_link_backfill()
     import threading
     threading.Thread(target=_run_proxy_status_backfill, daemon=True).start()
     yield
@@ -1989,7 +2031,13 @@ def sign_proxy(proxy_id: int, request: Request, user: dict = Depends(get_current
             proxy = db.get_proxy_assignment(conn, proxy_id)
     else:
         # Click-to-sign fallback
-        success = record_signature(proxy_id, user["id"], ip_address=ip, user_agent=ua)
+        success = record_signature(
+            proxy_id,
+            user["id"],
+            ip_address=ip,
+            user_agent=ua,
+            base_url=str(request.base_url).rstrip("/"),
+        )
         if not success:
             raise HTTPException(
                 status_code=400,

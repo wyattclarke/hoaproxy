@@ -93,7 +93,7 @@ def load_settings() -> Settings:
         smtp_user=os.environ.get("SMTP_USER"),
         smtp_password=os.environ.get("SMTP_PASSWORD"),
         proxy_retention_days=int(os.environ.get("PROXY_RETENTION_DAYS", "90")),
-        app_base_url=os.environ.get("APP_BASE_URL", "https://hoaware.app"),
+        app_base_url=os.environ.get("APP_BASE_URL", "https://hoaproxy.org"),
     )
 
 

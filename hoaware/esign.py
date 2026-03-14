@@ -230,7 +230,7 @@ def _inject_esig_stamp(
         f"{ip_line}"
         f"Method: Click-to-sign &#8212; ESIGN Act (15 U.S.C. &sect; 7001) compliant<br>"
         f"Verification code: <strong>{verification_code}</strong><br>"
-        f"Verify at: {verify_url}"
+        f'Verify at: <a href="{verify_url}" target="_blank" rel="noopener noreferrer">{verify_url}</a>'
         f"</div>"
     )
     soup = BeautifulSoup(form_html or "", "html.parser")
@@ -247,6 +247,7 @@ def record_signature(
     user_id: int,
     ip_address: str | None = None,
     user_agent: str | None = None,
+    base_url: str | None = None,
 ) -> bool:
     """Record an e-signature for a proxy assignment (click-to-sign fallback).
 
@@ -254,6 +255,7 @@ def record_signature(
     is not configured or as a fallback.
     """
     settings = load_settings()
+    resolved_base_url = (base_url or settings.app_base_url).rstrip("/")
     with db.get_connection(settings.db_path) as conn:
         proxy = db.get_proxy_assignment(conn, proxy_id)
         if not proxy:
@@ -273,7 +275,7 @@ def record_signature(
             ip_address=ip_address,
             signed_at=now,
             verification_code=verification_code,
-            base_url=settings.app_base_url,
+            base_url=resolved_base_url,
         )
         db.update_proxy_status(
             conn, proxy_id, "signed",

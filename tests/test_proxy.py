@@ -366,6 +366,7 @@ def test_signed_form_contains_verification_code():
     with db.get_connection(settings.db_path) as conn:
         record = db.get_proxy_assignment(conn, proxy["id"])
     assert record["verification_code"] in (record["form_html"] or "")
+    assert f'http://testserver/verify-proxy?code={record["verification_code"]}' in (record["form_html"] or "")
 
 
 # ---------------------------------------------------------------------------
