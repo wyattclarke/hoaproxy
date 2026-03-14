@@ -128,6 +128,69 @@ def _run_expiry_sweep() -> None:
 # Startup: ensure all DB tables exist (safe to run on existing DB)
 # ---------------------------------------------------------------------------
 
+def _run_proxy_status_backfill() -> None:
+    """Classify proxy allowance for HOAs that don't yet have a status.
+
+    Runs at startup in a background thread. Skips HOAs already classified,
+    so this is a no-op after the first run on a given database.
+    """
+    import json as _json
+    from openai import OpenAI
+    settings = load_settings()
+    if not settings.openai_api_key:
+        return
+    _PROXY_KW = {"proxy", "proxies", "absentee ballot", "vote in person", "in-person voting"}
+
+    with db.get_connection(settings.db_path) as conn:
+        rows = conn.execute(
+            "SELECT id, name FROM hoas WHERE proxy_status IS NULL OR proxy_status = 'unknown'"
+        ).fetchall()
+
+    if not rows:
+        return
+
+    client = OpenAI(api_key=settings.openai_api_key)
+    logger.info("Proxy status backfill: %d HOAs to classify", len(rows))
+
+    for row in rows:
+        hoa_id, name = row["id"], row["name"]
+        with db.get_connection(settings.db_path) as conn:
+            texts = db.get_chunk_text_for_hoa(conn, name, limit=200)
+        relevant = [t for t in texts if any(kw in t.lower() for kw in _PROXY_KW)]
+        if not relevant:
+            continue
+        excerpt = "\n\n---\n\n".join(relevant[:6])
+        prompt = (
+            "You are analyzing excerpts from HOA governing documents. "
+            "Determine whether proxy voting is: "
+            '"allowed" (explicitly permitted), '
+            '"not_allowed" (explicitly prohibited or in-person only required), or '
+            '"unknown" (not clearly addressed).\n\n'
+            f"Excerpts:\n{excerpt}\n\n"
+            'Respond with JSON only: {"status": "allowed"|"not_allowed"|"unknown", '
+            '"citation": "exact supporting quote or null"}'
+        )
+        try:
+            resp = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0,
+                max_tokens=200,
+            )
+            raw = (resp.choices[0].message.content or "").strip()
+            raw = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+            result = _json.loads(raw)
+            status = result.get("status", "unknown")
+            citation = result.get("citation") or None
+            if status not in ("allowed", "not_allowed", "unknown"):
+                status = "unknown"
+            with db.get_connection(settings.db_path) as conn:
+                db.set_hoa_proxy_status(conn, hoa_id, status, citation)
+            logger.info("HOA %d (%s) proxy_status = %s", hoa_id, name, status)
+        except Exception:
+            logger.exception("Proxy status classification failed for HOA %d (%s)", hoa_id, name)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = load_settings()
@@ -140,6 +203,8 @@ async def lifespan(app: FastAPI):
         if archived:
             logger.info("Archived %d stale proposals on startup", archived)
     _run_expiry_sweep()
+    import threading
+    threading.Thread(target=_run_proxy_status_backfill, daemon=True).start()
     yield
 
 
