@@ -103,9 +103,15 @@ def _build_template_context(
     """Build the shared Jinja2 context dict for proxy templates."""
     proxy_allowed = _get_rule_value(rules, "proxy_allowed")
     form_requirement = _get_rule_value(rules, "proxy_form_requirement")
+    signature_requirement = _get_rule_value(rules, "proxy_signature_requirement")
+    assignment_rule = _get_rule_value(rules, "proxy_assignment_rule")
+    delivery_requirement = _get_rule_value(rules, "proxy_delivery_requirement")
+    revocability = _get_rule_value(rules, "proxy_revocability")
     directed_option = _get_rule_value(rules, "proxy_directed_option")
+    undirected_option = _get_rule_value(rules, "proxy_undirected_option")
     validity_duration = _get_rule_value(rules, "proxy_validity_duration")
     electronic_allowed = _get_rule_value(rules, "proxy_electronic_assignment_allowed")
+    electronic_signature_allowed = _get_rule_value(rules, "proxy_electronic_signature_allowed")
     holder_restrictions = _get_rule_value(rules, "proxy_holder_restrictions")
 
     statutory_citation = None
@@ -130,6 +136,11 @@ def _build_template_context(
                 "This form may be signed electronically pursuant to the ESIGN Act "
                 "(15 U.S.C. \u00a7 7001) and the Uniform Electronic Transactions Act."
             )
+    elif electronic_signature_allowed:
+        electronic_assignment_note = (
+            "Electronic signatures are generally recognized for this proxy under applicable "
+            "electronic transactions law, subject to any HOA-specific requirements."
+        )
 
     required_disclosures = []
     if proxy_allowed and "not" in proxy_allowed.lower():
@@ -141,6 +152,15 @@ def _build_template_context(
     parsed_instructions = None
     if voting_instructions:
         parsed_instructions = voting_instructions if isinstance(voting_instructions, list) else []
+
+    common_requirements = [
+        "This proxy should be treated as a written, dated, and signed appointment of a proxy holder.",
+        "Name the proxy holder clearly and keep a copy of the completed proxy for your records.",
+        "Deliver the completed proxy to the association, secretary, inspector of elections, or other authorized recipient before it is counted.",
+        "Revoke the proxy in writing or by a later-dated proxy if your governing documents require formal notice.",
+    ]
+    if expires_at:
+        common_requirements.append(f"The proxy should expire no later than {expires_at}, unless your HOA documents require an earlier cutoff.")
 
     return dict(
         jurisdiction=jurisdiction.upper(),
@@ -158,8 +178,14 @@ def _build_template_context(
         expires_at=expires_at,
         holder_restrictions=holder_restrictions,
         form_requirements=form_requirement,
+        signature_requirement=signature_requirement,
+        assignment_rule=assignment_rule,
+        delivery_requirement=delivery_requirement,
+        revocability=revocability,
+        undirected_option=undirected_option,
         electronic_assignment_note=electronic_assignment_note,
         required_disclosures=required_disclosures,
+        common_requirements=common_requirements,
         undirected_fallback=undirected_fallback,
         revocation_notes=None,
         generated_date=datetime.now().strftime("%Y-%m-%d %H:%M"),

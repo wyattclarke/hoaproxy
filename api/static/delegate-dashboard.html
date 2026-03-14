@@ -82,9 +82,7 @@
             '<div class="meta">' + escapeHtml(p.hoa_name || "") + '</div>' +
             (['signed','delivered'].includes(p.status) ? '<button class="btn" style="padding:5px 12px;font-size:0.82rem" onclick="printProxy(' + p.id + ')">Print for Meeting</button>' : '') +
             '</div></div>' +
-            '<div class="meta">' + p.direction +
-            (p.for_meeting_date ? ' | Meeting: ' + p.for_meeting_date : '') +
-            ' | Created: ' + (p.created_at || '') + '</div></div>'
+            '<div class="meta">General proxy | Created: ' + (p.created_at || '') + '</div></div>'
           ).join("");
         } catch (err) {
           list.innerHTML = '<div class="meta" style="color:var(--danger)">' + escapeHtml(err.message) + '</div>';

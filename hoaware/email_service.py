@@ -128,15 +128,14 @@ def _proxy_delivery_html(proxy: dict) -> str:
     grantor = proxy.get("grantor_name") or proxy.get("grantor_email", "A member")
     delegate = proxy.get("delegate_name") or proxy.get("delegate_email", "you")
     hoa = proxy.get("hoa_name", "your HOA")
-    meeting = proxy.get("for_meeting_date") or "the upcoming meeting"
     return f"""
     <html><body style="font-family:sans-serif;max-width:600px;margin:0 auto">
     <h2>Proxy Authorization — {hoa}</h2>
     <p><strong>{grantor}</strong> has signed a proxy authorization
     designating <strong>{delegate}</strong> as their proxy holder
-    for <strong>{meeting}</strong> at <strong>{hoa}</strong>.</p>
-    <p>Please bring this proxy to the meeting and present it to the board secretary.
-    The grantor may revoke this proxy at any time before the meeting
+    at <strong>{hoa}</strong>.</p>
+    <p>Please present this proxy to the board secretary or other authorized recipient.
+    The grantor may revoke this proxy at any time before it is exercised
     by logging into HOAproxy.</p>
     <hr>
     <p style="font-size:12px;color:#666">

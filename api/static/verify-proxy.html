@@ -89,8 +89,7 @@
             '<div class="row"><span class="row-label">HOA</span><span class="row-val">' + escHtml(p.hoa_name) + '</span></div>' +
             '<div class="row"><span class="row-label">Signed by</span><span class="row-val">' + escHtml(p.grantor_display) + '</span></div>' +
             '<div class="row"><span class="row-label">Delegate</span><span class="row-val">' + escHtml(p.delegate_name) + '</span></div>' +
-            '<div class="row"><span class="row-label">Type</span><span class="row-val">' + escHtml(p.direction) + '</span></div>' +
-            (p.for_meeting_date ? '<div class="row"><span class="row-label">Meeting date</span><span class="row-val">' + escHtml(p.for_meeting_date) + '</span></div>' : '') +
+            '<div class="row"><span class="row-label">Type</span><span class="row-val">General proxy</span></div>' +
             '<div class="row"><span class="row-label">Signed at</span><span class="row-val">' + escHtml(date) + '</span></div>' +
             '<div class="row"><span class="row-label">Status</span><span class="row-val"><span class="' + badgeClass(p.status) + '">' + escHtml(p.status) + '</span></span></div>' +
             (p.form_hash ? '<div class="hash-block"><strong>Document hash (SHA-256):</strong><br>' + escHtml(p.form_hash) + '</div>' : '');

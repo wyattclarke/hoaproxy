@@ -85,6 +85,8 @@ def test_render_basic_form():
     assert "Bob Smith" in html
     assert "Test HOA" in html
     assert "Proxy Authorization Form" in html
+    assert "record owner(s)" in html
+    assert "Signature of owner or authorized voter" in html
 
 
 def test_render_directed_proxy():
@@ -95,9 +97,8 @@ def test_render_directed_proxy():
             {"agenda_item": "Budget Approval", "vote": "For", "notes": "With amendments"},
         ],
     )
-    assert "Directed Proxy" in html
-    assert "Budget Approval" in html
-    assert "For" in html
+    assert "General (Undirected) Proxy" in html
+    assert "Signature of owner or authorized voter" in html
 
 
 def test_render_undirected_proxy():
@@ -160,3 +161,19 @@ def test_preview_endpoint():
     resp = client.get("/proxy-templates/preview?jurisdiction=XX&community_type=hoa")
     assert resp.status_code == 200
     assert "Proxy Authorization Form" in resp.text
+
+
+def test_render_generic_form_includes_core_proxy_sections():
+    _seed_proxy_rules("AZ")
+    html = render_proxy_form(
+        "AZ",
+        grantor_name="Jordan Owner",
+        grantor_unit="123 Main St",
+        delegate_name="Casey Neighbor",
+        hoa_name="Parkway Community Association",
+        direction="undirected",
+    )
+    assert "Parkway Community Association" in html
+    assert "general proxy until this proxy expires or is revoked" in html
+    assert "Revocation." in html
+    assert "General (Undirected) Proxy" in html

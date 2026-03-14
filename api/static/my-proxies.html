@@ -78,8 +78,7 @@
             (['signed','delivered'].includes(p.status) ? '<button class="btn" style="padding:5px 10px;font-size:0.8rem" onclick="printProxy(' + p.id + ')">Print</button>' : '') +
             (['draft','signed','delivered'].includes(p.status) ? '<button class="btn danger" onclick="revokeProxy(' + p.id + ')">Revoke</button>' : '') +
             '</div></div>' +
-            '<div class="meta">Delegate: ' + escapeHtml(p.delegate_name || "Unknown") + ' | ' + p.direction +
-            (p.for_meeting_date ? ' | Meeting: ' + p.for_meeting_date : '') + '</div>' +
+            '<div class="meta">Delegate: ' + escapeHtml(p.delegate_name || "Unknown") + ' | General proxy</div>' +
             '<div class="meta">Created: ' + (p.created_at || '') + '</div>' +
             '</div>'
           ).join("");

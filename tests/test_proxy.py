@@ -71,13 +71,12 @@ def test_create_proxy():
     resp = client.post("/proxies", json={
         "delegate_user_id": delegate_uid,
         "hoa_id": hoa_id,
-        "direction": "directed",
-        "for_meeting_date": "2026-05-01",
     }, headers=grantor_h)
     assert resp.status_code == 200
     data = resp.json()
     assert data["status"] == "draft"
-    assert data["direction"] == "directed"
+    assert data["direction"] == "undirected"
+    assert data["for_meeting_date"] is None
     assert data["delegate_user_id"] == delegate_uid
 
 
@@ -149,7 +148,6 @@ def test_full_lifecycle():
     # Create
     proxy = client.post("/proxies", json={
         "delegate_user_id": delegate_uid, "hoa_id": hoa_id,
-        "direction": "directed", "for_meeting_date": "2026-06-15",
     }, headers=grantor_h).json()
     assert proxy["status"] == "draft"
 
@@ -250,7 +248,6 @@ def test_public_verify_endpoint():
     grantor_h, _, hoa_id, delegate_uid = _setup_users_and_hoa()
     proxy = client.post("/proxies", json={
         "delegate_user_id": delegate_uid, "hoa_id": hoa_id,
-        "for_meeting_date": "2026-08-01",
     }, headers=grantor_h).json()
     client.post(f"/proxies/{proxy['id']}/sign", json={}, headers=grantor_h)
 
@@ -264,7 +261,8 @@ def test_public_verify_endpoint():
     data = resp.json()
     assert data["status"] == "signed"
     assert data["hoa_name"] == "Proxy Test HOA"
-    assert data["for_meeting_date"] == "2026-08-01"
+    assert data["for_meeting_date"] is None
+    assert data["direction"] == "undirected"
     assert data["verification_code"] == code
     assert data["form_hash"] == record["form_hash"]
     # Grantor name is privacy-masked (first name + last initial)

@@ -505,7 +505,7 @@ class DelegateResponse(BaseModel):
 class CreateProxyRequest(BaseModel):
     delegate_user_id: int
     hoa_id: int
-    direction: str = "directed"
+    direction: str = "undirected"
     voting_instructions: str | None = None
     for_meeting_date: str | None = None
 
@@ -1773,8 +1773,7 @@ def preview_proxy_template(
         grantor_unit="Unit 42",
         delegate_name="John Smith",
         hoa_name="Example Homeowners Association",
-        meeting_date="2026-04-15",
-        direction="directed",
+        direction="undirected",
     )
     return HTMLResponse(content=html)
 
@@ -1788,7 +1787,7 @@ def _proxy_to_response(p: dict) -> ProxyResponse:
         id=p["id"], grantor_user_id=p["grantor_user_id"], delegate_user_id=p["delegate_user_id"],
         hoa_id=p["hoa_id"], hoa_name=p.get("hoa_name"), grantor_name=p.get("grantor_name"),
         delegate_name=p.get("delegate_name"), jurisdiction=p["jurisdiction"],
-        community_type=p["community_type"], direction=p.get("direction", "directed"),
+        community_type=p["community_type"], direction=p.get("direction", "undirected"),
         voting_instructions=p.get("voting_instructions"), for_meeting_date=p.get("for_meeting_date"),
         expires_at=p.get("expires_at"), status=p["status"],
         signing_url=p.get("documenso_signing_url"),
@@ -1827,6 +1826,9 @@ def create_proxy(body: CreateProxyRequest, request: Request, user: dict = Depend
         loc = db.get_hoa_location(conn, hoa_name)
         jurisdiction = (loc.get("state") if loc else None) or "XX"
 
+        # Current product scope: undirected general proxies only.
+        direction = "undirected"
+
         # Render form
         grantor = db.get_user_by_id(conn, user["id"])
         delegate_user = db.get_user_by_id(conn, body.delegate_user_id)
@@ -1837,8 +1839,7 @@ def create_proxy(body: CreateProxyRequest, request: Request, user: dict = Depend
             grantor_unit=claim.get("unit_number"),
             delegate_name=delegate_user.get("display_name") or delegate_user["email"],
             hoa_name=hoa_name,
-            meeting_date=body.for_meeting_date,
-            direction=body.direction,
+            direction=direction,
         )
 
         proxy_id = db.create_proxy_assignment(
@@ -1848,14 +1849,14 @@ def create_proxy(body: CreateProxyRequest, request: Request, user: dict = Depend
             hoa_id=body.hoa_id,
             jurisdiction=jurisdiction,
             community_type="hoa",
-            direction=body.direction,
-            voting_instructions=body.voting_instructions,
-            for_meeting_date=body.for_meeting_date,
+            direction=direction,
+            voting_instructions=None,
+            for_meeting_date=None,
             form_html=form_html,
         )
         db.create_proxy_audit(
             conn, proxy_id=proxy_id, action="created", actor_user_id=user["id"],
-            details={"direction": body.direction},
+            details={"direction": direction},
         )
         proxy = db.get_proxy_assignment(conn, proxy_id)
     return _proxy_to_response(proxy)
@@ -2061,7 +2062,7 @@ def verify_proxy_by_code(code: str):
         "hoa_name": proxy.get("hoa_name"),
         "grantor_display": display_grantor,
         "delegate_name": proxy.get("delegate_name"),
-        "direction": proxy.get("direction"),
+        "direction": proxy.get("direction") or "undirected",
         "for_meeting_date": proxy.get("for_meeting_date"),
         "signed_at": proxy.get("signed_at"),
         "status": proxy.get("status"),
