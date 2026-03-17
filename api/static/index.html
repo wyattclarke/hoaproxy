@@ -12,6 +12,7 @@
     />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" crossorigin="" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" crossorigin="" />
+    <link rel="stylesheet" href="/static/css/mobile.css" />
     <style>
       @import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Space+Grotesk:wght@600;700&display=swap");
 
@@ -1329,6 +1330,18 @@
           navContainer.innerHTML = baseLinks +
             '<a class="btn" href="/login">Login</a>' +
             '<a class="btn" href="/register">Register</a>';
+        }
+        // Inject mobile hamburger
+        if (!navContainer.parentElement.querySelector(".nav-hamburger")) {
+          const hb = document.createElement("button");
+          hb.className = "nav-hamburger";
+          hb.setAttribute("aria-label", "Toggle navigation");
+          hb.innerHTML = "<span></span><span></span><span></span>";
+          hb.addEventListener("click", function() {
+            const open = navContainer.classList.toggle("nav-open");
+            hb.classList.toggle("open", open);
+          });
+          navContainer.parentElement.insertBefore(hb, navContainer);
         }
       }
     </script>

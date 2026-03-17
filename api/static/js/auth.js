@@ -87,7 +87,7 @@ const Auth = (() => {
   }
 
   /**
-   * Render the auth-aware nav bar links.
+   * Render the auth-aware nav bar links with mobile hamburger toggle.
    * Call this from any page: Auth.renderNav(document.getElementById("navContainer"))
    */
   function renderNav(container) {
@@ -109,6 +109,27 @@ const Auth = (() => {
         '<a class="btn" href="/login">Login</a>' +
         '<a class="btn primary" href="/register">Register</a>';
     }
+    _injectHamburger(container);
+  }
+
+  /**
+   * Inject a hamburger button before the nav container for mobile.
+   * Toggles .nav-open on the nav container when tapped.
+   */
+  function _injectHamburger(navEl) {
+    if (!navEl || !navEl.parentElement) return;
+    // Avoid duplicating
+    if (navEl.parentElement.querySelector(".nav-hamburger")) return;
+    const btn = document.createElement("button");
+    btn.className = "nav-hamburger";
+    btn.setAttribute("aria-label", "Toggle navigation");
+    btn.innerHTML = "<span></span><span></span><span></span>";
+    btn.addEventListener("click", function () {
+      const open = navEl.classList.toggle("nav-open");
+      btn.classList.toggle("open", open);
+    });
+    // Insert hamburger right before the nav container
+    navEl.parentElement.insertBefore(btn, navEl);
   }
 
   return {
