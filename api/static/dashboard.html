@@ -261,13 +261,13 @@
           const data = await res.json();
           const items = [];
           if (data.hoa_matches && data.hoa_matches.length) {
-            data.hoa_matches.forEach(m => items.push({ name: m.name, meta: "HOA name match" }));
+            data.hoa_matches.forEach(m => items.push({ name: m.hoa, meta: "HOA name match" }));
           }
-          if (data.suggestions && data.suggestions.length) {
-            data.suggestions.forEach(s => {
-              if (!items.find(i => i.name === s.name)) {
-                const dist = s.distance_km ? ` · ${s.distance_km.toFixed(1)} km away` : "";
-                items.push({ name: s.name, meta: (s.city || "") + dist });
+          if (data.address_suggestions && data.address_suggestions.length) {
+            data.address_suggestions.forEach(s => {
+              if (!items.find(i => i.name === s.hoa)) {
+                const dist = s.distance_m ? ` · ${(s.distance_m / 1000).toFixed(1)} km away` : "";
+                items.push({ name: s.hoa, meta: (s.reason || "") + dist });
               }
             });
           }
