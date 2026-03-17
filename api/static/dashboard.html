@@ -289,10 +289,10 @@
               });
             });
           }
-          searchResults.style.display = "";
+          searchResults.style.display = "block";
         } catch (err) {
           searchResults.innerHTML = `<div class="search-result-item" style="color:var(--danger)">${escapeHtml(err.message)}</div>`;
-          searchResults.style.display = "";
+          searchResults.style.display = "block";
         } finally {
           searchBtn.disabled = false;
           searchBtn.textContent = "Search";

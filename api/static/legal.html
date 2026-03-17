@@ -223,7 +223,7 @@
           document.getElementById("resVerified").textContent = data.last_verified_date || "—";
           document.getElementById("resDisclaimer").textContent = data.disclaimer || "";
 
-          resultBox.style.display = "";
+          resultBox.style.display = "block";
           lookupStatus.className = "status";
           lookupStatus.textContent = "";
         } catch (err) {

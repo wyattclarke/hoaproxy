@@ -137,28 +137,15 @@
 
       async function loadAll() {
         let hoaId = null;
-        // Try to find hoa_id via a listing endpoint
+        // Look up hoa_id via summary endpoint
         try {
-          const r = await fetch("/hoas/list");
+          const r = await fetch("/hoas/summary?q=" + encodeURIComponent(hoaName));
           if (r.ok) {
-            const list = await r.json();
-            const match = (list.hoas || list).find(h => h.name === hoaName);
-            if (match) hoaId = match.id;
+            const data = await r.json();
+            const match = (data.results || []).find(h => h.hoa === hoaName);
+            if (match) hoaId = match.hoa_id;
           }
         } catch (_) {}
-
-        if (!hoaId) {
-          // Try search approach
-          try {
-            const r = await fetch("/hoas?name=" + encodeURIComponent(hoaName));
-            if (r.ok) {
-              const data = await r.json();
-              const list = Array.isArray(data) ? data : (data.hoas || []);
-              const match = list.find(h => h.name === hoaName);
-              if (match) hoaId = match.id;
-            }
-          } catch (_) {}
-        }
 
         if (!hoaId) {
           // If still no hoa_id, try storing it in URL query param
