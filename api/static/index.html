@@ -645,7 +645,7 @@
             <div id="homeStatus" class="status"></div>
           </div>
 
-          <aside class="starter-grid">
+          <aside class="starter-grid" id="starterGrid">
             <article class="starter-card">
               <h3>Find My HOA</h3>
               <p>Search your HOA or address to confirm your community and see its documents.</p>
@@ -1150,6 +1150,9 @@
             .map((item) => item.hoa)
         );
         lookupPanel.hidden = false;
+        // On mobile, hide starter cards so results are immediately visible
+        var sg = document.getElementById("starterGrid");
+        if (sg) sg.classList.add("mobile-hidden");
         clearMultiResults();
         setMultiStatus("");
         renderHoaMatches(payload.hoa_matches || []);
@@ -1159,6 +1162,8 @@
           return;
         }
         setLookupStatus("Lookup complete.", "ok");
+        // On mobile, scroll results into view so user doesn't have to hunt
+        setTimeout(function() { lookupPanel.scrollIntoView({ behavior: "smooth", block: "start" }); }, 100);
       }
 
       function setMultiMode(mode) {
@@ -1244,6 +1249,8 @@
         const q = searchInput.value.trim();
         if (!q) {
           lookupPanel.hidden = true;
+          var sg = document.getElementById("starterGrid");
+          if (sg) sg.classList.remove("mobile-hidden");
           setLookupStatus("");
           return;
         }

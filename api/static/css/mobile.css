@@ -397,3 +397,10 @@
     align-items: flex-start;
   }
 }
+
+/* --- Homepage: hide starter cards when search results are active --- */
+@media screen and (max-width: 768px) {
+  .starter-grid.mobile-hidden {
+    display: none;
+  }
+}
