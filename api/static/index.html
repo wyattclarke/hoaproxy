@@ -1010,15 +1010,18 @@
         const hasFilter = state.searchQuery || state.stateFilter;
         if (!hasFilter) {
           if (directoryCard) directoryCard.hidden = true;
-          state.filtered = [];
-          state.total = 0;
-          if (state.mapVisible) renderMarkers();
           countMeta.textContent = "";
-          return;
+          if (!state.mapVisible) {
+            state.filtered = [];
+            state.total = 0;
+            return;
+          }
+          // Map is visible with no filter: fall through to load all HOAs for map display
+        } else {
+          if (directoryCard) directoryCard.hidden = false;
+          state.mapVisible = true;
+          renderMapVisibility();
         }
-        if (directoryCard) directoryCard.hidden = false;
-        state.mapVisible = true;
-        renderMapVisibility();
         const params = new URLSearchParams();
         if (state.searchQuery) params.set("q", state.searchQuery);
         if (state.stateFilter) params.set("state", state.stateFilter);
@@ -1029,7 +1032,7 @@
           const page = await fetchJson("/hoas/summary?" + params.toString());
           state.filtered = page.results;
           state.total = page.total;
-          renderList();
+          if (hasFilter) renderList();
           renderMarkers();
           setStatus("");
         } catch (err) {
@@ -1293,8 +1296,12 @@
         toggleMapBtn.addEventListener("click", () => {
           state.mapVisible = !state.mapVisible;
           renderMapVisibility();
-          if (state.mapVisible && state.filtered.length) {
-            renderMarkers();
+          if (state.mapVisible) {
+            if (state.filtered.length) {
+              renderMarkers();
+            } else {
+              fetchSummaries();
+            }
           }
         });
       }
