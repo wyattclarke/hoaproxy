@@ -1577,6 +1577,90 @@ def health() -> dict:
     return {"status": "ok"}
 
 
+@app.post("/admin/import-tucson-hoa")
+def admin_import_tucson_hoa(request: Request):
+    """One-time admin endpoint to import Tucson HOA data from bundled GeoJSON."""
+    import os
+    admin_key = os.environ.get("JWT_SECRET", "")
+    auth_header = request.headers.get("Authorization", "")
+    if not admin_key or auth_header != f"Bearer {admin_key}":
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    from urllib.request import urlopen, Request as UrlRequest
+    from urllib.parse import urlencode
+    arcgis_url = (
+        "https://gis.tucsonaz.gov/public/rest/services/"
+        "PublicMaps/NeighborhoodsPlans/MapServer/14/query?"
+        + urlencode({
+            "where": "1=1",
+            "outFields": "OBJECTID,SUB_NAME,HOA_NAME,HOA_STATUS",
+            "returnGeometry": "true",
+            "outSR": "4326",
+            "geometryPrecision": "6",
+            "f": "geojson",
+        })
+    )
+    try:
+        req = UrlRequest(arcgis_url, headers={"User-Agent": "HOAproxy/1.0"})
+        with urlopen(req, timeout=60) as resp:
+            data = json.loads(resp.read())
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Failed to fetch ArcGIS data: {exc}")
+
+    features = data["features"]
+    active = [f for f in features if f.get("properties", {}).get("HOA_STATUS") == "1"]
+
+    def title_case_name(name: str) -> str:
+        lower_words = {"of", "the", "at", "in", "for", "and", "or", "no", "no."}
+        parts = name.split()
+        return " ".join(
+            w.capitalize() if i == 0 or w.lower() not in lower_words else w.lower()
+            for i, w in enumerate(parts)
+        )
+
+    def compute_centroid(geometry: dict):
+        points = []
+        def collect(coords):
+            if not isinstance(coords, list):
+                return
+            if coords and isinstance(coords[0], (int, float)) and len(coords) >= 2:
+                points.append((coords[1], coords[0]))
+                return
+            for child in coords:
+                collect(child)
+        collect(geometry.get("coordinates"))
+        if not points:
+            return None, None
+        return sum(p[0] for p in points) / len(points), sum(p[1] for p in points) / len(points)
+
+    settings = load_settings()
+    imported = 0
+    with db.get_connection(settings.db_path) as conn:
+        for feat in active:
+            props = feat["properties"]
+            raw_name = (props.get("HOA_NAME") or "").strip()
+            if not raw_name:
+                continue
+            hoa_name = title_case_name(raw_name)
+            geometry = feat.get("geometry")
+            boundary_geojson = None
+            if geometry and geometry.get("coordinates"):
+                boundary_geojson = json.dumps({"type": geometry["type"], "coordinates": geometry["coordinates"]})
+            lat, lon = compute_centroid(geometry) if geometry else (None, None)
+            sub_name = (props.get("SUB_NAME") or "").strip()
+            display_name = title_case_name(sub_name) if sub_name else None
+            db.upsert_hoa_location(
+                conn, hoa_name, display_name=display_name,
+                city="Tucson", state="AZ", country="US",
+                latitude=lat, longitude=lon,
+                boundary_geojson=boundary_geojson, source="arcgis_tucson",
+            )
+            imported += 1
+        conn.commit()
+
+    return {"status": "ok", "imported": imported, "total_active": len(active)}
+
+
 # ---------------------------------------------------------------------------
 # Auth endpoints
 # ---------------------------------------------------------------------------
