@@ -272,7 +272,11 @@
             });
           }
           if (!items.length) {
-            searchResults.innerHTML = '<div class="search-result-item" style="color:var(--muted)">No HOAs found. Try a different search or pick from the list below.</div>';
+            searchResults.innerHTML =
+              '<div class="search-result-item" style="color:var(--muted);line-height:1.5">' +
+              'No HOAs found. <a href="/add-hoa" style="color:var(--accent);font-weight:600">Add yours in 2 minutes →</a><br>' +
+              '<span style="font-size:0.85rem">Upload your CC&Rs, bylaws, and rules — your community can then search them with AI, submit proposals, and assign proxy votes.</span>' +
+              '</div>';
           } else {
             searchResults.innerHTML = items.map(item =>
               `<div class="search-result-item" data-name="${escapeHtml(item.name)}">

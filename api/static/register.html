@@ -97,7 +97,9 @@
       const registerBtn = document.getElementById("registerBtn");
       const status = document.getElementById("status");
 
-      if (Auth.isLoggedIn()) window.location.href = "/dashboard";
+      const _nextUrl = new URLSearchParams(window.location.search).get("next") || "/dashboard";
+
+      if (Auth.isLoggedIn()) window.location.href = _nextUrl;
 
       async function doRegister() {
         const email = emailInput.value.trim();
@@ -129,7 +131,7 @@
           Auth.setToken(data.token);
           const me = await Auth.fetchJson("/auth/me");
           Auth.setCachedUser(me);
-          window.location.href = "/dashboard";
+          window.location.href = _nextUrl;
         } catch (err) {
           status.className = "status error";
           status.textContent = err.message || "Registration failed.";

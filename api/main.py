@@ -2548,6 +2548,7 @@ async def upload_documents(
     latitude: float | None = Form(default=None),
     longitude: float | None = Form(default=None),
     boundary_geojson: str | None = Form(default=None),
+    user: dict = Depends(get_current_user),
 ) -> UploadResponse:
     settings = load_settings()
     resolved_hoa = _resolve_hoa_name(hoa)

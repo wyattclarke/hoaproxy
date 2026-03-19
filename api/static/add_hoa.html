@@ -318,6 +318,10 @@
       integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
       crossorigin=""
     ></script>
+    <script src="/static/js/auth.js"></script>
+    <script>
+      Auth.requireAuth();
+    </script>
     <script>
       const hoaName = document.getElementById("hoaName");
       const files = document.getElementById("files");
@@ -386,7 +390,12 @@
           if (lon.value.trim()) form.append("longitude", lon.value.trim());
           if (boundaryGeojson.value.trim()) form.append("boundary_geojson", boundaryGeojson.value.trim());
 
-          const res = await fetch("/upload", { method: "POST", body: form });
+          const token = Auth.getToken();
+          const res = await fetch("/upload", {
+            method: "POST",
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+            body: form,
+          });
           if (!res.ok) {
             let detail = `${res.status} ${res.statusText}`;
             try {
