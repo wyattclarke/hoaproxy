@@ -1580,8 +1580,8 @@ def health() -> dict:
 @app.post("/admin/import-tucson-hoa")
 def admin_import_tucson_hoa(request: Request):
     """One-time admin endpoint to import Tucson HOA data from bundled GeoJSON."""
-    import os
-    admin_key = os.environ.get("JWT_SECRET", "")
+    settings = load_settings()
+    admin_key = settings.jwt_secret
     auth_header = request.headers.get("Authorization", "")
     if not admin_key or auth_header != f"Bearer {admin_key}":
         raise HTTPException(status_code=403, detail="Forbidden")
