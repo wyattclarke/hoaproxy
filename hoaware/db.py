@@ -506,8 +506,8 @@ def list_hoa_summaries(
         SELECT
             h.id AS hoa_id,
             h.name AS hoa,
-            ds.doc_count,
-            ds.total_bytes,
+            COALESCE(ds.doc_count, 0) AS doc_count,
+            COALESCE(ds.total_bytes, 0) AS total_bytes,
             ds.last_ingested,
             COALESCE(cs.chunk_count, 0) AS chunk_count,
             l.website_url,
@@ -517,7 +517,7 @@ def list_hoa_summaries(
             l.longitude,
             l.boundary_geojson
         FROM hoas h
-        JOIN doc_stats ds ON ds.hoa_id = h.id
+        LEFT JOIN doc_stats ds ON ds.hoa_id = h.id
         LEFT JOIN chunk_stats cs ON cs.hoa_id = h.id
         LEFT JOIN hoa_locations l ON l.hoa_id = h.id
         {where_sql}
@@ -557,7 +557,7 @@ def list_hoa_states(conn: sqlite3.Connection) -> list[dict]:
         SELECT l.state, COUNT(DISTINCT h.id) AS count
         FROM hoas h
         JOIN hoa_locations l ON l.hoa_id = h.id
-        JOIN documents d ON d.hoa_id = h.id
+        LEFT JOIN documents d ON d.hoa_id = h.id
         WHERE l.state IS NOT NULL
         GROUP BY l.state
         ORDER BY l.state
@@ -775,7 +775,7 @@ def list_hoa_locations(conn: sqlite3.Connection) -> list[dict]:
             l.source,
             l.updated_at
         FROM hoas h
-        JOIN documents d ON d.hoa_id = h.id
+        LEFT JOIN documents d ON d.hoa_id = h.id
         LEFT JOIN hoa_locations l ON l.hoa_id = h.id
         GROUP BY h.id
         ORDER BY h.name COLLATE NOCASE
