@@ -282,6 +282,27 @@ def send_verification_email(*, email: str, token: str, base_url: str) -> bool:
     )
 
 
+def send_password_reset_email(*, email: str, token: str, base_url: str) -> bool:
+    """Send a password reset link to a user who requested it."""
+    reset_url = f"{base_url.rstrip('/')}/reset-password?token={token}"
+    html = f"""
+    <html><body style="font-family:sans-serif;max-width:600px;margin:0 auto">
+    <h2>Reset your HOAproxy password</h2>
+    <p>We received a request to reset the password for your account.</p>
+    <p><a href="{reset_url}" style="display:inline-block;padding:12px 24px;background:#1662f3;color:#fff;text-decoration:none;border-radius:8px;font-weight:bold">Reset Password</a></p>
+    <p>Or copy and paste this link: {reset_url}</p>
+    <p>This link expires in 1 hour. If you didn't request a password reset, you can ignore this email.</p>
+    <hr>
+    <p style="font-size:12px;color:#666">HOAproxy — your account security is important to us.</p>
+    </body></html>
+    """
+    return _send_email(
+        to=[email],
+        subject="Reset your HOAproxy password",
+        html=html,
+    )
+
+
 def notify_delegate(proxy_id: int, event: str) -> bool:
     """Send a notification to the delegate (new_proxy, revoked)."""
     settings = load_settings()

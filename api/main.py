@@ -38,7 +38,7 @@ logging.root.setLevel(logging.INFO)
 logging.root.handlers = [_json_handler]
 
 import requests
-from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import BackgroundTasks, Body, Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -1458,6 +1458,16 @@ def verify_email_page() -> FileResponse:
     return _serve_static_page("verify-email.html")
 
 
+@app.get("/forgot-password", include_in_schema=False)
+def forgot_password_page() -> FileResponse:
+    return _serve_static_page("forgot-password.html")
+
+
+@app.get("/reset-password", include_in_schema=False)
+def reset_password_page() -> FileResponse:
+    return _serve_static_page("reset-password.html")
+
+
 @app.get("/proxy-form", include_in_schema=False)
 def proxy_form_redirect():
     from fastapi.responses import RedirectResponse
@@ -1659,6 +1669,57 @@ def resend_verification(request: Request, background_tasks: BackgroundTasks, use
         base_url=settings.app_base_url,
     )
     return {"ok": True, "already_verified": False}
+
+
+@app.post("/auth/forgot-password")
+def forgot_password(request: Request, background_tasks: BackgroundTasks, body: dict = Body(...)):
+    import secrets as _secrets
+    from datetime import timedelta
+    from hoaware.email_service import send_password_reset_email
+    _check_rate_limit(request, limit=5)
+    email = (body.get("email") or "").strip().lower()
+    if not email:
+        raise HTTPException(status_code=422, detail="Email is required")
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        user = db.get_user_by_email(conn, email)
+        if user:
+            reset_token = _secrets.token_urlsafe(32)
+            reset_expires = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
+            db.create_password_reset_token(conn, user_id=user["id"], token=reset_token, expires_at=reset_expires)
+            background_tasks.add_task(
+                send_password_reset_email,
+                email=user["email"],
+                token=reset_token,
+                base_url=settings.app_base_url,
+            )
+    # Always return success to avoid user enumeration
+    return {"ok": True}
+
+
+@app.post("/auth/reset-password")
+def reset_password(request: Request, body: dict = Body(...)):
+    from hoaware.auth import hash_password
+    _check_rate_limit(request, limit=10)
+    token = (body.get("token") or "").strip()
+    new_password = body.get("password") or ""
+    if not token:
+        raise HTTPException(status_code=422, detail="Token is required")
+    if len(new_password) < 8:
+        raise HTTPException(status_code=422, detail="Password must be at least 8 characters")
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        record = db.get_password_reset_token(conn, token)
+        if not record:
+            raise HTTPException(status_code=400, detail="Invalid or expired reset link")
+        expires_at = datetime.fromisoformat(record["expires_at"].replace("Z", "+00:00"))
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if datetime.now(timezone.utc) > expires_at:
+            raise HTTPException(status_code=400, detail="Reset link has expired. Please request a new one.")
+        new_hash = hash_password(new_password)
+        db.consume_password_reset_token(conn, token, new_hash)
+    return {"ok": True}
 
 
 @app.get("/auth/me", response_model=UserMeResponse)

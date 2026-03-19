@@ -181,6 +181,15 @@ CREATE TABLE IF NOT EXISTS email_verification_tokens (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token TEXT NOT NULL UNIQUE,
+    expires_at TIMESTAMP NOT NULL,
+    used_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS membership_claims (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL REFERENCES users(id),
@@ -1594,6 +1603,49 @@ def mark_user_verified(conn: sqlite3.Connection, user_id: int) -> None:
     )
     conn.execute("DELETE FROM email_verification_tokens WHERE user_id = ?", (user_id,))
     conn.commit()
+
+
+def create_password_reset_token(
+    conn: sqlite3.Connection,
+    *,
+    user_id: int,
+    token: str,
+    expires_at: str,
+) -> None:
+    conn.execute("DELETE FROM password_reset_tokens WHERE user_id = ?", (user_id,))
+    conn.execute(
+        "INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES (?, ?, ?)",
+        (user_id, token, expires_at),
+    )
+    conn.commit()
+
+
+def get_password_reset_token(conn: sqlite3.Connection, token: str) -> dict | None:
+    row = conn.execute(
+        "SELECT * FROM password_reset_tokens WHERE token = ? AND used_at IS NULL",
+        (token,),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def consume_password_reset_token(conn: sqlite3.Connection, token: str, new_password_hash: str) -> bool:
+    """Mark token used and update the user's password. Returns False if token not found."""
+    row = conn.execute(
+        "SELECT * FROM password_reset_tokens WHERE token = ? AND used_at IS NULL",
+        (token,),
+    ).fetchone()
+    if not row:
+        return False
+    conn.execute(
+        "UPDATE users SET password_hash = ? WHERE id = ?",
+        (new_password_hash, row["user_id"]),
+    )
+    conn.execute(
+        "UPDATE password_reset_tokens SET used_at = CURRENT_TIMESTAMP WHERE id = ?",
+        (row["id"],),
+    )
+    conn.commit()
+    return True
 
 
 def get_user_by_email(conn: sqlite3.Connection, email: str) -> dict | None:
