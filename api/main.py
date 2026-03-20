@@ -488,6 +488,14 @@ class HoaSummaryPage(BaseModel):
     total: int
 
 
+class HoaMapPoint(BaseModel):
+    hoa: str
+    latitude: float | None = None
+    longitude: float | None = None
+    state: str | None = None
+    doc_count: int
+
+
 # ---------------------------------------------------------------------------
 # Auth models
 # ---------------------------------------------------------------------------
@@ -2346,6 +2354,18 @@ def list_hoa_states() -> List[HoaStateCount]:
     settings = load_settings()
     with db.get_connection(settings.db_path) as conn:
         return [HoaStateCount(**row) for row in db.list_hoa_states(conn)]
+
+
+@app.get("/hoas/map-points", response_model=List[HoaMapPoint])
+def list_hoa_map_points(
+    q: str | None = None,
+    state: str | None = None,
+) -> List[HoaMapPoint]:
+    """Lightweight endpoint returning only lat/lng/state/doc_count for map markers."""
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        rows = db.list_hoa_map_points(conn, q=q, state=state)
+    return [HoaMapPoint(**row) for row in rows]
 
 
 class HoaResolveResponse(BaseModel):

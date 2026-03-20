@@ -568,6 +568,51 @@ def list_hoa_states(conn: sqlite3.Connection) -> list[dict]:
     return [{"state": str(row[0]), "count": int(row[1])} for row in cur.fetchall()]
 
 
+def list_hoa_map_points(
+    conn: sqlite3.Connection,
+    q: str | None = None,
+    state: str | None = None,
+) -> list[dict]:
+    """Lightweight query returning only fields needed for map markers."""
+    params: list[Any] = []
+    where_clauses: list[str] = []
+    if q:
+        like = f"%{q}%"
+        where_clauses.append("(h.name LIKE ? OR l.city LIKE ? OR l.state LIKE ?)")
+        params.extend([like, like, like])
+    if state:
+        where_clauses.append("l.state = ?")
+        params.append(state)
+    where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+    cur = conn.execute(
+        f"""
+        SELECT
+            h.name AS hoa,
+            COALESCE(ds.doc_count, 0) AS doc_count,
+            l.state,
+            l.latitude,
+            l.longitude
+        FROM hoas h
+        LEFT JOIN (
+            SELECT hoa_id, COUNT(*) AS doc_count FROM documents GROUP BY hoa_id
+        ) ds ON ds.hoa_id = h.id
+        LEFT JOIN hoa_locations l ON l.hoa_id = h.id
+        {where_sql}
+        """,
+        params,
+    )
+    return [
+        {
+            "hoa": str(row["hoa"]),
+            "doc_count": int(row["doc_count"]),
+            "state": str(row["state"]) if row["state"] is not None else None,
+            "latitude": float(row["latitude"]) if row["latitude"] is not None else None,
+            "longitude": float(row["longitude"]) if row["longitude"] is not None else None,
+        }
+        for row in cur.fetchall()
+    ]
+
+
 def resolve_hoa_by_slug(conn: sqlite3.Connection, slug: str) -> dict | None:
     cur = conn.execute(
         """

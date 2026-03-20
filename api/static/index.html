@@ -876,6 +876,7 @@
         map: null,
         markerLayer: null,
         polygonLayer: null,
+        mapData: [],
         lookupResult: null,
         selectedHoas: new Set(),
         multiMode: "qa",
@@ -1114,41 +1115,17 @@
       }
 
       function renderMarkers() {
-        if (!state.map || !state.markerLayer || !state.polygonLayer) return;
+        if (!state.map || !state.markerLayer) return;
         state.markerLayer.clearLayers();
-        state.polygonLayer.clearLayers();
         state.markers.clear();
 
         let fitBounds = null;
-        for (const item of state.filtered) {
+        for (const item of state.mapData) {
+          if (item.latitude == null || item.longitude == null) continue;
           const popupHtml =
             `<a class="hoa-name-link" href="${profileHref(item.hoa)}"><strong>${escapeHtml(item.hoa)}</strong></a><br>` +
             `<span class="meta">${escapeHtml(locationText(item))}</span><br>` +
             `${item.doc_count} docs`;
-
-          const boundaryLayer = buildBoundaryLayer(item);
-          if (boundaryLayer) {
-            boundaryLayer.addTo(state.polygonLayer);
-            boundaryLayer.bindPopup(popupHtml);
-            if (fitBounds) {
-              fitBounds.extend(boundaryLayer.getBounds());
-            } else {
-              fitBounds = boundaryLayer.getBounds();
-            }
-            const hasAddressContext = Boolean(item.city || item.state);
-            if (!hasAddressContext) {
-              const center =
-                item.latitude != null && item.longitude != null
-                  ? L.latLng(item.latitude, item.longitude)
-                  : boundaryLayer.getBounds().getCenter();
-              const marker = L.marker(center).addTo(state.markerLayer);
-              marker.bindPopup(popupHtml);
-              state.markers.set(item.hoa, marker);
-            }
-            continue;
-          }
-
-          if (item.latitude == null || item.longitude == null) continue;
           const marker = L.marker([item.latitude, item.longitude]).addTo(state.markerLayer);
           marker.bindPopup(popupHtml);
           state.markers.set(item.hoa, marker);
@@ -1189,11 +1166,18 @@
         if (state.stateFilter) params.set("state", state.stateFilter);
         params.set("limit", String(PAGE_SIZE));
         params.set("offset", String(state.offset));
+        const mapParams = new URLSearchParams();
+        if (state.searchQuery) mapParams.set("q", state.searchQuery);
+        if (state.stateFilter) mapParams.set("state", state.stateFilter);
         setStatus("Loading communities...");
         try {
-          const page = await fetchJson("/hoas/summary?" + params.toString());
+          const [page, mapPoints] = await Promise.all([
+            fetchJson("/hoas/summary?" + params.toString()),
+            fetchJson("/hoas/map-points?" + mapParams.toString()),
+          ]);
           state.filtered = page.results;
           state.total = page.total;
+          state.mapData = mapPoints;
           if (hasFilter) renderList();
           renderMarkers();
           setStatus("");
@@ -1470,7 +1454,7 @@
           state.mapVisible = !state.mapVisible;
           renderMapVisibility();
           if (state.mapVisible) {
-            if (state.filtered.length) {
+            if (state.mapData.length) {
               renderMarkers();
             } else {
               fetchSummaries();
