@@ -586,7 +586,6 @@ class ProxyResponse(BaseModel):
     for_meeting_date: str | None = None
     expires_at: str | None = None
     status: str
-    signing_url: str | None = None
     signed_at: str | None = None
     delivered_at: str | None = None
     revoked_at: str | None = None
@@ -2024,7 +2023,6 @@ def _proxy_to_response(p: dict) -> ProxyResponse:
         community_type=p["community_type"], direction=p.get("direction", "undirected"),
         voting_instructions=p.get("voting_instructions"), for_meeting_date=p.get("for_meeting_date"),
         expires_at=p.get("expires_at"), status=p["status"],
-        signing_url=p.get("documenso_signing_url"),
         signed_at=p.get("signed_at"),
         delivered_at=p.get("delivered_at"), revoked_at=p.get("revoked_at"),
         revoke_reason=p.get("revoke_reason"), created_at=p.get("created_at"),
@@ -2155,16 +2153,8 @@ def get_proxy_form(proxy_id: int, user: dict = Depends(get_current_user)) -> HTM
 @app.post("/proxies/{proxy_id}/sign", response_model=ProxyResponse)
 def sign_proxy(proxy_id: int, request: Request, user: dict = Depends(get_current_user)):
     _check_rate_limit(request, limit=20)
-    """Initiate signing for a proxy.
-
-    If Documenso is configured: creates a Documenso document, stores the signing URL,
-    and returns the proxy with status='draft' and signing_url set. The status will
-    move to 'signed' when Documenso calls the webhook.
-
-    If Documenso is not configured: immediately records the click-to-sign and
-    returns the proxy with status='signed'.
-    """
-    from hoaware.esign import create_signing_request, record_signature
+    """Record a click-to-sign e-signature for a proxy."""
+    from hoaware.esign import record_signature
     settings = load_settings()
     ip = request.client.host if request.client else None
     ua = request.headers.get("User-Agent")
@@ -2183,46 +2173,20 @@ def sign_proxy(proxy_id: int, request: Request, user: dict = Depends(get_current
             detail="Email verification required before signing. Please verify your email address.",
         )
 
-    if settings.documenso_api_key:
-        # Documenso path: create document, store signing URL, redirect user
-        try:
-            result = create_signing_request(
-                proxy_id=proxy_id,
-                form_html=proxy.get("form_html") or "",
-                grantor_email=proxy["grantor_email"],
-                grantor_name=proxy.get("grantor_name") or proxy["grantor_email"],
-            )
-        except Exception as exc:
-            raise HTTPException(status_code=502, detail=f"Documenso error: {exc}") from exc
-
-        with db.get_connection(settings.db_path) as conn:
-            db.update_proxy_status(
-                conn, proxy_id, "draft",
-                documenso_document_id=result.get("document_id"),
-                documenso_signing_url=result.get("signing_url"),
-            )
-            db.create_proxy_audit(
-                conn, proxy_id=proxy_id, action="signing_initiated",
-                actor_user_id=user["id"],
-                details={"method": "documenso", "document_id": result.get("document_id")},
-            )
-            proxy = db.get_proxy_assignment(conn, proxy_id)
-    else:
-        # Click-to-sign fallback
-        success = record_signature(
-            proxy_id,
-            user["id"],
-            ip_address=ip,
-            user_agent=ua,
-            base_url=str(request.base_url).rstrip("/"),
+    success = record_signature(
+        proxy_id,
+        user["id"],
+        ip_address=ip,
+        user_agent=ua,
+        base_url=str(request.base_url).rstrip("/"),
+    )
+    if not success:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot sign this proxy. It may not be in draft status or you may not be the grantor.",
         )
-        if not success:
-            raise HTTPException(
-                status_code=400,
-                detail="Cannot sign this proxy. It may not be in draft status or you may not be the grantor.",
-            )
-        with db.get_connection(settings.db_path) as conn:
-            proxy = db.get_proxy_assignment(conn, proxy_id)
+    with db.get_connection(settings.db_path) as conn:
+        proxy = db.get_proxy_assignment(conn, proxy_id)
 
     return _proxy_to_response(proxy)
 
@@ -2346,82 +2310,6 @@ def set_board_email(hoa_id: int, body: SetBoardEmailRequest, user: dict = Depend
             raise HTTPException(status_code=403, detail="You are not a member of this HOA")
         db.set_hoa_board_email(conn, hoa_id, body.board_email)
     return {"ok": True, "board_email": body.board_email}
-
-
-# ---------------------------------------------------------------------------
-# Documenso webhook (M6)
-# ---------------------------------------------------------------------------
-
-@app.post("/webhooks/documenso", include_in_schema=False)
-async def documenso_webhook(request: Request):
-    """Receive Documenso signing completion events.
-
-    Expected event payload:
-      {"event": "document.completed", "data": {"externalId": "<proxy_id>", ...}}
-
-    Verifies HMAC-SHA256 signature from X-Documenso-Signature header.
-    """
-    from hoaware.esign import verify_webhook_signature, download_signed_pdf
-    from hoaware.email_service import notify_grantor, notify_delegate
-
-    body_bytes = await request.body()
-    sig_header = request.headers.get("X-Documenso-Signature")
-
-    if not verify_webhook_signature(body_bytes, sig_header):
-        raise HTTPException(status_code=401, detail="Invalid webhook signature")
-
-    try:
-        payload = json.loads(body_bytes)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid JSON payload")
-
-    event = payload.get("event") or payload.get("type")
-    data = payload.get("data") or {}
-
-    if event not in ("document.completed", "DOCUMENT_COMPLETED"):
-        # Acknowledge other events without action
-        return {"ok": True, "event": event, "action": "ignored"}
-
-    external_id = data.get("externalId") or data.get("external_id")
-    if not external_id:
-        raise HTTPException(status_code=400, detail="Missing externalId in webhook payload")
-
-    try:
-        proxy_id = int(external_id)
-    except (ValueError, TypeError):
-        raise HTTPException(status_code=400, detail=f"Invalid externalId: {external_id!r}")
-
-    settings = load_settings()
-    with db.get_connection(settings.db_path) as conn:
-        proxy = db.get_proxy_assignment(conn, proxy_id)
-        if not proxy:
-            raise HTTPException(status_code=404, detail=f"Proxy {proxy_id} not found")
-        if proxy["status"] != "draft":
-            # Already processed (idempotent)
-            return {"ok": True, "proxy_id": proxy_id, "action": "already_processed"}
-
-        now = datetime.now(timezone.utc).isoformat()
-        db.update_proxy_status(conn, proxy_id, "signed", signed_at=now)
-        db.create_proxy_audit(
-            conn, proxy_id=proxy_id, action="signed", actor_user_id=None,
-            details={"method": "documenso_webhook", "event": event, "timestamp": now},
-        )
-
-    # Optionally save the signed PDF
-    doc_id = proxy.get("documenso_document_id")
-    if doc_id:
-        pdf_bytes = download_signed_pdf(doc_id)
-        if pdf_bytes:
-            import hashlib, pathlib
-            pdf_dir = pathlib.Path("data/signed_pdfs")
-            pdf_dir.mkdir(parents=True, exist_ok=True)
-            pdf_path = pdf_dir / f"proxy_{proxy_id}.pdf"
-            pdf_path.write_bytes(pdf_bytes)
-            with db.get_connection(settings.db_path) as conn:
-                db.update_proxy_status(conn, proxy_id, "signed", signed_pdf_path=str(pdf_path))
-
-    notify_grantor(proxy_id, "signed")
-    return {"ok": True, "proxy_id": proxy_id, "action": "signed"}
 
 
 @app.get("/hoas")

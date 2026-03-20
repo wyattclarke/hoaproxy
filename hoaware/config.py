@@ -37,10 +37,6 @@ class Settings:
     jwt_secret: str
     jwt_algorithm: str
     jwt_expiry_days: int
-    # Documenso e-signature
-    documenso_api_url: str
-    documenso_api_key: str | None
-    documenso_webhook_secret: str | None
     # Email delivery
     email_provider: str   # "stub" | "resend" | "smtp"
     email_from: str
@@ -82,9 +78,6 @@ def load_settings() -> Settings:
         jwt_secret=os.environ.get("JWT_SECRET", "dev-secret-change-in-production"),
         jwt_algorithm=os.environ.get("JWT_ALGORITHM", "HS256"),
         jwt_expiry_days=int(os.environ.get("JWT_EXPIRY_DAYS", "30")),
-        documenso_api_url=os.environ.get("DOCUMENSO_API_URL", "https://app.documenso.com"),
-        documenso_api_key=os.environ.get("DOCUMENSO_API_KEY"),
-        documenso_webhook_secret=os.environ.get("DOCUMENSO_WEBHOOK_SECRET"),
         email_provider=os.environ.get("EMAIL_PROVIDER", "stub"),
         email_from=os.environ.get("EMAIL_FROM", "noreply@hoaware.app"),
         resend_api_key=os.environ.get("RESEND_API_KEY"),

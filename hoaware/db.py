@@ -324,8 +324,6 @@ def get_connection(db_path: Path) -> sqlite3.Connection:
     _ensure_table_column(conn, "hoa_locations", "boundary_geojson", "TEXT")
     # M6 migrations
     _ensure_table_column(conn, "hoas", "board_email", "TEXT")
-    _ensure_table_column(conn, "proxy_assignments", "documenso_document_id", "TEXT")
-    _ensure_table_column(conn, "proxy_assignments", "documenso_signing_url", "TEXT")
     # Proposal location fields
     _ensure_table_column(conn, "proposals", "lat", "REAL")
     _ensure_table_column(conn, "proposals", "lng", "REAL")

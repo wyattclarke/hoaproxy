@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 import tempfile
 from unittest.mock import MagicMock, patch
@@ -82,15 +81,6 @@ def test_board_email_column_exists():
     assert "board_email" in cols
 
 
-def test_documenso_columns_exist():
-    settings = load_settings()
-    with db.get_connection(settings.db_path) as conn:
-        cur = conn.execute("PRAGMA table_info(proxy_assignments)")
-        cols = {row["name"] for row in cur.fetchall()}
-    assert "documenso_document_id" in cols
-    assert "documenso_signing_url" in cols
-
-
 # ---------------------------------------------------------------------------
 # Board email endpoint
 # ---------------------------------------------------------------------------
@@ -124,11 +114,10 @@ def test_set_board_email_requires_membership():
 
 
 # ---------------------------------------------------------------------------
-# Click-to-sign (no Documenso configured)
+# Click-to-sign
 # ---------------------------------------------------------------------------
 
-def test_click_to_sign_without_documenso():
-    """Without DOCUMENSO_API_KEY, sign endpoint records click-to-sign immediately."""
+def test_click_to_sign():
     grantor_headers, _, hoa_id, delegate_user_id = _setup_users_and_hoa()
     proxy = _create_proxy(grantor_headers, hoa_id, delegate_user_id)
     assert proxy["status"] == "draft"
@@ -153,101 +142,6 @@ def test_sign_already_signed_rejected():
     client.post(f"/proxies/{proxy['id']}/sign", headers=grantor_headers)
     resp = client.post(f"/proxies/{proxy['id']}/sign", headers=grantor_headers)
     assert resp.status_code == 400
-
-
-# ---------------------------------------------------------------------------
-# Documenso path (mocked)
-# ---------------------------------------------------------------------------
-
-def test_sign_with_documenso_mocked():
-    """When DOCUMENSO_API_KEY is set, sign endpoint calls Documenso and returns signing_url."""
-    grantor_headers, _, hoa_id, delegate_user_id = _setup_users_and_hoa()
-    proxy = _create_proxy(grantor_headers, hoa_id, delegate_user_id)
-
-    mock_result = {
-        "method": "documenso",
-        "document_id": "doc-abc-123",
-        "signing_url": "https://app.documenso.com/sign/abc123",
-    }
-
-    with patch("hoaware.esign.create_signing_request", return_value=mock_result):
-        with patch.dict(os.environ, {"DOCUMENSO_API_KEY": "test-key"}):
-            # Reload settings so the key is picked up
-            from importlib import reload
-            import hoaware.config
-            reload(hoaware.config)
-            from hoaware.config import load_settings as _ls
-            settings = _ls()
-
-            # Patch the settings on the sign endpoint path
-            with patch("api.main.load_settings", return_value=settings):
-                # Manually set the api key on settings
-                settings.documenso_api_key = "test-key"
-                resp = client.post(f"/proxies/{proxy['id']}/sign", headers=grantor_headers)
-
-    # Status stays draft (waiting for webhook), signing_url is set
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["signing_url"] == "https://app.documenso.com/sign/abc123"
-
-
-# ---------------------------------------------------------------------------
-# Documenso webhook
-# ---------------------------------------------------------------------------
-
-def test_documenso_webhook_marks_proxy_signed():
-    grantor_headers, _, hoa_id, delegate_user_id = _setup_users_and_hoa()
-    proxy = _create_proxy(grantor_headers, hoa_id, delegate_user_id)
-    proxy_id = proxy["id"]
-
-    # Simulate webhook — no secret configured so signature check passes
-    payload = json.dumps({
-        "event": "document.completed",
-        "data": {"externalId": str(proxy_id)},
-    }).encode()
-
-    resp = client.post(
-        "/webhooks/documenso",
-        content=payload,
-        headers={"Content-Type": "application/json"},
-    )
-    assert resp.status_code == 200
-    assert resp.json()["action"] == "signed"
-
-    # Verify DB state
-    settings = load_settings()
-    with db.get_connection(settings.db_path) as conn:
-        updated = db.get_proxy_assignment(conn, proxy_id)
-    assert updated["status"] == "signed"
-    assert updated["signed_at"] is not None
-
-
-def test_documenso_webhook_idempotent():
-    """Calling webhook twice for the same proxy is safe."""
-    grantor_headers, _, hoa_id, delegate_user_id = _setup_users_and_hoa()
-    proxy = _create_proxy(grantor_headers, hoa_id, delegate_user_id)
-    proxy_id = proxy["id"]
-
-    payload = json.dumps({
-        "event": "document.completed",
-        "data": {"externalId": str(proxy_id)},
-    }).encode()
-
-    r1 = client.post("/webhooks/documenso", content=payload,
-                     headers={"Content-Type": "application/json"})
-    assert r1.status_code == 200
-    r2 = client.post("/webhooks/documenso", content=payload,
-                     headers={"Content-Type": "application/json"})
-    assert r2.status_code == 200
-    assert r2.json()["action"] == "already_processed"
-
-
-def test_documenso_webhook_unknown_event_ignored():
-    payload = json.dumps({"event": "document.viewed", "data": {"externalId": "999"}}).encode()
-    resp = client.post("/webhooks/documenso", content=payload,
-                       headers={"Content-Type": "application/json"})
-    assert resp.status_code == 200
-    assert resp.json()["action"] == "ignored"
 
 
 # ---------------------------------------------------------------------------
@@ -354,40 +248,3 @@ def test_html_to_pdf_empty_input():
     assert len(pdf) > 0
 
 
-# ---------------------------------------------------------------------------
-# Webhook signature verification
-# ---------------------------------------------------------------------------
-
-def test_webhook_signature_no_secret_passes():
-    """Without DOCUMENSO_WEBHOOK_SECRET configured, verification is skipped."""
-    from hoaware.esign import verify_webhook_signature
-    with patch("hoaware.esign.load_settings") as mock_settings:
-        settings = MagicMock()
-        settings.documenso_webhook_secret = None
-        mock_settings.return_value = settings
-        assert verify_webhook_signature(b"payload", None) is True
-
-
-def test_webhook_signature_valid():
-    import hashlib
-    import hmac as hmac_lib
-    from hoaware.esign import verify_webhook_signature
-
-    secret = "my-webhook-secret"
-    payload = b'{"event": "document.completed"}'
-    sig = "sha256=" + hmac_lib.new(secret.encode(), payload, hashlib.sha256).hexdigest()
-
-    with patch("hoaware.esign.load_settings") as mock_settings:
-        settings = MagicMock()
-        settings.documenso_webhook_secret = secret
-        mock_settings.return_value = settings
-        assert verify_webhook_signature(payload, sig) is True
-
-
-def test_webhook_signature_invalid():
-    from hoaware.esign import verify_webhook_signature
-    with patch("hoaware.esign.load_settings") as mock_settings:
-        settings = MagicMock()
-        settings.documenso_webhook_secret = "real-secret"
-        mock_settings.return_value = settings
-        assert verify_webhook_signature(b"payload", "sha256=badhex") is False
