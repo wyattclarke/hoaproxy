@@ -25,290 +25,390 @@
         --accent: #1662f3;
         --accent-strong: #0d49be;
         --ok: #177c45;
+        --teal: #0d9488;
+        --amber: #d97706;
       }
 
-      * {
-        box-sizing: border-box;
-      }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
 
       body {
-        margin: 0;
-        min-height: 100vh;
         font-family: "Manrope", "Segoe UI", sans-serif;
         color: var(--ink);
-        background:
-          radial-gradient(95rem 60rem at 8% -22%, rgba(20, 98, 243, 0.2), transparent 60%),
-          radial-gradient(70rem 45rem at 95% -15%, rgba(36, 189, 156, 0.14), transparent 56%),
-          linear-gradient(180deg, #f8fbff 0%, var(--bg) 54%, #edf3ff 100%);
+        background: linear-gradient(180deg, #f8fbff 0%, var(--bg) 40%, #edf3ff 100%);
+        min-height: 100vh;
+        -webkit-text-size-adjust: 100%;
       }
 
-      .shell {
-        width: min(1240px, 94vw);
-        margin: 28px auto 56px;
+      /* ─────────────────────────────
+         BASE = MOBILE (< 600px)
+         ───────────────────────────── */
+
+      /* ── MOBILE REORDER: search before pitch ── */
+      .main-content {
+        display: flex;
+        flex-direction: column;
       }
 
-      .hero {
-        border: 1px solid #c9dbfa;
-        border-radius: 22px;
-        background: linear-gradient(118deg, rgba(255, 255, 255, 0.95) 0%, rgba(227, 240, 255, 0.95) 100%);
-        box-shadow: 0 16px 44px rgba(17, 40, 74, 0.14);
-        padding: 22px;
-      }
+      .search-section { order: 1; }
+      .hero { order: 2; }
 
-      .top-row {
+      /* ── NAV ── */
+      .site-nav {
+        padding: 16px 16px 0;
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 12px;
         flex-wrap: wrap;
       }
 
       .brand {
         display: inline-flex;
         align-items: baseline;
-        gap: 0.12em;
-        font-family: "Space Grotesk", "Manrope", sans-serif;
-        font-size: clamp(1.7rem, 3.5vw, 2.5rem);
+        gap: 0.05em;
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 1.5rem;
         font-weight: 700;
-        margin: 0;
-      }
-
-      .brand-wrap {
-        margin: 0;
-      }
-
-      .brand-link {
-        color: inherit;
         text-decoration: none;
+        flex-shrink: 0;
       }
 
-      .brand-link:hover {
-        text-decoration: none;
-      }
+      .brand-hoa { color: #0f2f6d; letter-spacing: 0.03em; }
+      .brand-proxy { color: #1a66ff; }
 
-      .brand-mark {
-        position: relative;
-        width: 0.9em;
-        height: 0.9em;
-        margin-right: 0.12em;
-        transform: translateY(0.03em);
-      }
-
-      .brand-mark::before {
-        content: "";
-        position: absolute;
-        left: 0.08em;
-        top: 0.08em;
-        width: 0.72em;
-        height: 0.52em;
-        border-radius: 0.08em;
-        background: linear-gradient(180deg, #cfe0ff, #a9c5f6);
-        border: 1px solid #89aee8;
-      }
-
-      .brand-mark::after {
-        content: "";
-        position: absolute;
-        left: 0;
-        top: 0;
-        width: 0;
-        height: 0;
-        border-left: 0.44em solid transparent;
-        border-right: 0.44em solid transparent;
-        border-bottom: 0.34em solid #1e5fcf;
-      }
-
-      .brand-hoa {
-        color: #0f2f6d;
-        letter-spacing: 0.03em;
-      }
-
-      .brand-proxy {
-        color: #1a66ff;
-      }
-
-      .actions {
+      .nav-links {
         display: flex;
-        gap: 8px;
+        gap: 4px;
         flex-wrap: wrap;
+        justify-content: flex-end;
       }
 
-      .btn {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        border-radius: 10px;
-        border: 1px solid var(--line);
-        background: #fff;
-        color: #1b355c;
-        padding: 10px 14px;
-        font-family: "Manrope", "Segoe UI", sans-serif;
-        font-size: 0.92rem;
-        font-weight: 800;
-        line-height: 1.15;
+      .nav-links a {
+        font-family: "Manrope", sans-serif;
+        font-size: 0.8rem;
+        font-weight: 700;
+        padding: 6px 10px;
+        border-radius: 8px;
         text-decoration: none;
+        color: var(--ink);
+        white-space: nowrap;
         cursor: pointer;
-        appearance: none;
+        transition: background 0.15s;
       }
 
-      .btn:disabled {
-        opacity: 0.55;
-        cursor: not-allowed;
-      }
-
-      .btn.primary {
-        border-color: var(--accent);
+      .nav-links a:hover { background: rgba(22, 98, 243, 0.08); }
+      .nav-links a.primary {
         background: linear-gradient(180deg, var(--accent), var(--accent-strong));
         color: #fff;
       }
+      .nav-links a.primary:hover { opacity: 0.9; }
 
-      .subtitle {
-        margin: 8px 0 0;
-        color: var(--muted);
-        font-size: 1rem;
-        max-width: 62ch;
-        line-height: 1.55;
+      /* ── HERO: PITCH COLUMNS ── */
+      .hero {
+        padding: 28px 16px 28px;
       }
 
-      .hero-grid {
+      .pitch-grid {
         display: grid;
-        grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.85fr);
-        gap: 18px;
-        margin-top: 16px;
-        align-items: start;
+        grid-template-columns: 1fr;
+        gap: 24px;
       }
 
-      .hero-title {
-        margin: 14px 0 0;
-        font-family: "Space Grotesk", "Manrope", sans-serif;
-        font-size: clamp(2rem, 4vw, 3rem);
-        line-height: 1.02;
-        letter-spacing: -0.03em;
+      .pitch-col {
+        padding-left: 18px;
+        border-left: 3px solid var(--accent);
       }
 
-      .search-help {
-        margin-top: 8px;
-        color: var(--muted);
-        font-size: 0.88rem;
-      }
+      .pitch-col:nth-child(2) { border-left-color: var(--teal); }
+      .pitch-col:nth-child(3) { border-left-color: var(--amber); }
 
-      .example-list {
+      .pitch-icon {
+        width: 44px;
+        height: 44px;
+        border-radius: 12px;
         display: flex;
-        flex-wrap: wrap;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 12px;
+        background: rgba(22, 98, 243, 0.1);
+        color: var(--accent);
+      }
+
+      .pitch-icon svg { width: 22px; height: 22px; }
+
+      .pitch-col:nth-child(2) .pitch-icon {
+        background: rgba(13, 148, 136, 0.1);
+        color: var(--teal);
+      }
+
+      .pitch-col:nth-child(3) .pitch-icon {
+        background: rgba(217, 119, 6, 0.1);
+        color: var(--amber);
+      }
+
+      .pitch-title {
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 1.25rem;
+        font-weight: 700;
+        line-height: 1.15;
+        letter-spacing: -0.02em;
+        margin-bottom: 6px;
+      }
+
+      .pitch-desc {
+        font-size: 0.9rem;
+        line-height: 1.6;
+        color: var(--muted);
+      }
+
+      /* ── SEARCH BAR ── */
+      .search-section {
+        padding: 0 16px;
+        margin-top: 24px;
+      }
+
+      .search-bar {
+        display: grid;
+        grid-template-columns: 1fr;
         gap: 8px;
+        background: #fff;
+        border: 2px solid var(--line);
+        border-radius: 14px;
+        padding: 10px;
+        box-shadow: 0 6px 24px rgba(17, 40, 74, 0.08);
+        transition: border-color 0.2s, box-shadow 0.2s;
+      }
+
+      .search-bar:focus-within {
+        border-color: var(--accent);
+        box-shadow: 0 6px 24px rgba(22, 98, 243, 0.12);
+      }
+
+      .search-bar input {
+        border: none;
+        outline: none;
+        font: inherit;
+        font-size: 1rem;
+        color: var(--ink);
+        background: transparent;
+        padding: 4px 2px;
+      }
+
+      .search-bar input::placeholder { color: #a0b4cc; }
+
+      .search-btn {
+        padding: 12px 24px;
+        border: none;
+        border-radius: 10px;
+        background: linear-gradient(180deg, var(--accent), var(--accent-strong));
+        color: #fff;
+        font-family: "Manrope", sans-serif;
+        font-size: 0.95rem;
+        font-weight: 800;
+        cursor: pointer;
+        width: 100%;
+        transition: opacity 0.15s;
+      }
+
+      .search-btn:hover { opacity: 0.88; }
+      .search-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+      .search-hint {
+        text-align: center;
         margin-top: 12px;
+        color: var(--muted);
+        font-size: 0.82rem;
+        line-height: 2;
       }
 
       .example-chip {
-        border: 1px solid #cae0ff;
-        background: #f8fbff;
-        color: #244a7f;
+        display: inline-block;
+        background: #f0f5ff;
+        border: 1px solid #d6e4fa;
         border-radius: 999px;
-        padding: 7px 12px;
+        padding: 3px 10px;
+        margin: 2px 2px;
         font: inherit;
-        font-size: 0.83rem;
-        font-weight: 700;
+        font-size: 0.78rem;
+        font-weight: 600;
+        color: #3b6bb5;
         cursor: pointer;
       }
 
-      .next-strip {
-        margin-top: 14px;
+      .example-chip:hover { background: #e4edff; }
+
+      .state-filter-row {
         display: flex;
         flex-wrap: wrap;
-        gap: 8px;
+        gap: 6px;
+        margin-top: 10px;
+        justify-content: center;
       }
 
-      .next-pill {
-        border: 1px solid var(--line);
-        background: rgba(255,255,255,0.82);
-        color: var(--muted);
+      .state-pill {
+        display: inline-block;
+        font-size: 0.74rem;
         border-radius: 999px;
-        padding: 7px 12px;
-        font-size: 0.82rem;
-        font-weight: 700;
+        padding: 3px 10px;
+        background: #ebf3ff;
+        border: 1px solid #cae0ff;
+        color: #244a7f;
+        cursor: pointer;
+        font-weight: 600;
+        transition: background 0.12s, color 0.12s;
       }
 
-      .starter-grid {
-        display: grid;
-        gap: 12px;
-      }
-
-      .starter-card {
-        border: 1px solid var(--line);
-        border-radius: 16px;
-        background: rgba(255,255,255,0.96);
-        box-shadow: 0 8px 24px rgba(16, 40, 73, 0.06);
-        padding: 16px;
-      }
-
-      .starter-card h3 {
-        margin: 0 0 8px;
-        font-family: "Space Grotesk", "Manrope", sans-serif;
-        font-size: 1rem;
-      }
-
-      .starter-card p {
-        margin: 0 0 12px;
-        color: var(--muted);
-        font-size: 0.9rem;
-        line-height: 1.55;
-      }
-
-      .search-row {
-        margin-top: 14px;
-        display: grid;
-        grid-template-columns: 1fr auto;
-        gap: 10px;
-      }
-
-      .search-row input {
-        border: 1px solid var(--line);
-        border-radius: 11px;
-        background: #fff;
-        padding: 12px;
-        font: inherit;
-      }
-
-      .search-row input:focus {
-        outline: none;
-        border-color: #8cb4ff;
-        box-shadow: 0 0 0 4px rgba(22, 98, 243, 0.15);
+      .state-pill:hover { background: #d0e8ff; }
+      .state-pill.active {
+        background: var(--accent);
+        color: #fff;
+        border-color: var(--accent);
       }
 
       .status {
-        margin-top: 9px;
+        margin-top: 8px;
         min-height: 1.2em;
         color: var(--muted);
-        font-size: 0.9rem;
+        font-size: 0.85rem;
+        text-align: center;
       }
 
-      .status.ok {
-        color: var(--ok);
+      .status.ok { color: var(--ok); }
+      .status.error { color: #c0392b; }
+
+      .meta { color: var(--muted); font-size: 0.82rem; }
+
+      /* ── HOW IT WORKS: ACTION CARDS ── */
+      .how-section {
+        margin-top: 48px;
+        padding: 0 16px;
+      }
+
+      .how-section.hidden-when-results { }
+
+      .section-label {
+        text-align: center;
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 0.78rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: var(--accent);
+        margin-bottom: 8px;
+      }
+
+      .section-heading {
+        text-align: center;
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 1.4rem;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        margin-bottom: 24px;
+      }
+
+      .action-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 14px;
+      }
+
+      .action-card {
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        padding: 24px 20px;
+        box-shadow: 0 4px 16px rgba(16, 40, 73, 0.05);
+        display: flex;
+        align-items: flex-start;
+        gap: 16px;
+        text-decoration: none;
+        color: inherit;
+        transition: transform 0.2s, box-shadow 0.2s;
+      }
+
+      .action-num {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        height: 36px;
+        min-width: 36px;
+        border-radius: 50%;
+        background: var(--bg);
+        border: 2px solid var(--line);
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 0.9rem;
+        font-weight: 700;
+        color: var(--accent);
+      }
+
+      .action-body h3 {
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 1.05rem;
+        font-weight: 700;
+        margin-bottom: 4px;
+      }
+
+      .action-body p {
+        font-size: 0.88rem;
+        line-height: 1.55;
+        color: var(--muted);
+        margin-bottom: 10px;
+      }
+
+      .action-link {
+        display: inline-block;
+        font-size: 0.85rem;
+        font-weight: 800;
+        color: var(--accent);
+        text-decoration: none;
+        transition: color 0.15s;
+      }
+
+      .action-link:hover { color: var(--accent-strong); text-decoration: underline; }
+
+      .map-link {
+        text-align: center;
+        margin-top: 16px;
+        font-size: 0.85rem;
+        color: var(--muted);
+      }
+
+      .map-link a {
+        color: var(--accent);
+        font-weight: 700;
+        text-decoration: none;
+        cursor: pointer;
+      }
+
+      .map-link a:hover { text-decoration: underline; }
+
+      /* ── LOOKUP PANEL ── */
+      .lookup-section {
+        padding: 0 16px;
+        margin-top: 24px;
       }
 
       .lookup-panel {
-        margin-top: 12px;
         border: 1px solid var(--line);
-        border-radius: 14px;
-        background: rgba(255, 255, 255, 0.88);
-        padding: 12px;
+        border-radius: 16px;
+        background: rgba(255, 255, 255, 0.92);
+        padding: 16px;
+        box-shadow: 0 4px 16px rgba(16, 40, 73, 0.06);
       }
 
-      .lookup-panel[hidden] {
-        display: none;
-      }
+      .lookup-panel[hidden] { display: none; }
 
       .intent-grid {
         display: grid;
-        gap: 10px;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+        grid-template-columns: 1fr;
       }
 
       .intent-card {
         border: 1px solid var(--line);
         border-radius: 12px;
         background: #fff;
-        padding: 10px;
+        padding: 12px;
       }
 
       .intent-title {
@@ -317,10 +417,7 @@
         font-weight: 800;
       }
 
-      .intent-list {
-        display: grid;
-        gap: 8px;
-      }
+      .intent-list { display: grid; gap: 8px; }
 
       .intent-item {
         border: 1px solid var(--line);
@@ -329,20 +426,10 @@
         padding: 8px 10px;
       }
 
-      .address-workflow {
-        margin-top: 10px;
-        border-top: 1px solid #d8e4f7;
-        padding-top: 10px;
-      }
+      .address-workflow { margin-top: 12px; border-top: 1px solid #d8e4f7; padding-top: 12px; }
+      .address-workflow[hidden] { display: none; }
 
-      .address-workflow[hidden] {
-        display: none;
-      }
-
-      .suggestion-list {
-        display: grid;
-        gap: 8px;
-      }
+      .suggestion-list { display: grid; gap: 8px; }
 
       .suggestion-item {
         border: 1px solid var(--line);
@@ -351,16 +438,8 @@
         padding: 8px 10px;
       }
 
-      .suggestion-item label {
-        display: flex;
-        align-items: flex-start;
-        gap: 8px;
-      }
-
-      .suggestion-meta {
-        font-size: 0.82rem;
-        color: var(--muted);
-      }
+      .suggestion-item label { display: flex; align-items: flex-start; gap: 8px; }
+      .suggestion-meta { font-size: 0.82rem; color: var(--muted); }
 
       .badge {
         display: inline-block;
@@ -372,36 +451,17 @@
         border: 1px solid transparent;
       }
 
-      .badge.inside {
-        background: #e8f8ef;
-        border-color: #bde7ce;
-        color: #1f6f42;
-      }
+      .badge.inside { background: #e8f8ef; border-color: #bde7ce; color: #1f6f42; }
+      .badge.near-boundary { background: #fff6e8; border-color: #f0dbb4; color: #8a5e15; }
+      .badge.near-point { background: #edf2ff; border-color: #d3dfff; color: #3258a8; }
 
-      .badge.near-boundary {
-        background: #fff6e8;
-        border-color: #f0dbb4;
-        color: #8a5e15;
-      }
-
-      .badge.near-point {
-        background: #edf2ff;
-        border-color: #d3dfff;
-        color: #3258a8;
-      }
-
-      .mode-row {
-        margin-top: 10px;
-        display: flex;
-        gap: 8px;
-        flex-wrap: wrap;
-      }
+      .mode-row { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
 
       .query-row {
         margin-top: 8px;
         display: grid;
         gap: 8px;
-        grid-template-columns: 1fr auto;
+        grid-template-columns: 1fr;
       }
 
       .query-row input {
@@ -417,99 +477,68 @@
         border-radius: 10px;
         background: #fff;
         padding: 10px;
+        font-size: 0.9rem;
       }
 
-      .result-item {
-        padding: 8px 0;
-        border-bottom: 1px solid #edf2fa;
+      .result-item { padding: 8px 0; border-bottom: 1px solid #edf2fa; }
+      .result-item:last-child { border-bottom: 0; }
+
+      /* ── MAP & DIRECTORY ── */
+      .results-section {
+        padding: 0 16px;
+        margin-top: 24px;
       }
 
-      .result-item:last-child {
-        border-bottom: 0;
-      }
-
-      .grid {
-        margin-top: 16px;
+      .results-grid {
         display: grid;
-        gap: 14px;
-        grid-template-columns: minmax(420px, 1.25fr) minmax(320px, 1fr);
-      }
-
-      .grid > [hidden] {
-        display: none;
-      }
-
-      .grid:has(> [hidden]) {
+        gap: 16px;
         grid-template-columns: 1fr;
       }
 
+      .results-grid > [hidden] { display: none; }
+
       .card {
         border: 1px solid var(--line);
-        border-radius: 18px;
+        border-radius: 16px;
         background: rgba(255, 255, 255, 0.94);
-        box-shadow: 0 10px 32px rgba(16, 40, 73, 0.09);
-        padding: 14px;
+        box-shadow: 0 6px 20px rgba(16, 40, 73, 0.07);
+        padding: 16px;
       }
 
-      h2 {
+      .card h2 {
         margin: 0 0 10px;
-        font-family: "Space Grotesk", "Manrope", sans-serif;
-        font-size: 1.08rem;
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 1.05rem;
       }
 
       #map {
-        height: 560px;
+        height: 340px;
         border: 1px solid var(--line);
         border-radius: 12px;
       }
 
-      .meta {
-        color: var(--muted);
-        font-size: 0.86rem;
-      }
-
       .list {
-        max-height: 620px;
+        max-height: 500px;
         overflow: auto;
         border: 1px solid var(--line);
         border-radius: 12px;
         background: #fff;
       }
 
-      .hoa-card {
-        padding: 12px;
-        border-bottom: 1px solid #ebf1fb;
-      }
+      .hoa-card { padding: 12px; border-bottom: 1px solid #ebf1fb; }
+      .hoa-card:last-child { border-bottom: 0; }
 
-      .hoa-card:last-child {
-        border-bottom: 0;
-      }
+      .hoa-head { display: flex; justify-content: space-between; gap: 8px; }
+      .hoa-name { font-weight: 800; font-size: 0.95rem; }
 
-      .hoa-head {
-        display: flex;
-        justify-content: space-between;
-        gap: 8px;
-      }
-
-      .hoa-name {
-        font-weight: 800;
-        font-size: 0.98rem;
-      }
-
-      .hoa-name-link {
-        color: #0f4fcd;
-        text-decoration: none;
-      }
-
-      .hoa-name-link:hover {
-        text-decoration: underline;
-      }
+      .hoa-name-link { color: #0f4fcd; text-decoration: none; }
+      .hoa-name-link:hover { text-decoration: underline; }
 
       .pill {
         display: inline-block;
         margin-right: 6px;
         margin-top: 6px;
-        font-size: 0.75rem;
+        font-size: 0.72rem;
         border-radius: 999px;
         padding: 3px 8px;
         background: #ebf3ff;
@@ -523,69 +552,10 @@
         color: #0f4fcd;
         font-weight: 800;
         text-decoration: none;
+        font-size: 0.85rem;
       }
 
-      .hoa-link:hover {
-        text-decoration: underline;
-      }
-
-      @media (max-width: 980px) {
-        .hero-grid {
-          grid-template-columns: 1fr;
-        }
-
-        .grid {
-          grid-template-columns: 1fr;
-        }
-
-        #map {
-          height: 360px;
-        }
-      }
-
-      @media (max-width: 680px) {
-        .search-row {
-          grid-template-columns: 1fr;
-        }
-
-        .intent-grid {
-          grid-template-columns: 1fr;
-        }
-
-        .query-row {
-          grid-template-columns: 1fr;
-        }
-      }
-
-      .state-filter-row {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-        margin-top: 10px;
-      }
-
-      .state-pill {
-        display: inline-block;
-        font-size: 0.78rem;
-        border-radius: 999px;
-        padding: 4px 12px;
-        background: #ebf3ff;
-        border: 1px solid #cae0ff;
-        color: #244a7f;
-        cursor: pointer;
-        font-weight: 600;
-        transition: background 0.12s, color 0.12s;
-      }
-
-      .state-pill:hover {
-        background: #d0e8ff;
-      }
-
-      .state-pill.active {
-        background: var(--accent, #1662f3);
-        color: #fff;
-        border-color: var(--accent, #1662f3);
-      }
+      .hoa-link:hover { text-decoration: underline; }
 
       .pager {
         display: flex;
@@ -593,8 +563,8 @@
         justify-content: center;
         align-items: center;
         margin-top: 10px;
-        font-size: 0.85rem;
-        color: var(--muted, #4a6a8a);
+        font-size: 0.82rem;
+        color: var(--muted);
       }
 
       .pager button {
@@ -605,112 +575,289 @@
         color: #244a7f;
         font-weight: 600;
         cursor: pointer;
-        font-size: 0.8rem;
+        font-size: 0.78rem;
       }
 
-      .pager button:disabled {
-        opacity: 0.4;
-        cursor: default;
+      .pager button:disabled { opacity: 0.4; cursor: default; }
+
+      /* ── SHARED BUTTON ── */
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 10px;
+        border: 1px solid var(--line);
+        background: #fff;
+        color: #1b355c;
+        padding: 10px 14px;
+        font-family: "Manrope", sans-serif;
+        font-size: 0.88rem;
+        font-weight: 800;
+        line-height: 1.15;
+        text-decoration: none;
+        cursor: pointer;
+        appearance: none;
+      }
+
+      .btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+      .btn.primary {
+        border-color: var(--accent);
+        background: linear-gradient(180deg, var(--accent), var(--accent-strong));
+        color: #fff;
+      }
+
+      /* ── FOOTER ── */
+      .site-footer {
+        margin-top: 48px;
+        padding: 28px 16px;
+        border-top: 1px solid var(--line);
+        text-align: center;
+        color: var(--muted);
+        font-size: 0.85rem;
+        line-height: 1.6;
+      }
+
+      .site-footer a {
+        color: var(--accent);
+        font-weight: 700;
+        text-decoration: none;
+      }
+
+      .site-footer a:hover { text-decoration: underline; }
+
+      /* ─────────────────────────────
+         TABLET (600px+)
+         ───────────────────────────── */
+      @media (min-width: 600px) {
+        .main-content { display: block; }
+        .search-section { order: unset; }
+        .hero { order: unset; }
+
+        .site-nav { padding: 20px 24px 0; }
+        .brand { font-size: 1.65rem; }
+        .nav-links { gap: 6px; }
+        .nav-links a { font-size: 0.85rem; padding: 7px 14px; }
+
+        .hero { padding: 48px 24px 36px; }
+        .pitch-grid { gap: 28px; }
+        .pitch-title { font-size: 1.35rem; }
+        .pitch-desc { font-size: 0.95rem; }
+
+        .search-section { max-width: 560px; margin: 40px auto 0; padding: 0 24px; }
+        .search-bar { grid-template-columns: 1fr auto; padding: 8px 8px 8px 18px; gap: 10px; }
+        .search-btn { width: auto; padding: 12px 24px; }
+
+        .how-section { padding: 0 24px; margin-top: 56px; }
+        .section-heading { font-size: 1.6rem; margin-bottom: 28px; }
+        .action-card { padding: 28px 24px; }
+
+        .lookup-section { padding: 0 24px; max-width: 700px; margin-left: auto; margin-right: auto; }
+        .intent-grid { grid-template-columns: repeat(2, 1fr); }
+        .query-row { grid-template-columns: 1fr auto; }
+
+        .results-section { padding: 0 24px; }
+        #map { height: 420px; }
+
+        .site-footer { padding: 32px 24px; margin-top: 56px; font-size: 0.88rem; }
+      }
+
+      /* ─────────────────────────────
+         DESKTOP (900px+)
+         ───────────────────────────── */
+      @media (min-width: 900px) {
+        .site-nav { max-width: 1200px; margin: 0 auto; padding: 24px 32px 0; }
+        .brand { font-size: 1.8rem; }
+        .nav-links { gap: 8px; }
+        .nav-links a { font-size: 0.88rem; padding: 8px 16px; }
+
+        .hero { max-width: 1200px; margin: 0 auto; padding: 72px 32px 56px; }
+        .pitch-grid { grid-template-columns: repeat(3, 1fr); gap: 40px; }
+        .pitch-col { padding-left: 24px; border-left-width: 4px; }
+        .pitch-icon { width: 56px; height: 56px; border-radius: 14px; margin-bottom: 20px; }
+        .pitch-icon svg { width: 28px; height: 28px; }
+        .pitch-title { font-size: 1.55rem; margin-bottom: 12px; }
+        .pitch-desc { font-size: 1rem; line-height: 1.65; }
+
+        .search-section { max-width: 720px; margin: 56px auto 0; padding: 0 32px; }
+        .search-bar { border-radius: 16px; padding: 8px 8px 8px 20px; gap: 12px; box-shadow: 0 8px 32px rgba(17, 40, 74, 0.08); }
+        .search-bar input { font-size: 1.05rem; }
+        .search-btn { padding: 12px 28px; font-size: 0.95rem; }
+        .search-hint { font-size: 0.88rem; margin-top: 14px; }
+        .example-chip { font-size: 0.82rem; padding: 4px 12px; }
+
+        .how-section { max-width: 1200px; margin: 80px auto 0; padding: 0 32px; }
+        .section-label { font-size: 0.82rem; margin-bottom: 12px; }
+        .section-heading { font-size: 2rem; margin-bottom: 40px; }
+        .action-grid { grid-template-columns: repeat(3, 1fr); gap: 24px; }
+        .action-card {
+          flex-direction: column; align-items: center; text-align: center;
+          padding: 32px 28px; box-shadow: 0 4px 20px rgba(16, 40, 73, 0.06);
+        }
+        .action-card:hover { transform: translateY(-4px); box-shadow: 0 12px 36px rgba(16, 40, 73, 0.12); }
+        .action-num { width: 40px; height: 40px; min-width: 40px; margin-bottom: 4px; }
+        .action-body h3 { font-size: 1.15rem; margin-bottom: 10px; }
+        .action-body p { font-size: 0.93rem; line-height: 1.6; margin-bottom: 20px; }
+        .action-link { font-size: 0.9rem; }
+        .map-link { margin-top: 20px; font-size: 0.9rem; }
+
+        .lookup-section { padding: 0 32px; max-width: 900px; }
+
+        .results-section { max-width: 1200px; margin-left: auto; margin-right: auto; padding: 0 32px; }
+        .results-grid { grid-template-columns: minmax(420px, 1.25fr) minmax(320px, 1fr); }
+        .results-grid:has(> [hidden]) { grid-template-columns: 1fr; }
+        #map { height: 560px; }
+
+        .site-footer { max-width: 1200px; margin: 80px auto 0; padding: 40px 32px; font-size: 0.92rem; }
       }
     </style>
   </head>
   <body>
-    <main class="shell">
-      <section class="hero">
-        <div class="top-row">
-          <h1 class="brand-wrap">
-            <a class="brand brand-link" href="/"><span class="brand-mark" aria-hidden="true"></span><span class="brand-hoa">HOA</span><span class="brand-proxy">proxy</span></a>
-          </h1>
-          <div class="actions" id="navContainer">
-            <a class="btn primary" href="/add-hoa">Add Your HOA</a>
-            <a class="btn" href="/about">About</a>
-          </div>
-        </div>
-        <div class="hero-grid">
-          <div>
-            <h2 class="hero-title">Know your rules. Vote online. Propose changes.</h2>
-            <p class="subtitle">Upload your community's governing documents and search them with AI. Assign your proxy vote to a trusted neighbor. Make your voice heard with non-binding proposals.</p>
-            <div class="search-row">
-              <input id="searchInput" placeholder="HOA name or home address" />
-              <button class="btn primary" id="searchSubmitBtn" type="button">Search</button>
-            </div>
-            <div class="search-help">Examples:</div>
-            <div class="example-list">
-              <button class="example-chip" type="button" data-example="Parkway Community Association">Parkway Community Association</button>
-              <button class="example-chip" type="button" data-example="123 Main St Cary NC">123 Main St Cary NC</button>
-              <button class="example-chip" type="button" data-example="Sunset Pines HOA">Sunset Pines HOA</button>
-            </div>
-            <div id="stateFilter" class="state-filter-row"></div>
-            <div class="meta" id="countMeta"></div>
-            <div id="homeStatus" class="status"></div>
-          </div>
 
-          <aside class="starter-grid" id="starterGrid">
-            <article class="starter-card">
-              <h3>Find My HOA</h3>
-              <p>Search your HOA or address to confirm your community and see its documents.</p>
-              <button class="btn primary" id="focusSearchBtn" type="button">Start with Search</button>
-            </article>
-            <article class="starter-card">
-              <h3>I Need Someone to Vote for Me</h3>
-              <p>Choose one trusted person who can vote for you, then review and sign your proxy.</p>
-              <a class="btn" href="/assign-proxy">Start a Proxy</a>
-            </article>
-            <article class="starter-card">
-              <h3>I Want to Represent My Neighbors</h3>
-              <p>Sign up so neighbors can choose you as the person who can vote for them.</p>
-              <a class="btn" href="/become-delegate">Represent Neighbors</a>
-            </article>
-            <article class="starter-card">
-              <h3>Prefer a Map?</h3>
-              <p>Browse HOA locations on a map only when you want geographic context.</p>
-              <button class="btn" id="toggleMapBtn" type="button">Browse Map</button>
-            </article>
-          </aside>
-        </div>
-        <section id="lookupPanel" class="lookup-panel" hidden>
-          <div class="intent-grid">
-            <article class="intent-card">
-              <h3 class="intent-title">HOA Matches</h3>
-              <div class="intent-list" id="hoaIntentList"></div>
-            </article>
-            <article class="intent-card">
-              <h3 class="intent-title">Address Match</h3>
-              <div id="addressIntentCard"></div>
-            </article>
+    <!-- NAV -->
+    <nav class="site-nav">
+      <a class="brand" href="/">
+        <span class="brand-hoa">HOA</span><span class="brand-proxy">proxy</span>
+      </a>
+      <div class="nav-links" id="navContainer">
+        <a class="primary" href="/add-hoa">Add HOA</a>
+        <a href="/about">About</a>
+      </div>
+    </nav>
+
+    <div class="main-content">
+    <!-- HERO: THREE-COLUMN PITCH -->
+    <section class="hero">
+      <div class="pitch-grid">
+        <div class="pitch-col">
+          <div class="pitch-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
           </div>
-          <div id="lookupStatus" class="status"></div>
-          <section id="addressWorkflow" class="address-workflow" hidden>
-            <h3 class="intent-title">Suggested HOAs</h3>
-            <div class="suggestion-list" id="addressSuggestions"></div>
-            <div class="mode-row">
-              <button class="btn primary" id="multiModeQaBtn" type="button">Ask</button>
-              <button class="btn" id="multiModeSearchBtn" type="button">Search</button>
-            </div>
-            <div class="query-row">
-              <input id="multiQueryInput" placeholder="Ask a question or enter a search query" />
-              <button class="btn primary" id="runMultiBtn" type="button">Run</button>
-            </div>
-            <div id="multiStatus" class="status"></div>
-            <div id="multiOutput" class="result-box"></div>
-            <div id="multiSources" class="result-box"></div>
-          </section>
+          <h2 class="pitch-title">Transparent rules</h2>
+          <p class="pitch-desc">Searchable documents, with a chatbot. Upload your CC&Rs, bylaws, and rules — then ask questions in plain English.</p>
+        </div>
+        <div class="pitch-col">
+          <div class="pitch-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          </div>
+          <h2 class="pitch-title">Guerrilla online voting</h2>
+          <p class="pitch-desc">HOAs rarely allow online voting, but almost all allow proxy votes. Assign your vote to a trusted neighbor right here. Or nominate yourself, gather proxies, and join the board!</p>
+        </div>
+        <div class="pitch-col">
+          <div class="pitch-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          </div>
+          <h2 class="pitch-title">Community proposals</h2>
+          <p class="pitch-desc">Three co-signers required. Confirmed residents only. No comments. No gossip. Serious proposals from real neighbors.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- SEARCH BAR -->
+    <section class="search-section">
+      <div class="search-bar">
+        <input id="searchInput" type="text" placeholder="HOA name or home address..." />
+        <button class="search-btn" id="searchSubmitBtn" type="button">Search</button>
+      </div>
+      <div class="search-hint">
+        Try:
+        <button class="example-chip" type="button" data-example="Parkway Community Association">Parkway Community Association</button>
+        <button class="example-chip" type="button" data-example="123 Main St Cary NC">123 Main St Cary NC</button>
+        <button class="example-chip" type="button" data-example="Sunset Pines HOA">Sunset Pines HOA</button>
+      </div>
+      <div id="stateFilter" class="state-filter-row"></div>
+      <div class="meta" id="countMeta" style="text-align:center;margin-top:6px"></div>
+      <div id="homeStatus" class="status"></div>
+    </section>
+    </div><!-- /.main-content -->
+
+    <!-- LOOKUP PANEL -->
+    <section class="lookup-section">
+      <div id="lookupPanel" class="lookup-panel" hidden>
+        <div class="intent-grid">
+          <article class="intent-card">
+            <h3 class="intent-title">HOA Matches</h3>
+            <div class="intent-list" id="hoaIntentList"></div>
+          </article>
+          <article class="intent-card">
+            <h3 class="intent-title">Address Match</h3>
+            <div id="addressIntentCard"></div>
+          </article>
+        </div>
+        <div id="lookupStatus" class="status"></div>
+        <section id="addressWorkflow" class="address-workflow" hidden>
+          <h3 class="intent-title">Suggested HOAs</h3>
+          <div class="suggestion-list" id="addressSuggestions"></div>
+          <div class="mode-row">
+            <button class="btn primary" id="multiModeQaBtn" type="button">Ask</button>
+            <button class="btn" id="multiModeSearchBtn" type="button">Search</button>
+          </div>
+          <div class="query-row">
+            <input id="multiQueryInput" placeholder="Ask a question or enter a search query" />
+            <button class="btn primary" id="runMultiBtn" type="button">Run</button>
+          </div>
+          <div id="multiStatus" class="status"></div>
+          <div id="multiOutput" class="result-box"></div>
+          <div id="multiSources" class="result-box"></div>
         </section>
-      </section>
+      </div>
+    </section>
 
-      <section class="grid">
+    <!-- MAP & DIRECTORY -->
+    <section class="results-section">
+      <div class="results-grid">
         <article class="card" id="mapCard" hidden>
           <h2>HOA Map</h2>
           <div id="map"></div>
         </article>
-
         <article class="card" id="directoryCard" hidden>
           <h2>HOA Directory</h2>
           <div class="list" id="hoaList"></div>
           <div id="pager" class="pager"></div>
         </article>
-      </section>
-    </main>
+      </div>
+    </section>
+
+    <!-- HOW IT WORKS -->
+    <section class="how-section" id="howSection">
+      <div class="section-label">Get started</div>
+      <h2 class="section-heading">Three ways to take action</h2>
+      <div class="action-grid">
+        <article class="action-card">
+          <div class="action-num">1</div>
+          <div class="action-body">
+            <h3>Find My HOA</h3>
+            <p>Search your HOA or address to confirm your community and browse its governing documents.</p>
+            <a class="action-link" id="focusSearchBtn" href="#">Start searching &rarr;</a>
+          </div>
+        </article>
+        <a class="action-card" href="/assign-proxy">
+          <div class="action-num">2</div>
+          <div class="action-body">
+            <h3>Assign My Vote</h3>
+            <p>Choose one trusted person who can vote for you, then review and e-sign your proxy form.</p>
+            <span class="action-link">Start a proxy &rarr;</span>
+          </div>
+        </a>
+        <a class="action-card" href="/become-delegate">
+          <div class="action-num">3</div>
+          <div class="action-body">
+            <h3>Represent My Neighbors</h3>
+            <p>Sign up so neighbors in your community can choose you as their proxy delegate.</p>
+            <span class="action-link">Become a delegate &rarr;</span>
+          </div>
+        </a>
+      </div>
+      <div class="map-link">
+        Or <a id="toggleMapBtn">browse the HOA map</a> for geographic context.
+      </div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer class="site-footer">
+      <p>HOAproxy is a free, open-source civic organizing platform to empower HOA residents.<br>
+      Join the effort at <a href="https://github.com/wyattclarke/hoaware" target="_blank" rel="noopener noreferrer">github.com/wyattclarke/hoaware</a></p>
+    </footer>
 
     <script
       src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
@@ -758,6 +905,7 @@
       const multiStatus = document.getElementById("multiStatus");
       const multiOutput = document.getElementById("multiOutput");
       const multiSources = document.getElementById("multiSources");
+      const howSection = document.getElementById("howSection");
 
       function setStatus(message, kind = "") {
         homeStatus.className = `status ${kind}`.trim();
@@ -836,7 +984,7 @@
         if (!mapCard) return;
         mapCard.hidden = !state.mapVisible;
         if (toggleMapBtn) {
-          toggleMapBtn.textContent = state.mapVisible ? "Hide Map" : "Browse Map";
+          toggleMapBtn.textContent = state.mapVisible ? "hide the map" : "browse the HOA map";
         }
         if (state.mapVisible) {
           initMap();
@@ -1031,7 +1179,6 @@
             state.total = 0;
             return;
           }
-          // Map is visible with no filter: fall through to load all HOAs for map display
         } else {
           if (directoryCard) directoryCard.hidden = false;
           state.mapVisible = true;
@@ -1181,9 +1328,8 @@
             .map((item) => item.hoa)
         );
         lookupPanel.hidden = false;
-        // On mobile, hide starter cards so results are immediately visible
-        var sg = document.getElementById("starterGrid");
-        if (sg) sg.classList.add("mobile-hidden");
+        // Hide action cards when results are showing
+        if (howSection) howSection.style.display = "none";
         clearMultiResults();
         setMultiStatus("");
         renderHoaMatches(payload.hoa_matches || []);
@@ -1193,7 +1339,6 @@
           return;
         }
         setLookupStatus("Lookup complete.", "ok");
-        // On mobile, scroll results into view so user doesn't have to hunt
         setTimeout(function() { lookupPanel.scrollIntoView({ behavior: "smooth", block: "start" }); }, 100);
       }
 
@@ -1280,8 +1425,7 @@
         const q = searchInput.value.trim();
         if (!q) {
           lookupPanel.hidden = true;
-          var sg = document.getElementById("starterGrid");
-          if (sg) sg.classList.remove("mobile-hidden");
+          if (howSection) howSection.style.display = "";
           setLookupStatus("");
           return;
         }
@@ -1315,7 +1459,8 @@
       });
       searchSubmitBtn.addEventListener("click", runUniversalLookup);
       if (focusSearchBtn) {
-        focusSearchBtn.addEventListener("click", () => {
+        focusSearchBtn.addEventListener("click", (e) => {
+          e.preventDefault();
           searchInput.focus();
           searchInput.scrollIntoView({ behavior: "smooth", block: "center" });
         });
@@ -1347,7 +1492,6 @@
       clearMultiResults();
       renderMapVisibility();
 
-      // Milestone 6: read ?state= from URL to pre-select a state filter
       (function initStateFromUrl() {
         const params = new URLSearchParams(window.location.search);
         const s = params.get("state");
@@ -1359,31 +1503,18 @@
     </script>
     <script src="/static/js/auth.js"></script>
     <script>
-      // Add auth-aware nav items
       const navContainer = document.getElementById("navContainer");
       if (navContainer) {
-        const baseLinks = '<a class="btn primary" href="/add-hoa">Add Your HOA</a><a class="btn" href="/about">About</a>';
+        const baseLinks = '<a class="primary" href="/add-hoa">Add HOA</a><a href="/about">About</a>';
         if (Auth.isLoggedIn()) {
           navContainer.innerHTML = baseLinks +
-            '<a class="btn" href="/dashboard">Dashboard</a>' +
-            '<a class="btn" id="logoutBtn">Logout</a>';
+            '<a href="/dashboard">Dashboard</a>' +
+            '<a id="logoutBtn">Logout</a>';
           document.getElementById("logoutBtn").addEventListener("click", Auth.logout);
         } else {
           navContainer.innerHTML = baseLinks +
-            '<a class="btn" href="/login">Login</a>' +
-            '<a class="btn" href="/register">Register</a>';
-        }
-        // Inject mobile hamburger
-        if (!navContainer.parentElement.querySelector(".nav-hamburger")) {
-          const hb = document.createElement("button");
-          hb.className = "nav-hamburger";
-          hb.setAttribute("aria-label", "Toggle navigation");
-          hb.innerHTML = "<span></span><span></span><span></span>";
-          hb.addEventListener("click", function() {
-            const open = navContainer.classList.toggle("nav-open");
-            hb.classList.toggle("open", open);
-          });
-          navContainer.parentElement.insertBefore(hb, navContainer);
+            '<a href="/login">Login</a>' +
+            '<a href="/register">Register</a>';
         }
       }
     </script>
