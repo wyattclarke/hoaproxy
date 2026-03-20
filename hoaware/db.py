@@ -42,6 +42,7 @@ CREATE INDEX IF NOT EXISTS idx_chunks_document ON chunks(document_id);
 CREATE TABLE IF NOT EXISTS hoa_locations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     hoa_id INTEGER NOT NULL UNIQUE REFERENCES hoas(id) ON DELETE CASCADE,
+    metadata_type TEXT,
     display_name TEXT,
     website_url TEXT,
     street TEXT,
@@ -318,6 +319,7 @@ def get_connection(db_path: Path) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys=ON;")
     conn.executescript(SCHEMA)
+    _ensure_table_column(conn, "hoa_locations", "metadata_type", "TEXT")
     _ensure_table_column(conn, "hoa_locations", "website_url", "TEXT")
     _ensure_table_column(conn, "hoa_locations", "boundary_geojson", "TEXT")
     # M6 migrations
@@ -510,6 +512,7 @@ def list_hoa_summaries(
             COALESCE(ds.total_bytes, 0) AS total_bytes,
             ds.last_ingested,
             COALESCE(cs.chunk_count, 0) AS chunk_count,
+            l.metadata_type,
             l.website_url,
             l.city,
             l.state,
@@ -539,6 +542,7 @@ def list_hoa_summaries(
             "chunk_count": int(row["chunk_count"]),
             "total_bytes": int(row["total_bytes"]),
             "last_ingested": str(row["last_ingested"]) if row["last_ingested"] is not None else None,
+            "metadata_type": str(row["metadata_type"]) if row["metadata_type"] is not None else None,
             "website_url": str(row["website_url"]) if row["website_url"] is not None else None,
             "city": str(row["city"]) if row["city"] is not None else None,
             "state": str(row["state"]) if row["state"] is not None else None,
@@ -613,6 +617,7 @@ def get_hoa_location(conn: sqlite3.Connection, hoa_name: str) -> dict | None:
         """
         SELECT
             h.name AS hoa,
+            l.metadata_type,
             l.display_name,
             l.website_url,
             l.street,
@@ -644,6 +649,7 @@ def get_hoa_location(conn: sqlite3.Connection, hoa_name: str) -> dict | None:
     ):
         return {
             "hoa": str(row["hoa"]),
+            "metadata_type": None,
             "display_name": None,
             "website_url": None,
             "street": None,
@@ -659,6 +665,7 @@ def get_hoa_location(conn: sqlite3.Connection, hoa_name: str) -> dict | None:
         }
     return {
         "hoa": str(row["hoa"]),
+        "metadata_type": str(row["metadata_type"]) if row["metadata_type"] is not None else None,
         "display_name": str(row["display_name"]) if row["display_name"] is not None else None,
         "website_url": str(row["website_url"]) if row["website_url"] is not None else None,
         "street": str(row["street"]) if row["street"] is not None else None,
@@ -678,6 +685,7 @@ def upsert_hoa_location(
     conn: sqlite3.Connection,
     hoa_name: str,
     *,
+    metadata_type: str | None = None,
     display_name: str | None = None,
     website_url: str | None = None,
     street: str | None = None,
@@ -700,11 +708,12 @@ def upsert_hoa_location(
         conn.execute(
             """
             INSERT INTO hoa_locations
-                (hoa_id, display_name, website_url, street, city, state, postal_code, country, latitude, longitude, boundary_geojson, source)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (hoa_id, metadata_type, display_name, website_url, street, city, state, postal_code, country, latitude, longitude, boundary_geojson, source)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 hoa_id,
+                metadata_type,
                 display_name,
                 website_url,
                 street,
@@ -725,6 +734,7 @@ def upsert_hoa_location(
         """
         UPDATE hoa_locations
         SET
+            metadata_type = COALESCE(?, metadata_type),
             display_name = COALESCE(?, display_name),
             website_url = COALESCE(?, website_url),
             street = COALESCE(?, street),
@@ -740,6 +750,7 @@ def upsert_hoa_location(
         WHERE hoa_id = ?
         """,
         (
+            metadata_type,
             display_name,
             website_url,
             street,
@@ -762,6 +773,7 @@ def list_hoa_locations(conn: sqlite3.Connection) -> list[dict]:
         """
         SELECT
             h.name AS hoa,
+            l.metadata_type,
             l.display_name,
             l.website_url,
             l.street,
@@ -785,6 +797,7 @@ def list_hoa_locations(conn: sqlite3.Connection) -> list[dict]:
     return [
         {
             "hoa": str(row["hoa"]),
+            "metadata_type": str(row["metadata_type"]) if row["metadata_type"] is not None else None,
             "display_name": str(row["display_name"]) if row["display_name"] is not None else None,
             "website_url": str(row["website_url"]) if row["website_url"] is not None else None,
             "street": str(row["street"]) if row["street"] is not None else None,

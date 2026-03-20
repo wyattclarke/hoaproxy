@@ -452,6 +452,7 @@ class DocumentSummary(BaseModel):
 
 class HoaLocation(BaseModel):
     hoa: str
+    metadata_type: str | None = None
     display_name: str | None = None
     website_url: str | None = None
     street: str | None = None
@@ -469,6 +470,7 @@ class HoaLocation(BaseModel):
 class HoaSummary(BaseModel):
     hoa_id: int | None = None
     hoa: str
+    metadata_type: str | None = None
     doc_count: int
     chunk_count: int
     total_bytes: int
@@ -698,6 +700,21 @@ def _normalize_website_url(raw_url: str | None) -> str | None:
     parsed = urlparse(cleaned)
     if not parsed.scheme or not parsed.netloc:
         raise HTTPException(status_code=400, detail="Invalid HOA website URL")
+    return cleaned
+
+
+def _normalize_metadata_type(raw_value: str | None) -> str | None:
+    if raw_value is None:
+        return None
+    cleaned = raw_value.strip().lower()
+    if not cleaned:
+        return None
+    allowed = {"hoa", "condo", "coop", "timeshare"}
+    if cleaned not in allowed:
+        raise HTTPException(
+            status_code=400,
+            detail=f"metadata_type must be one of: {', '.join(sorted(allowed))}",
+        )
     return cleaned
 
 
@@ -1577,88 +1594,104 @@ def health() -> dict:
     return {"status": "ok"}
 
 
-@app.post("/admin/import-tucson-hoa")
-def admin_import_tucson_hoa(request: Request):
-    """One-time admin endpoint to import Tucson HOA data from bundled GeoJSON."""
+class BulkImportRecord(BaseModel):
+    name: str
+    metadata_type: str | None = None
+    display_name: str | None = None
+    website_url: str | None = None
+    street: str | None = None
+    city: str | None = None
+    state: str | None = None
+    postal_code: str | None = None
+    country: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    boundary_geojson: dict | None = None
+    source: str | None = None
+
+
+class BulkImportRequest(BaseModel):
+    source: str
+    records: list[BulkImportRecord]
+
+
+class BulkImportResponse(BaseModel):
+    status: str
+    imported: int
+    skipped: int
+    errors: list[str]
+
+
+@app.post("/admin/bulk-import", response_model=BulkImportResponse)
+def admin_bulk_import(request: Request, body: BulkImportRequest):
+    """Generic bulk import endpoint for HOA location data."""
     settings = load_settings()
     admin_key = settings.jwt_secret
     auth_header = request.headers.get("Authorization", "")
     if not admin_key or auth_header != f"Bearer {admin_key}":
         raise HTTPException(status_code=403, detail="Forbidden")
 
-    from urllib.request import urlopen, Request as UrlRequest
-    from urllib.parse import urlencode
-    arcgis_url = (
-        "https://gis.tucsonaz.gov/public/rest/services/"
-        "PublicMaps/NeighborhoodsPlans/MapServer/14/query?"
-        + urlencode({
-            "where": "1=1",
-            "outFields": "OBJECTID,SUB_NAME,HOA_NAME,HOA_STATUS",
-            "returnGeometry": "true",
-            "outSR": "4326",
-            "geometryPrecision": "6",
-            "f": "geojson",
-        })
-    )
-    try:
-        req = UrlRequest(arcgis_url, headers={"User-Agent": "HOAproxy/1.0"})
-        with urlopen(req, timeout=60) as resp:
-            data = json.loads(resp.read())
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Failed to fetch ArcGIS data: {exc}")
+    _check_rate_limit(request, limit=50)
 
-    features = data["features"]
-    active = [f for f in features if f.get("properties", {}).get("HOA_STATUS") == "1"]
+    if len(body.records) > 5000:
+        raise HTTPException(status_code=400, detail="Maximum 5000 records per request")
 
-    def title_case_name(name: str) -> str:
-        lower_words = {"of", "the", "at", "in", "for", "and", "or", "no", "no."}
-        parts = name.split()
-        return " ".join(
-            w.capitalize() if i == 0 or w.lower() not in lower_words else w.lower()
-            for i, w in enumerate(parts)
-        )
-
-    def compute_centroid(geometry: dict):
-        points = []
-        def collect(coords):
-            if not isinstance(coords, list):
-                return
-            if coords and isinstance(coords[0], (int, float)) and len(coords) >= 2:
-                points.append((coords[1], coords[0]))
-                return
-            for child in coords:
-                collect(child)
-        collect(geometry.get("coordinates"))
-        if not points:
-            return None, None
-        return sum(p[0] for p in points) / len(points), sum(p[1] for p in points) / len(points)
-
-    settings = load_settings()
     imported = 0
+    skipped = 0
+    errors: list[str] = []
+
     with db.get_connection(settings.db_path) as conn:
-        for feat in active:
-            props = feat["properties"]
-            raw_name = (props.get("HOA_NAME") or "").strip()
-            if not raw_name:
+        for i, rec in enumerate(body.records):
+            name = rec.name.strip()
+            if not name:
+                skipped += 1
                 continue
-            hoa_name = title_case_name(raw_name)
-            geometry = feat.get("geometry")
-            boundary_geojson = None
-            if geometry and geometry.get("coordinates"):
-                boundary_geojson = json.dumps({"type": geometry["type"], "coordinates": geometry["coordinates"]})
-            lat, lon = compute_centroid(geometry) if geometry else (None, None)
-            sub_name = (props.get("SUB_NAME") or "").strip()
-            display_name = title_case_name(sub_name) if sub_name else None
-            db.upsert_hoa_location(
-                conn, hoa_name, display_name=display_name,
-                city="Tucson", state="AZ", country="US",
-                latitude=lat, longitude=lon,
-                boundary_geojson=boundary_geojson, source="arcgis_tucson",
-            )
-            imported += 1
+
+            try:
+                # Serialize boundary_geojson dict to JSON string for DB storage
+                boundary_str = None
+                if rec.boundary_geojson:
+                    boundary_str = json.dumps(rec.boundary_geojson)
+
+                # Compute centroid from boundary if lat/lon missing
+                lat = rec.latitude
+                lon = rec.longitude
+                if (lat is None or lon is None) and boundary_str:
+                    center = _center_from_boundary_geojson(boundary_str)
+                    if center:
+                        lat, lon = center
+
+                # Uppercase state
+                state = rec.state.upper() if rec.state else None
+
+                # Per-record source overrides top-level source
+                source = rec.source or body.source
+
+                db.upsert_hoa_location(
+                    conn,
+                    name,
+                    metadata_type=_normalize_metadata_type(rec.metadata_type),
+                    display_name=rec.display_name,
+                    website_url=rec.website_url,
+                    street=rec.street,
+                    city=rec.city,
+                    state=state,
+                    postal_code=rec.postal_code,
+                    country=rec.country,
+                    latitude=lat,
+                    longitude=lon,
+                    boundary_geojson=boundary_str,
+                    source=source,
+                )
+                imported += 1
+            except Exception as exc:
+                errors.append(f"Record {i} ({name}): {exc}")
+
         conn.commit()
 
-    return {"status": "ok", "imported": imported, "total_active": len(active)}
+    return BulkImportResponse(
+        status="ok", imported=imported, skipped=skipped, errors=errors
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -2520,6 +2553,7 @@ def get_hoa_location(hoa_name: str) -> HoaLocation | None:
 @app.post("/hoas/{hoa_name}/location", response_model=HoaLocation)
 def upsert_hoa_location(
     hoa_name: str,
+    metadata_type: str | None = Form(default=None),
     website_url: str | None = Form(default=None),
     street: str | None = Form(default=None),
     city: str | None = Form(default=None),
@@ -2532,6 +2566,7 @@ def upsert_hoa_location(
 ) -> HoaLocation:
     settings = load_settings()
     resolved_hoa = _resolve_hoa_name(hoa_name)
+    normalized_metadata_type = _normalize_metadata_type(metadata_type)
     normalized_website = _normalize_website_url(website_url)
     normalized_boundary = _parse_boundary_geojson(boundary_geojson)
     if latitude is not None and not (-90 <= latitude <= 90):
@@ -2555,6 +2590,7 @@ def upsert_hoa_location(
         db.upsert_hoa_location(
             conn,
             resolved_hoa,
+            metadata_type=normalized_metadata_type,
             website_url=normalized_website,
             street=(street.strip() if street else None),
             city=(city.strip() if city else None),
@@ -2623,6 +2659,7 @@ async def upload_documents(
     background_tasks: BackgroundTasks,
     hoa: str = Form(...),
     files: List[UploadFile] = File(...),
+    metadata_type: str | None = Form(default=None),
     website_url: str | None = Form(default=None),
     street: str | None = Form(default=None),
     city: str | None = Form(default=None),
@@ -2657,9 +2694,10 @@ async def upload_documents(
         await upload.close()
 
     normalized_website = _normalize_website_url(website_url)
+    normalized_metadata_type = _normalize_metadata_type(metadata_type)
     normalized_boundary = _parse_boundary_geojson(boundary_geojson)
     location_saved = False
-    if any(value is not None and str(value).strip() for value in [normalized_website, street, city, state, postal_code, country, normalized_boundary]) or (
+    if any(value is not None and str(value).strip() for value in [normalized_metadata_type, normalized_website, street, city, state, postal_code, country, normalized_boundary]) or (
         latitude is not None and longitude is not None
     ):
         if latitude is not None and not (-90 <= latitude <= 90):
@@ -2683,6 +2721,7 @@ async def upload_documents(
             db.upsert_hoa_location(
                 conn,
                 resolved_hoa,
+                metadata_type=normalized_metadata_type,
                 website_url=normalized_website,
                 street=(street.strip() if street else None),
                 city=(city.strip() if city else None),
