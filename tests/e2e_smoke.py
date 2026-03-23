@@ -16,6 +16,20 @@ Usage:
 
     # Against local dev
     python tests/e2e_smoke.py --url http://localhost:8000
+
+    # Run only multi-user API tests (group 8) or browser tests (group 9)
+    python tests/e2e_smoke.py --group 8
+    python tests/e2e_smoke.py --group 9
+
+Env vars:
+    SMOKE_TEST_EMAIL / SMOKE_TEST_PASSWORD       — primary test account (groups 4, 9)
+    SMOKE_TEST_EMAIL_2 / SMOKE_TEST_PASSWORD_2   — second account (group 9 only)
+    SMOKE_TEST_EMAIL_3 / SMOKE_TEST_PASSWORD_3   — third account (group 9 only)
+    TESTMAIL_API_KEY / TESTMAIL_NAMESPACE         — email delivery tests (group 6)
+
+    Group 8 (multi-user API) creates throwaway accounts — no extra env vars needed.
+    Group 9 (multi-user browser) requires all 3 accounts to be pre-registered
+    and members of at least one shared HOA.
 """
 
 from __future__ import annotations
@@ -689,6 +703,471 @@ def group7_api(base: str, results: SmokeResults):
 
 
 # ---------------------------------------------------------------------------
+# Multi-user API helpers
+# ---------------------------------------------------------------------------
+
+def _api_call(base: str, method: str, path: str, body: dict | None = None,
+              token: str | None = None) -> tuple[int, dict]:
+    """Make an API call. Returns (status_code, response_json)."""
+    url = f"{base}{path}"
+    data = json.dumps(body).encode() if body else None
+    headers = {"Content-Type": "application/json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    req = urllib.request.Request(url, data=data, headers=headers, method=method)
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            return resp.status, json.loads(resp.read())
+    except urllib.error.HTTPError as exc:
+        try:
+            body_text = exc.read().decode()
+            return exc.code, json.loads(body_text)
+        except Exception:
+            return exc.code, {"detail": str(exc)}
+
+
+def _register_temp(base: str, suffix: str, display_name: str) -> tuple[str, int]:
+    """Register a throwaway account, return (token, user_id)."""
+    email = f"smoke-multi-{suffix}-{int(time.time())}@test.hoatest.invalid"
+    status, data = _api_call(base, "POST", "/auth/register", {
+        "email": email, "password": f"SmokeMulti{int(time.time())}!",
+        "display_name": display_name,
+    })
+    if status != 200:
+        raise RuntimeError(f"Register failed ({status}): {data}")
+    return data["token"], data["user_id"]
+
+
+def group8_multi_user_api(base: str, results: SmokeResults):
+    """Multi-user workflows via API — proposal lifecycle + proxy delegation."""
+    print("\n--- Group 8: Multi-User API Tests ---")
+
+    # ---- Setup: 3 users + HOA + memberships ----
+    try:
+        t1, uid1 = _register_temp(base, "creator", "Alice Smoketest")
+        t2, uid2 = _register_temp(base, "cosigner1", "Bob Smoketest")
+        t3, uid3 = _register_temp(base, "cosigner2", "Carol Smoketest")
+        results.passed("Multi-user: register 3 accounts")
+    except Exception as exc:
+        results.failed("Multi-user: register 3 accounts", str(exc)[:120])
+        return
+
+    # Claim membership in an existing HOA (use the first available one)
+    try:
+        status, summary = _api_call(base, "GET", "/hoas/summary?page=1&per_page=1")
+        if status != 200 or not summary.get("hoas"):
+            results.failed("Multi-user: find HOA for testing", "No HOAs available")
+            return
+        hoa_id = summary["hoas"][0]["id"]
+        hoa_name = summary["hoas"][0]["name"]
+        for tok in (t1, t2, t3):
+            s, _ = _api_call(base, "POST", f"/user/hoas/{hoa_id}/claim",
+                             {"unit_number": "SMOKE"}, tok)
+            if s not in (200, 409):  # 409 = already claimed
+                results.failed("Multi-user: claim membership", f"HTTP {s}")
+                return
+        results.passed(f"Multi-user: claim membership ({hoa_name[:30]})")
+    except Exception as exc:
+        results.failed("Multi-user: claim membership", str(exc)[:120])
+        return
+
+    # ---- Proposal lifecycle ----
+    # Step 1: Create proposal
+    try:
+        s, proposal = _api_call(base, "POST", "/proposals", {
+            "hoa_id": hoa_id,
+            "title": f"Smoke test proposal {int(time.time())}",
+            "description": "Automated multi-user smoke test. Safe to ignore or archive.",
+            "category": "Other",
+        }, t1)
+        if s != 200:
+            results.failed("Multi-user: create proposal", f"HTTP {s}: {proposal.get('detail')}")
+            return
+        proposal_id = proposal["id"]
+        share_code = proposal["share_code"]
+        assert proposal["status"] == "private"
+        results.passed("Multi-user: create proposal (private)")
+    except Exception as exc:
+        results.failed("Multi-user: create proposal", str(exc)[:120])
+        return
+
+    # Step 2: First co-signer
+    try:
+        s, resp = _api_call(base, "POST", f"/proposals/cosign/{share_code}", None, t2)
+        if s != 200:
+            results.failed("Multi-user: first co-sign", f"HTTP {s}: {resp.get('detail')}")
+            return
+        assert resp["cosigner_count"] == 1
+        assert resp["status"] == "private"
+        results.passed("Multi-user: first co-sign (still private)")
+    except Exception as exc:
+        results.failed("Multi-user: first co-sign", str(exc)[:120])
+        return
+
+    # Step 3: Second co-signer → publishes
+    try:
+        s, resp = _api_call(base, "POST", f"/proposals/cosign/{share_code}", None, t3)
+        if s != 200:
+            results.failed("Multi-user: second co-sign (publishes)", f"HTTP {s}: {resp.get('detail')}")
+            return
+        assert resp["cosigner_count"] == 2
+        assert resp["status"] == "public"
+        results.passed("Multi-user: second co-sign (now public)")
+    except Exception as exc:
+        results.failed("Multi-user: second co-sign", str(exc)[:120])
+        return
+
+    # Step 4: Upvote the public proposal (by cosigner 1)
+    try:
+        s, resp = _api_call(base, "POST", f"/proposals/{proposal_id}/upvote", None, t2)
+        if s != 200:
+            results.failed("Multi-user: upvote proposal", f"HTTP {s}: {resp.get('detail')}")
+            return
+        assert resp["upvote_count"] >= 1
+        assert resp["user_upvoted"] is True
+        results.passed("Multi-user: upvote public proposal")
+    except Exception as exc:
+        results.failed("Multi-user: upvote proposal", str(exc)[:120])
+        return
+
+    # Step 5: Named co-sign on public proposal (by cosigner 1, who already cosigned privately)
+    # This should 409 since they already cosigned. Register a 4th user instead.
+    try:
+        t4, uid4 = _register_temp(base, "supporter", "Dave Smoketest")
+        _api_call(base, "POST", f"/user/hoas/{hoa_id}/claim", {"unit_number": "SMOKE"}, t4)
+        s, resp = _api_call(base, "POST", f"/proposals/{proposal_id}/cosign", None, t4)
+        if s != 200:
+            results.failed("Multi-user: public co-sign by name", f"HTTP {s}: {resp.get('detail')}")
+            return
+        assert resp["user_cosigned"] is True
+        assert "Dave Smoketest" in resp.get("cosigners", [])
+        results.passed("Multi-user: public co-sign (named supporter)")
+    except Exception as exc:
+        results.failed("Multi-user: public co-sign by name", str(exc)[:120])
+        return
+
+    # Step 6: Verify the proposal shows up in HOA feed
+    try:
+        s, feed = _api_call(base, "GET", f"/hoas/{hoa_id}/proposals", None, t2)
+        if s != 200:
+            results.failed("Multi-user: list HOA proposals", f"HTTP {s}")
+            return
+        found = [p for p in feed if p["id"] == proposal_id]
+        if not found:
+            results.failed("Multi-user: proposal in HOA feed", "Proposal not in feed")
+            return
+        results.passed("Multi-user: proposal visible in HOA feed")
+    except Exception as exc:
+        results.failed("Multi-user: proposal in HOA feed", str(exc)[:120])
+        return
+
+    # Step 7: Withdraw (archive) the proposal — cleanup
+    try:
+        s, _ = _api_call(base, "DELETE", f"/proposals/{proposal_id}", None, t1)
+        if s != 200:
+            results.warn("Multi-user: withdraw proposal", f"HTTP {s}")
+        else:
+            results.passed("Multi-user: withdraw proposal (cleanup)")
+    except Exception as exc:
+        results.warn("Multi-user: withdraw proposal", str(exc)[:120])
+
+    # ---- Proxy delegation lifecycle ----
+    # Step 1: Register user2 as delegate
+    try:
+        s, delegate = _api_call(base, "POST", "/delegates/register", {
+            "hoa_id": hoa_id,
+            "bio": "Smoke test delegate",
+            "contact_email": "smoke-delegate@test.hoatest.invalid",
+        }, t2)
+        if s == 409:
+            # Already a delegate from a previous run — find their delegate record
+            s2, delegates = _api_call(base, "GET", f"/hoas/{hoa_id}/delegates", None, t1)
+            delegate = next((d for d in delegates if d["user_id"] == uid2), None)
+            if not delegate:
+                results.failed("Multi-user: register delegate", "409 but delegate not found")
+                return
+            results.passed("Multi-user: delegate already registered")
+        elif s != 200:
+            results.failed("Multi-user: register delegate", f"HTTP {s}: {delegate.get('detail')}")
+            return
+        else:
+            results.passed("Multi-user: register as delegate")
+        delegate_user_id = uid2
+    except Exception as exc:
+        results.failed("Multi-user: register delegate", str(exc)[:120])
+        return
+
+    # Step 2: user1 creates proxy assignment to user2
+    try:
+        s, proxy = _api_call(base, "POST", "/proxies", {
+            "hoa_id": hoa_id,
+            "delegate_user_id": delegate_user_id,
+        }, t1)
+        if s == 409:
+            results.warn("Multi-user: create proxy", "User already has active proxy — skipping sign/revoke")
+            return
+        if s != 200:
+            results.failed("Multi-user: create proxy", f"HTTP {s}: {proxy.get('detail')}")
+            return
+        proxy_id = proxy["id"]
+        assert proxy["status"] == "draft"
+        results.passed("Multi-user: create proxy (draft)")
+    except Exception as exc:
+        results.failed("Multi-user: create proxy", str(exc)[:120])
+        return
+
+    # Step 3: Revoke the draft proxy (signing requires email verification, so we test revoke)
+    try:
+        s, resp = _api_call(base, "POST", f"/proxies/{proxy_id}/revoke", None, t1)
+        if s != 200:
+            results.failed("Multi-user: revoke proxy", f"HTTP {s}: {resp.get('detail')}")
+            return
+        assert resp["status"] == "revoked"
+        results.passed("Multi-user: revoke proxy")
+    except Exception as exc:
+        results.failed("Multi-user: revoke proxy", str(exc)[:120])
+
+    # Step 4: Check proxy stats
+    try:
+        s, stats = _api_call(base, "GET", f"/hoas/{hoa_id}/proxy-stats", None, t1)
+        if s != 200:
+            results.failed("Multi-user: proxy stats", f"HTTP {s}")
+            return
+        results.passed("Multi-user: proxy stats endpoint")
+    except Exception as exc:
+        results.failed("Multi-user: proxy stats", str(exc)[:120])
+
+
+def group9_multi_user_browser(page1, page2, page3, base: str,
+                               results: SmokeResults, js_errors: list[list[str]],
+                               creds: list[tuple[str, str]]):
+    """Multi-user browser tests — full proposal + proxy flows through the UI.
+
+    Requires 3 pre-existing accounts (SMOKE_TEST_EMAIL, _2, _3) that are
+    members of at least one shared HOA.
+    """
+    print("\n--- Group 9: Multi-User Browser Tests ---")
+
+    pages = [page1, page2, page3]
+    emails = [c[0] for c in creds]
+    passwords = [c[1] for c in creds]
+
+    # ---- Login all 3 users ----
+    for i, (page, email, pw) in enumerate(zip(pages, emails, passwords)):
+        js_errors[i].clear()
+        try:
+            page.goto(f"{base}/login", wait_until="domcontentloaded", timeout=PAGE_TIMEOUT)
+            page.fill("#email", email)
+            page.fill("#password", pw)
+            page.click("#loginBtn")
+            page.wait_for_url("**/dashboard**", timeout=INTERACTION_TIMEOUT)
+        except PwTimeout:
+            if "/dashboard" not in page.url:
+                results.failed(f"Multi-user browser: login user {i+1}", "Timeout")
+                return
+        except Exception as exc:
+            results.failed(f"Multi-user browser: login user {i+1}", str(exc)[:120])
+            return
+    results.passed("Multi-user browser: login 3 users")
+
+    # ---- User 1 creates a proposal ----
+    try:
+        page1.goto(f"{base}/proposals", wait_until="domcontentloaded", timeout=PAGE_TIMEOUT)
+        page1.wait_for_selector("#hoaSelect", timeout=PAGE_TIMEOUT)
+        # Wait for HOA options to load
+        page1.wait_for_function(
+            "document.querySelectorAll('#hoaSelect option').length >= 1 && "
+            "document.querySelector('#hoaSelect option').value !== ''",
+            timeout=INTERACTION_TIMEOUT,
+        )
+        # Open the new proposal form
+        page1.click("#newProposalDetails summary")
+        page1.wait_for_timeout(300)
+        title = f"Browser smoke test {int(time.time())}"
+        page1.fill("#npTitle", title)
+        page1.fill("#npDesc", "Automated browser multi-user smoke test. Safe to ignore or archive.")
+        page1.click("#submitProposalBtn")
+        page1.wait_for_selector("#shareCodeDisplay", timeout=INTERACTION_TIMEOUT)
+        page1.wait_for_function(
+            "document.getElementById('shareCodeDisplay').textContent.trim().length === 4",
+            timeout=INTERACTION_TIMEOUT,
+        )
+        share_code = page1.text_content("#shareCodeDisplay").strip()
+        if len(share_code) != 4:
+            results.failed("Multi-user browser: create proposal", f"Bad share code: '{share_code}'")
+            return
+        results.passed(f"Multi-user browser: create proposal (code: {share_code})")
+    except Exception as exc:
+        results.failed("Multi-user browser: create proposal", str(exc)[:120])
+        return
+
+    # ---- User 2 co-signs via share code ----
+    try:
+        page2.goto(f"{base}/proposals", wait_until="domcontentloaded", timeout=PAGE_TIMEOUT)
+        page2.wait_for_selector("#hoaSelect", timeout=PAGE_TIMEOUT)
+        page2.wait_for_timeout(500)
+        # Open co-sign section
+        page2.click("#cosignDetails summary")
+        page2.wait_for_timeout(300)
+        page2.fill("#cosignCodeInput", share_code)
+        page2.click("#lookupCodeBtn")
+        page2.wait_for_function(
+            "document.getElementById('cosignLookupStatus').classList.contains('ok')",
+            timeout=INTERACTION_TIMEOUT,
+        )
+        results.passed("Multi-user browser: user 2 co-signs")
+    except Exception as exc:
+        results.failed("Multi-user browser: user 2 co-signs", str(exc)[:120])
+        return
+
+    # ---- User 3 co-signs → publishes ----
+    try:
+        page3.goto(f"{base}/proposals", wait_until="domcontentloaded", timeout=PAGE_TIMEOUT)
+        page3.wait_for_selector("#hoaSelect", timeout=PAGE_TIMEOUT)
+        page3.wait_for_timeout(500)
+        page3.click("#cosignDetails summary")
+        page3.wait_for_timeout(300)
+        page3.fill("#cosignCodeInput", share_code)
+        page3.click("#lookupCodeBtn")
+        page3.wait_for_function(
+            "document.getElementById('cosignLookupStatus').classList.contains('ok')",
+            timeout=INTERACTION_TIMEOUT,
+        )
+        # Check the co-sign preview shows "public"
+        preview_text = page3.text_content("#cosignPreview")
+        if "public" in (preview_text or "").lower():
+            results.passed("Multi-user browser: user 3 co-signs (now public)")
+        else:
+            results.warn("Multi-user browser: user 3 co-signs",
+                         f"Status not 'public' in preview: {(preview_text or '')[:80]}")
+    except Exception as exc:
+        results.failed("Multi-user browser: user 3 co-signs", str(exc)[:120])
+        return
+
+    # ---- User 2 sees proposal in public feed and upvotes ----
+    try:
+        page2.goto(f"{base}/proposals", wait_until="domcontentloaded", timeout=PAGE_TIMEOUT)
+        page2.wait_for_selector("#hoaSelect", timeout=PAGE_TIMEOUT)
+        page2.wait_for_function(
+            "document.querySelectorAll('#hoaSelect option').length >= 1 && "
+            "document.querySelector('#hoaSelect option').value !== ''",
+            timeout=INTERACTION_TIMEOUT,
+        )
+        # Trigger load
+        page2.evaluate("document.getElementById('hoaSelect').dispatchEvent(new Event('change'))")
+        page2.wait_for_timeout(2000)
+        # Find upvote button
+        upvote_btns = page2.locator(".upvote-btn")
+        if upvote_btns.count() > 0:
+            upvote_btns.first.click()
+            page2.wait_for_timeout(1500)
+            results.passed("Multi-user browser: upvote proposal")
+        else:
+            results.warn("Multi-user browser: upvote proposal", "No upvote buttons found in feed")
+    except Exception as exc:
+        results.failed("Multi-user browser: upvote proposal", str(exc)[:120])
+
+    # ---- User 3 sees proposal in feed and co-signs by name ----
+    try:
+        page3.goto(f"{base}/proposals", wait_until="domcontentloaded", timeout=PAGE_TIMEOUT)
+        page3.wait_for_selector("#hoaSelect", timeout=PAGE_TIMEOUT)
+        page3.wait_for_function(
+            "document.querySelectorAll('#hoaSelect option').length >= 1 && "
+            "document.querySelector('#hoaSelect option').value !== ''",
+            timeout=INTERACTION_TIMEOUT,
+        )
+        page3.evaluate("document.getElementById('hoaSelect').dispatchEvent(new Event('change'))")
+        page3.wait_for_timeout(2000)
+        cosign_btns = page3.locator(".cosign-btn")
+        if cosign_btns.count() > 0:
+            cosign_btns.first.click()
+            page3.wait_for_timeout(1500)
+            # Check the button changed to signed state
+            first_btn = page3.locator(".cosign-btn").first
+            if first_btn.count() > 0:
+                btn_text = first_btn.text_content()
+                if "Signed" in (btn_text or ""):
+                    results.passed("Multi-user browser: named co-sign on public proposal")
+                else:
+                    # Button may have already been applied (already cosigned as original cosigner)
+                    results.warn("Multi-user browser: named co-sign", f"Button text: {btn_text}")
+            else:
+                results.passed("Multi-user browser: named co-sign (button toggled)")
+        else:
+            results.warn("Multi-user browser: named co-sign", "No co-sign buttons found")
+    except Exception as exc:
+        results.failed("Multi-user browser: named co-sign", str(exc)[:120])
+
+    # ---- User 1 withdraws the proposal (cleanup) ----
+    try:
+        page1.goto(f"{base}/proposals", wait_until="domcontentloaded", timeout=PAGE_TIMEOUT)
+        page1.wait_for_timeout(2000)
+        withdraw_btns = page1.locator("[data-withdraw]")
+        if withdraw_btns.count() > 0:
+            page1.on("dialog", lambda d: d.accept())
+            withdraw_btns.first.click()
+            page1.wait_for_timeout(2000)
+            results.passed("Multi-user browser: withdraw proposal (cleanup)")
+        else:
+            results.warn("Multi-user browser: withdraw proposal", "No withdraw button found")
+    except Exception as exc:
+        results.warn("Multi-user browser: withdraw proposal", str(exc)[:120])
+
+    # ---- Proxy delegation flow ----
+    # User 2 becomes a delegate
+    try:
+        page2.goto(f"{base}/become-delegate", wait_until="domcontentloaded", timeout=PAGE_TIMEOUT)
+        page2.wait_for_timeout(1000)
+        # Check if already a delegate (button may say "already registered" or form may be hidden)
+        page_text = page2.text_content("body") or ""
+        if "already" in page_text.lower() or "registered" in page_text.lower():
+            results.passed("Multi-user browser: user 2 already a delegate")
+        else:
+            # Try to fill form and register
+            hoa_select = page2.locator("#hoaSelect, #delegateHoaSelect, select").first
+            if hoa_select.count() > 0:
+                page2.wait_for_timeout(500)
+                bio_field = page2.locator("#bio, textarea").first
+                if bio_field.count() > 0:
+                    bio_field.fill("Smoke test delegate")
+                register_btn = page2.locator("button.primary, #registerBtn").first
+                if register_btn.count() > 0:
+                    register_btn.click()
+                    page2.wait_for_timeout(2000)
+                    results.passed("Multi-user browser: register as delegate")
+                else:
+                    results.warn("Multi-user browser: register as delegate", "No register button")
+            else:
+                results.warn("Multi-user browser: register as delegate", "No HOA select found")
+    except Exception as exc:
+        results.warn("Multi-user browser: register as delegate", str(exc)[:120])
+
+    # User 1 assigns proxy to user 2
+    try:
+        page1.goto(f"{base}/assign-proxy", wait_until="domcontentloaded", timeout=PAGE_TIMEOUT)
+        page1.wait_for_timeout(1500)
+        page_text = page1.text_content("body") or ""
+        if "already have" in page_text.lower():
+            results.warn("Multi-user browser: assign proxy", "User already has active proxy")
+        else:
+            delegate_cards = page1.locator("[data-delegate-id], .delegate-card, .card")
+            if delegate_cards.count() > 0:
+                # Look for an assign/select button
+                assign_btn = page1.locator("[data-assign], button:has-text('Assign'), button:has-text('Select')").first
+                if assign_btn.count() > 0:
+                    assign_btn.click()
+                    page1.wait_for_timeout(2000)
+                    results.passed("Multi-user browser: assign proxy")
+                else:
+                    results.warn("Multi-user browser: assign proxy", "No assign button found")
+            else:
+                results.warn("Multi-user browser: assign proxy",
+                             "No delegate cards — may need delegates in this HOA")
+    except Exception as exc:
+        results.warn("Multi-user browser: assign proxy", str(exc)[:120])
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -705,7 +1184,7 @@ def parse_args():
     parser.add_argument("--slow-mo", type=int, default=0,
                         help="Slow down actions by N ms")
     parser.add_argument("--group", type=int, default=0,
-                        help="Run only a specific group (1-7), 0 = all")
+                        help="Run only a specific group (1-9), 0 = all")
     return parser.parse_args()
 
 
@@ -718,9 +1197,18 @@ def main():
     password = args.password or os.environ.get("SMOKE_TEST_PASSWORD", "")
     has_creds = bool(email and password)
 
+    multi_browser = all([
+        has_creds,
+        os.environ.get("SMOKE_TEST_EMAIL_2"),
+        os.environ.get("SMOKE_TEST_PASSWORD_2"),
+        os.environ.get("SMOKE_TEST_EMAIL_3"),
+        os.environ.get("SMOKE_TEST_PASSWORD_3"),
+    ])
+
     print(f"\nHOAproxy Smoke Test")
     print(f"  Target: {base}")
     print(f"  Auth:   {'yes' if has_creds else 'no (auth tests will be skipped)'}")
+    print(f"  Multi:  {'browser + API' if multi_browser else 'API only (set SMOKE_TEST_EMAIL_2/3 for browser)'}")
     print(f"  Mode:   {'headed' if args.headed else 'headless'}")
 
     results = SmokeResults()
@@ -784,6 +1272,65 @@ def main():
         # Group 7: API health (no browser needed)
         if run_group in (0, 7):
             group7_api(base, results)
+
+        # Group 8: multi-user API tests (no browser needed)
+        if run_group in (0, 8):
+            group8_multi_user_api(base, results)
+
+        # Group 9: multi-user browser tests (requires 3 accounts)
+        if run_group in (0, 9):
+            email2 = os.environ.get("SMOKE_TEST_EMAIL_2", "")
+            pw2 = os.environ.get("SMOKE_TEST_PASSWORD_2", "")
+            email3 = os.environ.get("SMOKE_TEST_EMAIL_3", "")
+            pw3 = os.environ.get("SMOKE_TEST_PASSWORD_3", "")
+            has_multi_creds = all([has_creds, email2, pw2, email3, pw3])
+
+            if has_multi_creds:
+                contexts = []
+                page_list = []
+                js_err_lists: list[list[str]] = []
+                for _ in range(3):
+                    ctx = browser.new_context(viewport={"width": 1280, "height": 720})
+                    pg = ctx.new_page()
+                    errs: list[str] = []
+                    pg.on("pageerror", lambda exc, e=errs: e.append(str(exc)))
+                    pg.on("console",
+                          lambda msg, e=errs: e.append(msg.text)
+                          if msg.type == "error" else None)
+                    contexts.append(ctx)
+                    page_list.append(pg)
+                    js_err_lists.append(errs)
+
+                group9_multi_user_browser(
+                    page_list[0], page_list[1], page_list[2],
+                    base, results, js_err_lists,
+                    [(email, password), (email2, pw2), (email3, pw3)],
+                )
+
+                for ctx in contexts:
+                    ctx.close()
+            else:
+                print("\n--- Group 9: Multi-User Browser Tests ---")
+                missing = []
+                if not has_creds:
+                    missing.append("SMOKE_TEST_EMAIL/PASSWORD")
+                if not email2 or not pw2:
+                    missing.append("SMOKE_TEST_EMAIL_2/PASSWORD_2")
+                if not email3 or not pw3:
+                    missing.append("SMOKE_TEST_EMAIL_3/PASSWORD_3")
+                reason = f"Missing: {', '.join(missing)}"
+                for name in [
+                    "Multi-user browser: login 3 users",
+                    "Multi-user browser: create proposal",
+                    "Multi-user browser: user 2 co-signs",
+                    "Multi-user browser: user 3 co-signs",
+                    "Multi-user browser: upvote proposal",
+                    "Multi-user browser: named co-sign",
+                    "Multi-user browser: withdraw proposal",
+                    "Multi-user browser: register as delegate",
+                    "Multi-user browser: assign proxy",
+                ]:
+                    results.skipped(name, reason)
 
         browser.close()
 

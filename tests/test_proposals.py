@@ -581,6 +581,83 @@ def test_location_preserved_in_feed():
     assert feed[0]["location_description"] == "Corner of Cary Pkwy and Appomattox"
 
 
+def test_cosign_public_proposal_by_id():
+    """A 4th member can co-sign a public proposal by ID (named support)."""
+    h1, uid1, h2, uid2, h3, uid3, hoa_id = _setup_users_and_hoa()
+    h4, uid4 = _reg("user4@example.com", "User Four")
+    client.post(f"/user/hoas/{hoa_id}/claim", json={"unit_number": "104"}, headers=h4)
+
+    # Create and publish via share-code cosigning
+    p = client.post("/proposals", json={
+        "hoa_id": hoa_id, "title": "Public cosign test", "description": "Testing named support on public proposals.",
+    }, headers=h1).json()
+    code = p["share_code"]
+    client.post(f"/proposals/cosign/{code}", headers=h2)
+    client.post(f"/proposals/cosign/{code}", headers=h3)
+
+    # Now co-sign the public proposal by ID
+    r = client.post(f"/proposals/{p['id']}/cosign", headers=h4)
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["user_cosigned"] is True
+    assert data["cosigner_count"] == 3
+    assert "User Four" in data["cosigners"]
+
+    # Duplicate should be rejected
+    r2 = client.post(f"/proposals/{p['id']}/cosign", headers=h4)
+    assert r2.status_code == 409
+
+    # Withdraw co-signature
+    r3 = client.delete(f"/proposals/{p['id']}/cosign", headers=h4)
+    assert r3.status_code == 200
+
+    # Verify cosigner list updated
+    r4 = client.get(f"/proposals/{p['id']}", headers=h4)
+    assert r4.json()["cosigner_count"] == 2
+    assert "User Four" not in r4.json()["cosigners"]
+
+
+def test_cosign_public_proposal_creator_rejected():
+    """Creator cannot co-sign their own public proposal."""
+    h1, uid1, h2, uid2, h3, uid3, hoa_id = _setup_users_and_hoa()
+    p = client.post("/proposals", json={
+        "hoa_id": hoa_id, "title": "Own cosign test", "description": "Creator should not be able to cosign own proposal.",
+    }, headers=h1).json()
+    code = p["share_code"]
+    client.post(f"/proposals/cosign/{code}", headers=h2)
+    client.post(f"/proposals/cosign/{code}", headers=h3)
+
+    r = client.post(f"/proposals/{p['id']}/cosign", headers=h1)
+    assert r.status_code == 403
+
+
+def test_cosign_public_proposal_non_member_rejected():
+    """Non-member cannot co-sign a public proposal."""
+    h1, uid1, h2, uid2, h3, uid3, hoa_id = _setup_users_and_hoa()
+    outsider, _ = _reg("outsider@example.com", "Outsider")
+
+    p = client.post("/proposals", json={
+        "hoa_id": hoa_id, "title": "Non-member cosign test", "description": "Outsiders should be blocked from cosigning.",
+    }, headers=h1).json()
+    code = p["share_code"]
+    client.post(f"/proposals/cosign/{code}", headers=h2)
+    client.post(f"/proposals/cosign/{code}", headers=h3)
+
+    r = client.post(f"/proposals/{p['id']}/cosign", headers=outsider)
+    assert r.status_code == 403
+
+
+def test_cosign_private_proposal_by_id_rejected():
+    """Cannot co-sign a private proposal by ID (must use share code)."""
+    h1, uid1, h2, uid2, h3, uid3, hoa_id = _setup_users_and_hoa()
+    p = client.post("/proposals", json={
+        "hoa_id": hoa_id, "title": "Private cosign test", "description": "Should require share code for private proposals.",
+    }, headers=h1).json()
+
+    r = client.post(f"/proposals/{p['id']}/cosign", headers=h2)
+    assert r.status_code == 400
+
+
 def _publish_proposal(creator_h, cosigner1_h, cosigner2_h, hoa_id, title, description):
     """Create a proposal and get it to 'public' status with 2 co-signers."""
     p = client.post("/proposals", json={

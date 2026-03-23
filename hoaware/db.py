@@ -2382,6 +2382,19 @@ def list_cosigners(conn: sqlite3.Connection, proposal_id: int) -> list[dict]:
     return [{"user_id": int(r["user_id"]), "cosigned_at": str(r["created_at"])} for r in rows]
 
 
+def list_cosigner_names(conn: sqlite3.Connection, proposal_id: int) -> list[str]:
+    """Return display names of cosigners for a proposal, ordered by sign date."""
+    rows = conn.execute(
+        """SELECT u.display_name
+           FROM proposal_cosigners pc
+           JOIN users u ON u.id = pc.user_id
+           WHERE pc.proposal_id = ?
+           ORDER BY pc.created_at""",
+        (int(proposal_id),),
+    ).fetchall()
+    return [str(r["display_name"] or "A resident") for r in rows]
+
+
 # ---------------------------------------------------------------------------
 # HOA proxy status (from document ingestion)
 # ---------------------------------------------------------------------------

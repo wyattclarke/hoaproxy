@@ -636,6 +636,7 @@ class ProposalResponse(BaseModel):
     cosigner_count: int = 0
     upvote_count: int = 0
     share_code: str | None = None
+    cosigners: list[str] = []
     user_cosigned: bool = False
     user_upvoted: bool = False
     created_at: str | None = None
@@ -2902,6 +2903,7 @@ def _proposal_to_response(
     *,
     hoa_name: str | None = None,
     share_code: str | None = None,
+    cosigners: list[str] | None = None,
     user_cosigned: bool = False,
     user_upvoted: bool = False,
 ) -> ProposalResponse:
@@ -2917,6 +2919,7 @@ def _proposal_to_response(
         cosigner_count=p["cosigner_count"],
         upvote_count=p["upvote_count"],
         share_code=share_code,
+        cosigners=cosigners or [],
         user_cosigned=user_cosigned,
         user_upvoted=user_upvoted,
         created_at=p.get("created_at"),
@@ -2994,8 +2997,8 @@ def cosign_proposal(share_code: str, request: Request, user: dict = Depends(get_
         # Cannot co-sign own proposal
         if p["creator_user_id"] == user["id"]:
             raise HTTPException(status_code=403, detail="Cannot co-sign your own proposal")
-        # Must be private to accept co-signers
-        if p["status"] != "private":
+        # Must be private or public (not archived) to accept co-signers
+        if p["status"] not in ("private", "public"):
             raise HTTPException(status_code=400, detail="Proposal is no longer accepting co-signers")
         import sqlite3 as _sqlite3
         try:
@@ -3006,7 +3009,36 @@ def cosign_proposal(share_code: str, request: Request, user: dict = Depends(get_
         hoa_row = conn.execute("SELECT name FROM hoas WHERE id = ?", (p["hoa_id"],)).fetchone()
         hoa_name = str(hoa_row["name"]) if hoa_row else None
         user_cosigned = db.get_cosigner(conn, p["id"], user["id"]) is not None
-    return _proposal_to_response(p, hoa_name=hoa_name, user_cosigned=user_cosigned)
+        cosigners = db.list_cosigner_names(conn, p["id"]) if p["status"] == "public" else []
+    return _proposal_to_response(p, hoa_name=hoa_name, cosigners=cosigners, user_cosigned=user_cosigned)
+
+
+@app.post("/proposals/{proposal_id}/cosign", response_model=ProposalResponse)
+def cosign_public_proposal(proposal_id: int, request: Request, user: dict = Depends(get_current_user)):
+    """Co-sign a public proposal by ID (puts your name on it publicly)."""
+    _check_rate_limit(request, limit=30)
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        p = db.get_proposal(conn, proposal_id)
+        if not p:
+            raise HTTPException(status_code=404, detail="Proposal not found")
+        claim = db.get_membership_claim(conn, user["id"], p["hoa_id"])
+        if not claim:
+            raise HTTPException(status_code=403, detail="You must be a member of this HOA")
+        if p["creator_user_id"] == user["id"]:
+            raise HTTPException(status_code=403, detail="Cannot co-sign your own proposal")
+        if p["status"] != "public":
+            raise HTTPException(status_code=400, detail="Can only co-sign public proposals by ID")
+        import sqlite3 as _sqlite3
+        try:
+            db.create_cosigner(conn, proposal_id=proposal_id, user_id=user["id"])
+        except _sqlite3.IntegrityError:
+            raise HTTPException(status_code=409, detail="You have already co-signed this proposal")
+        p = db.get_proposal(conn, proposal_id)
+        hoa_row = conn.execute("SELECT name FROM hoas WHERE id = ?", (p["hoa_id"],)).fetchone()
+        hoa_name = str(hoa_row["name"]) if hoa_row else None
+        cosigners = db.list_cosigner_names(conn, proposal_id)
+    return _proposal_to_response(p, hoa_name=hoa_name, cosigners=cosigners, user_cosigned=True)
 
 
 @app.delete("/proposals/{proposal_id}/cosign")
@@ -3088,9 +3120,10 @@ def get_proposal_route(proposal_id: int, user: dict = Depends(get_current_user))
         hoa_name = str(hoa_row["name"]) if hoa_row else None
         user_cosigned = db.get_cosigner(conn, proposal_id, user["id"]) is not None
         user_upvoted = db.get_upvote(conn, proposal_id, user["id"]) is not None
+        cosigners = db.list_cosigner_names(conn, proposal_id) if p["status"] == "public" else []
         share_code = p["share_code"] if p["creator_user_id"] == user["id"] and p["status"] == "private" else None
     return _proposal_to_response(p, hoa_name=hoa_name, share_code=share_code,
-                                  user_cosigned=user_cosigned, user_upvoted=user_upvoted)
+                                  cosigners=cosigners, user_cosigned=user_cosigned, user_upvoted=user_upvoted)
 
 
 @app.get("/hoas/{hoa_id}/proposals")
@@ -3110,5 +3143,7 @@ def list_hoa_proposals(
         result = []
         for p in proposals:
             user_upvoted = db.get_upvote(conn, p["id"], user["id"]) is not None
-            result.append(_proposal_to_response(p, hoa_name=hoa_name, user_upvoted=user_upvoted))
+            user_cosigned = db.get_cosigner(conn, p["id"], user["id"]) is not None
+            cosigners = db.list_cosigner_names(conn, p["id"]) if p["status"] == "public" else []
+            result.append(_proposal_to_response(p, hoa_name=hoa_name, cosigners=cosigners, user_upvoted=user_upvoted, user_cosigned=user_cosigned))
     return result
