@@ -72,7 +72,7 @@
             '<div class="stat"><div class="stat-num">' + delivered + '</div><div class="stat-label">Delivered</div></div>';
 
           if (!proxies.length) {
-            list.innerHTML = '<div class="empty">No incoming proxies yet. Share your delegate profile to collect proxies.</div>';
+            list.innerHTML = '<div class="empty">No incoming proxies yet. <a href="/become-delegate" style="color:var(--accent);font-weight:600">Set up your delegate profile</a> so neighbors can choose you as their representative.</div>';
             return;
           }
           list.innerHTML = proxies.map(p =>

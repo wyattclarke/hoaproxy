@@ -386,7 +386,7 @@
         <div class="left-col">
           <article class="card">
             <h2>Document Browser</h2>
-            <p class="section-caption">Open searchable OCR view or raw PDF.</p>
+            <p class="section-caption">View full text or download the original PDF.</p>
             <button id="refreshDocsBtn" class="secondary" type="button">Reload Docs</button>
             <div id="docs" class="docs"></div>
           </article>
@@ -397,7 +397,7 @@
             <label for="uploadFiles">PDF files</label>
             <input id="uploadFiles" type="file" accept=".pdf,application/pdf" multiple />
             <div class="row" style="margin-top: 10px">
-              <button id="uploadBtn" type="button">Upload and Index</button>
+              <button id="uploadBtn" type="button">Upload</button>
             </div>
             <div id="uploadStatus" class="status"></div>
           </article>
@@ -408,7 +408,7 @@
             <h2>Assistant</h2>
             <div class="mode-toggle">
               <button id="modeQa" class="active" type="button">Chatbot</button>
-              <button id="modeSearch" class="secondary" type="button">Semantic Search</button>
+              <button id="modeSearch" class="secondary" type="button">Search Documents</button>
             </div>
             <label for="assistantInput" id="assistantLabel">Question</label>
             <textarea id="assistantInput" placeholder="Do I need ARC approval to add a fence?"></textarea>
@@ -691,7 +691,7 @@
         const page = await fetchJson("/hoas/summary?q=" + encodeURIComponent(state.hoaName) + "&limit=1");
         const item = (page.results || []).find((r) => r.hoa === state.hoaName);
         if (!item) {
-          hoaMeta.textContent = "No summary metadata available.";
+          hoaMeta.textContent = "No summary available.";
           return;
         }
         const mb = (item.total_bytes / (1024 * 1024)).toFixed(1);
@@ -702,7 +702,7 @@
         const stateBackLink = state.hoaState
           ? ` · <a class="doc-link" href="/?state=${encodeURIComponent(state.hoaState)}">← ${escapeHtml(state.hoaState)} HOAs</a>`
           : "";
-        hoaMeta.innerHTML = `${escapeHtml(location)}${stateBackLink} · ${item.doc_count} docs · ${item.chunk_count} searchable sections · ${mb} MB indexed${websitePart}`;
+        hoaMeta.innerHTML = `${escapeHtml(location)}${stateBackLink} · ${item.doc_count} docs · ${item.chunk_count} searchable sections · ${mb} MB${websitePart}`;
       }
 
       async function loadDocuments() {
@@ -711,8 +711,8 @@
         try {
           const docs = await fetchJson(`/hoas/${encodeURIComponent(state.hoaName)}/documents`);
           if (!docs.length) {
-            docsEl.innerHTML = '<div class="doc-item">No indexed documents yet.</div>';
-            setStatus(uploadStatus, "No documents indexed yet.");
+            docsEl.innerHTML = '<div class="doc-item">No documents uploaded yet.</div>';
+            setStatus(uploadStatus, "No documents uploaded yet.");
             return;
           }
           docsEl.innerHTML = docs
@@ -722,8 +722,8 @@
               return (
                 `<div class="doc-item"><strong>${escapeHtml(doc.relative_path)}</strong>` +
                 `<span class="chip">${doc.chunk_count} sections</span><br>` +
-                `<span class="meta">${doc.page_count ?? "?"} pages, ${doc.bytes} bytes, indexed ${escapeHtml(doc.last_ingested)}</span><br>` +
-                `<a class="doc-link" href="${searchableHref}" target="_blank" rel="noopener noreferrer">Open Searchable OCR View</a> · ` +
+                `<span class="meta">${doc.page_count ?? "?"} pages, ${doc.bytes} bytes, added ${escapeHtml(doc.last_ingested)}</span><br>` +
+                `<a class="doc-link" href="${searchableHref}" target="_blank" rel="noopener noreferrer">View Full Text</a> · ` +
                 `<a class="doc-link" href="${rawHref}" target="_blank" rel="noopener noreferrer">Open Raw PDF</a></div>`
               );
             })
@@ -743,7 +743,7 @@
         }
 
         uploadBtn.disabled = true;
-        setStatus(uploadStatus, "Uploading and queueing ingestion...");
+        setStatus(uploadStatus, "Uploading and processing...");
 
         try {
           const formData = new FormData();
@@ -752,7 +752,7 @@
             formData.append("files", file);
           }
           const body = await fetchJson("/upload", { method: "POST", body: formData });
-          setStatus(uploadStatus, `Uploaded ${body.saved_files.length} file(s). Background indexing started.`, "ok");
+          setStatus(uploadStatus, `Uploaded ${body.saved_files.length} file(s). Processing started — documents will appear shortly.`, "ok");
           uploadFiles.value = "";
           await loadDocuments();
           await loadHoaMeta();
@@ -910,7 +910,7 @@
 
       async function inferLocation() {
         inferBtn.disabled = true;
-        setStatus(mapStatus, "Inferring location from indexed documents...");
+        setStatus(mapStatus, "Inferring location from uploaded documents...");
         try {
           await fetchJson("/hoas/locations/infer", { method: "POST" });
           await loadHoaLocation();
