@@ -129,12 +129,14 @@ def _is_benign(msg: str) -> bool:
 # Testmail.app helpers
 # ---------------------------------------------------------------------------
 
-def _testmail_fetch(api_key: str, namespace: str, tag: str, timeout: float = 30.0):
+def _testmail_fetch(api_key: str, namespace: str, tag: str,
+                    timeout: float = 30.0, timestamp_from: int = 0):
     """Poll testmail.app for an email matching the given tag. Returns email dict or None."""
+    ts = timestamp_from or int((time.time() - 5) * 1000)
     url = (
         f"https://api.testmail.app/api/json"
         f"?apikey={api_key}&namespace={namespace}"
-        f"&tag={tag}&livequery=true&timestamp_from={int(time.time() - 5) * 1000}"
+        f"&tag={tag}&livequery=true&timestamp_from={ts}"
     )
     deadline = time.time() + timeout
     while time.time() < deadline:
@@ -573,6 +575,38 @@ def group6_email(base: str, results: SmokeResults):
 
     tag = f"smoke{int(time.time())}"
     test_email = f"{namespace}.{tag}@inbox.testmail.app"
+    temp_password = f"SmokeSetup{int(time.time())}!"
+
+    # Register a temporary account with the testmail address
+    try:
+        payload = json.dumps({
+            "email": test_email,
+            "password": temp_password,
+            "display_name": "Smoke Email Test",
+        }).encode()
+        req = urllib.request.Request(
+            f"{base}/auth/register",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            if resp.status != 200:
+                results.failed("Forgot password email delivery",
+                               f"Could not register test account: HTTP {resp.status}")
+                results.skipped("Reset password end-to-end", "No test account")
+                return
+    except Exception as exc:
+        results.failed("Forgot password email delivery",
+                       f"Could not register test account: {exc}")
+        results.skipped("Reset password end-to-end", "No test account")
+        return
+
+    # Small delay to let registration complete
+    time.sleep(1)
+
+    # Record time after registration so we skip the verification email
+    forgot_timestamp = int(time.time() * 1000)
 
     # Send forgot-password request
     try:
@@ -593,7 +627,8 @@ def group6_email(base: str, results: SmokeResults):
         return
 
     # Poll testmail for the email
-    email_data = _testmail_fetch(api_key, namespace, tag, timeout=30)
+    email_data = _testmail_fetch(api_key, namespace, tag, timeout=30,
+                                 timestamp_from=forgot_timestamp)
     if not email_data:
         results.warn("Forgot password email delivery",
                      "Email not received within 30s — check EMAIL_PROVIDER config")
