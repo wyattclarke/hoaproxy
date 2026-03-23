@@ -174,7 +174,7 @@
           <button id="searchBtn" type="button">Search</button>
         </div>
         <div id="searchResults" class="search-results"></div>
-        <div class="claim-row">
+        <div class="claim-row" id="claimRow" style="display:none">
           <button class="btn primary" id="claimBtn" type="button">Claim</button>
         </div>
         <div id="claimStatus" class="status"></div>
@@ -290,6 +290,7 @@
                 hoaSearch.value = name;
                 _selectedHoaName = name;
                 searchResults.style.display = "none";
+                document.getElementById("claimRow").style.display = "";
               });
             });
           }

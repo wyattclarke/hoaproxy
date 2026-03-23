@@ -188,6 +188,7 @@
       .right-col {
         display: grid;
         gap: 14px;
+        align-content: start;
       }
 
       .card {
@@ -701,7 +702,7 @@
         const stateBackLink = state.hoaState
           ? ` · <a class="doc-link" href="/?state=${encodeURIComponent(state.hoaState)}">← ${escapeHtml(state.hoaState)} HOAs</a>`
           : "";
-        hoaMeta.innerHTML = `${escapeHtml(location)}${stateBackLink} · ${item.doc_count} docs · ${item.chunk_count} chunks · ${mb} MB indexed${websitePart}`;
+        hoaMeta.innerHTML = `${escapeHtml(location)}${stateBackLink} · ${item.doc_count} docs · ${item.chunk_count} searchable sections · ${mb} MB indexed${websitePart}`;
       }
 
       async function loadDocuments() {
@@ -720,7 +721,7 @@
               const searchableHref = `/hoas/${encodeURIComponent(state.hoaName)}/documents/searchable?path=${encodeURIComponent(doc.relative_path)}`;
               return (
                 `<div class="doc-item"><strong>${escapeHtml(doc.relative_path)}</strong>` +
-                `<span class="chip">${doc.chunk_count} chunks</span><br>` +
+                `<span class="chip">${doc.chunk_count} sections</span><br>` +
                 `<span class="meta">${doc.page_count ?? "?"} pages, ${doc.bytes} bytes, indexed ${escapeHtml(doc.last_ingested)}</span><br>` +
                 `<a class="doc-link" href="${searchableHref}" target="_blank" rel="noopener noreferrer">Open Searchable OCR View</a> · ` +
                 `<a class="doc-link" href="${rawHref}" target="_blank" rel="noopener noreferrer">Open Raw PDF</a></div>`
@@ -797,7 +798,7 @@
                       `<div class="match"><span class="meta">Score ${Number(item.score).toFixed(3)} · pages ${escapeHtml(item.pages)}</span><br>${escapeHtml(item.excerpt)}</div>`
                   )
                   .join("")
-              : '<div class="match">No matching chunks found.</div>';
+              : '<div class="match">No matching sections found.</div>';
             renderCitations(results.map((item) => ({ document: item.document, pages: item.pages })));
             setStatus(assistantStatus, results.length ? `Found ${results.length} result(s).` : "No results.", results.length ? "ok" : "");
           }
