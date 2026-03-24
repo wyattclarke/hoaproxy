@@ -72,7 +72,7 @@
 
       <!-- HOA selector -->
       <div style="margin-top:14px">
-        <label for="hoaSelect" style="font-size:0.9rem">Select your HOA</label>
+        <label for="hoaSelect" class="req" style="font-size:0.9rem">Select your HOA</label>
         <select id="hoaSelect" style="max-width:340px;margin-top:4px">
           <option value="">Loading…</option>
         </select>
@@ -82,9 +82,9 @@
       <details id="newProposalDetails" style="margin-top:16px">
         <summary>+ New Proposal</summary>
         <div class="card" style="margin-top:8px">
-          <label for="npTitle">Title</label>
+          <label for="npTitle" class="req">Title</label>
           <input id="npTitle" type="text" maxlength="200" placeholder="e.g. Add a dog run to the park area" />
-          <label for="npCategory">Category</label>
+          <label for="npCategory" class="req">Category</label>
           <select id="npCategory">
             <option>Other</option>
             <option>Maintenance</option>
@@ -92,7 +92,7 @@
             <option>Rules</option>
             <option>Safety</option>
           </select>
-          <label for="npDesc">Description</label>
+          <label for="npDesc" class="req">Description</label>
           <textarea id="npDesc" maxlength="5000" placeholder="Describe the idea and why it would benefit the community…"></textarea>
           <details id="locationDetails" style="margin-top:10px">
             <summary style="font-size:0.88rem;font-weight:600;color:var(--muted)">&#128205; Add location (optional)</summary>

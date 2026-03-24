@@ -90,11 +90,11 @@
         <h3 class="section-title">Profile</h3>
         <div style="display:flex;gap:12px">
           <div class="field" style="flex:1">
-            <label for="firstName">First Name</label>
+            <label for="firstName" class="req">First Name</label>
             <input id="firstName" type="text" autocomplete="given-name" />
           </div>
           <div class="field" style="flex:1">
-            <label for="lastName">Last Name</label>
+            <label for="lastName" class="req">Last Name</label>
             <input id="lastName" type="text" autocomplete="family-name" />
           </div>
         </div>
@@ -111,16 +111,16 @@
       <div class="card">
         <h3 class="section-title">Change Password</h3>
         <div class="field">
-          <label for="currentPassword">Current Password</label>
+          <label for="currentPassword" class="req">Current Password</label>
           <input id="currentPassword" type="password" autocomplete="current-password" />
         </div>
         <div class="field">
-          <label for="newPassword">New Password</label>
+          <label for="newPassword" class="req">New Password</label>
           <input id="newPassword" type="password" autocomplete="new-password" />
           <div class="hint">At least 8 characters</div>
         </div>
         <div class="field">
-          <label for="confirmPassword">Confirm New Password</label>
+          <label for="confirmPassword" class="req">Confirm New Password</label>
           <input id="confirmPassword" type="password" autocomplete="new-password" />
         </div>
         <button class="btn primary" id="changePasswordBtn" type="button">Change Password</button>

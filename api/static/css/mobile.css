@@ -3,6 +3,13 @@
    Link this AFTER inline <style> blocks so it can override.
    ============================================================ */
 
+/* --- Required field indicator --- */
+label.req::after {
+  content: " *";
+  color: #b62525;
+  font-weight: 700;
+}
+
 /* --- Prevent iOS zoom on input focus (requires >=16px font) --- */
 @media screen and (max-width: 768px) {
   input, select, textarea {

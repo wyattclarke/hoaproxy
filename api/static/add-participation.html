@@ -43,10 +43,10 @@
           Record attendance and voting numbers from a past HOA meeting. This helps calculate the proxy magic number.
         </p>
 
-        <label for="hoaSelect">HOA</label>
+        <label for="hoaSelect" class="req">HOA</label>
         <select id="hoaSelect"><option value="">Loading your HOAs...</option></select>
 
-        <label for="meetingDate">Meeting Date</label>
+        <label for="meetingDate" class="req">Meeting Date</label>
         <input id="meetingDate" type="date" />
 
         <label for="meetingType">Meeting Type</label>
@@ -56,11 +56,11 @@
           <option value="board">Board</option>
         </select>
 
-        <label for="totalUnits">Total Units in HOA</label>
+        <label for="totalUnits" class="req">Total Units in HOA</label>
         <input id="totalUnits" type="number" min="1" placeholder="e.g. 120" />
         <p class="hint">Total number of units/lots eligible to vote</p>
 
-        <label for="votesCast">Votes Cast</label>
+        <label for="votesCast" class="req">Votes Cast</label>
         <input id="votesCast" type="number" min="0" placeholder="e.g. 34" />
         <p class="hint">Total ballots or proxies received at the meeting</p>
 
