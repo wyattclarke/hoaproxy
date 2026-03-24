@@ -1721,6 +1721,27 @@ def get_user_by_id(conn: sqlite3.Connection, user_id: int) -> dict | None:
     return dict(row)
 
 
+def update_user(conn: sqlite3.Connection, user_id: int, *, display_name: str | None = None, email: str | None = None, password_hash: str | None = None) -> dict | None:
+    """Update mutable user fields. Only non-None kwargs are applied."""
+    sets: list[str] = []
+    params: list = []
+    if display_name is not None:
+        sets.append("display_name = ?")
+        params.append(display_name)
+    if email is not None:
+        sets.append("email = ?")
+        params.append(email.strip().lower())
+    if password_hash is not None:
+        sets.append("password_hash = ?")
+        params.append(password_hash)
+    if not sets:
+        return get_user_by_id(conn, user_id)
+    params.append(int(user_id))
+    conn.execute(f"UPDATE users SET {', '.join(sets)} WHERE id = ?", params)
+    conn.commit()
+    return get_user_by_id(conn, user_id)
+
+
 # ---------------------------------------------------------------------------
 # Sessions
 # ---------------------------------------------------------------------------

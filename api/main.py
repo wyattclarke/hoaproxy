@@ -524,6 +524,13 @@ class UserMeResponse(BaseModel):
     email_verified: bool = False
 
 
+class UserUpdateRequest(BaseModel):
+    display_name: str | None = None
+    email: str | None = None
+    current_password: str | None = None
+    new_password: str | None = None
+
+
 class MembershipClaimRequest(BaseModel):
     unit_number: str | None = None
 
@@ -1433,6 +1440,11 @@ def dashboard_page() -> FileResponse:
     return _serve_static_page("dashboard.html")
 
 
+@app.get("/account", include_in_schema=False)
+def account_page() -> FileResponse:
+    return _serve_static_page("account.html")
+
+
 @app.get("/become-delegate", include_in_schema=False)
 def become_delegate_page() -> FileResponse:
     return _serve_static_page("become-delegate.html")
@@ -1859,6 +1871,46 @@ def me(user: dict = Depends(get_current_user)):
         display_name=user.get("display_name"),
         hoas=[{"hoa_id": c["hoa_id"], "hoa_name": c["hoa_name"], "unit_number": c["unit_number"], "status": c["status"]} for c in claims],
         email_verified=bool(user_row and user_row.get("verified_at")),
+    )
+
+
+@app.put("/auth/me", response_model=UserMeResponse)
+def update_me(body: UserUpdateRequest, request: Request, user: dict = Depends(get_current_user)):
+    _check_rate_limit(request, limit=10)
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        # Password change requires current_password
+        new_hash = None
+        if body.new_password:
+            if not body.current_password:
+                raise HTTPException(status_code=400, detail="Current password is required to set a new password")
+            user_row = db.get_user_by_id(conn, user["id"])
+            if not user_row or not verify_password(body.current_password, user_row["password_hash"]):
+                raise HTTPException(status_code=403, detail="Current password is incorrect")
+            if len(body.new_password) < 8:
+                raise HTTPException(status_code=400, detail="New password must be at least 8 characters")
+            new_hash = hash_password(body.new_password)
+
+        # Email change: check uniqueness
+        if body.email and body.email.strip().lower() != user["email"]:
+            existing = db.get_user_by_email(conn, body.email)
+            if existing:
+                raise HTTPException(status_code=409, detail="That email is already in use")
+
+        db.update_user(
+            conn, user["id"],
+            display_name=body.display_name,
+            email=body.email,
+            password_hash=new_hash,
+        )
+        updated = db.get_user_by_id(conn, user["id"])
+        claims = db.list_membership_claims_for_user(conn, user["id"])
+    return UserMeResponse(
+        user_id=updated["id"],
+        email=updated["email"],
+        display_name=updated.get("display_name"),
+        hoas=[{"hoa_id": c["hoa_id"], "hoa_name": c["hoa_name"], "unit_number": c["unit_number"], "status": c["status"]} for c in claims],
+        email_verified=bool(updated.get("verified_at")),
     )
 
 

@@ -100,6 +100,7 @@ const Auth = (() => {
         '<a class="btn" href="/my-proxies">My Proxies</a>' +
         '<a class="btn" href="/proposals">Proposals</a>' +
         '<a class="btn" href="/legal">Legal</a>' +
+        '<a class="btn" href="/account">Account</a>' +
         '<a class="btn" id="logoutBtn">Logout</a>';
       const logoutBtn = container.querySelector("#logoutBtn");
       if (logoutBtn) logoutBtn.addEventListener("click", logout);

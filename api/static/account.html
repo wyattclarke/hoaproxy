@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HOAproxy | Account Settings</title>
+    <link rel="stylesheet" href="/static/css/mobile.css" />
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Space+Grotesk:wght@600;700&display=swap");
+
+      :root {
+        --bg: #eef5ff; --ink: #12233a; --muted: #587091; --line: #d3e0f4;
+        --accent: #1662f3; --accent-strong: #0d49be; --ok: #177c45; --danger: #b62525;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0; min-height: 100vh;
+        font-family: "Manrope", "Segoe UI", sans-serif; color: var(--ink);
+        background: radial-gradient(95rem 60rem at 8% -22%, rgba(20,98,243,0.2), transparent 60%),
+                    radial-gradient(70rem 45rem at 95% -15%, rgba(36,189,156,0.14), transparent 56%),
+                    linear-gradient(180deg, #f8fbff 0%, var(--bg) 54%, #edf3ff 100%);
+      }
+
+      .shell { width: min(640px, 94vw); margin: 28px auto 56px; }
+
+      .hero {
+        border: 1px solid #c9dbfa; border-radius: 22px;
+        background: linear-gradient(118deg, rgba(255,255,255,0.95) 0%, rgba(227,240,255,0.95) 100%);
+        box-shadow: 0 16px 44px rgba(17,40,74,0.14); padding: 22px;
+      }
+
+      .top-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+
+      .brand { display: inline-flex; align-items: baseline; gap: 0.12em;
+        font-family: "Space Grotesk", "Manrope", sans-serif;
+        font-size: clamp(1.5rem, 3vw, 2rem); font-weight: 700; margin: 0; }
+      .brand-link { color: inherit; text-decoration: none; }
+      .brand-hoa { color: #0f2f6d; } .brand-proxy { color: #1a66ff; }
+
+      .nav { display: flex; gap: 8px; flex-wrap: wrap; }
+
+      .btn {
+        display: inline-flex; align-items: center; justify-content: center;
+        border-radius: 10px; border: 1px solid var(--line); background: #fff;
+        color: #1b355c; padding: 9px 14px; font-family: inherit;
+        font-size: 0.92rem; font-weight: 800; text-decoration: none; cursor: pointer;
+      }
+      .btn.primary { border-color: var(--accent); background: linear-gradient(180deg, var(--accent), var(--accent-strong)); color: #fff; }
+
+      h2 { margin: 18px 0 10px; font-family: "Space Grotesk", "Manrope", sans-serif; font-size: 1.15rem; }
+
+      .card {
+        border: 1px solid var(--line); border-radius: 14px;
+        background: rgba(255,255,255,0.92); box-shadow: 0 6px 20px rgba(16,40,73,0.07);
+        padding: 20px; margin-bottom: 14px;
+      }
+
+      .field { margin-bottom: 16px; }
+      .field label { display: block; font-weight: 700; font-size: 0.88rem; margin-bottom: 4px; color: var(--ink); }
+      .field input {
+        width: 100%; border: 1px solid var(--line); border-radius: 8px;
+        padding: 9px 10px; font: inherit; background: #fff;
+      }
+      .field input:disabled { background: #f3f6fa; color: var(--muted); }
+      .field .hint { font-size: 0.82rem; color: var(--muted); margin-top: 3px; }
+
+      .status { margin-top: 8px; min-height: 1.2em; font-size: 0.9rem; color: var(--muted); }
+      .status.ok { color: var(--ok); } .status.error { color: var(--danger); }
+
+      .meta { color: var(--muted); font-size: 0.86rem; }
+
+      .section-title { margin: 0 0 14px; font-family: "Space Grotesk", "Manrope", sans-serif; font-size: 1.05rem; }
+
+      .divider { border: none; border-top: 1px solid var(--line); margin: 20px 0; }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <div class="top-row">
+          <h1 style="margin:0"><a class="brand brand-link" href="/"><span class="brand-hoa">HOA</span><span class="brand-proxy">proxy</span></a></h1>
+          <div class="nav" id="navContainer"></div>
+        </div>
+        <h2>Account Settings</h2>
+      </section>
+
+      <div class="card" style="margin-top:16px">
+        <h3 class="section-title">Profile</h3>
+        <div class="field">
+          <label for="displayName">Display Name</label>
+          <input id="displayName" type="text" placeholder="How you appear to other members" />
+        </div>
+        <div class="field">
+          <label for="email">Email Address</label>
+          <input id="email" type="email" />
+          <div class="hint" id="emailHint"></div>
+        </div>
+        <button class="btn primary" id="saveProfileBtn" type="button">Save Profile</button>
+        <div id="profileStatus" class="status"></div>
+      </div>
+
+      <div class="card">
+        <h3 class="section-title">Change Password</h3>
+        <div class="field">
+          <label for="currentPassword">Current Password</label>
+          <input id="currentPassword" type="password" autocomplete="current-password" />
+        </div>
+        <div class="field">
+          <label for="newPassword">New Password</label>
+          <input id="newPassword" type="password" autocomplete="new-password" />
+          <div class="hint">At least 8 characters</div>
+        </div>
+        <div class="field">
+          <label for="confirmPassword">Confirm New Password</label>
+          <input id="confirmPassword" type="password" autocomplete="new-password" />
+        </div>
+        <button class="btn primary" id="changePasswordBtn" type="button">Change Password</button>
+        <div id="passwordStatus" class="status"></div>
+      </div>
+
+      <div class="card">
+        <h3 class="section-title">Account Info</h3>
+        <p class="meta">Member since: <span id="memberSince">—</span></p>
+        <p class="meta">Email verified: <span id="verifiedStatus">—</span></p>
+      </div>
+    </main>
+
+    <script src="/static/js/auth.js"></script>
+    <script>
+      if (!Auth.requireAuth()) throw new Error("redirect");
+
+      const displayName = document.getElementById("displayName");
+      const emailInput = document.getElementById("email");
+      const emailHint = document.getElementById("emailHint");
+      const saveProfileBtn = document.getElementById("saveProfileBtn");
+      const profileStatus = document.getElementById("profileStatus");
+      const currentPassword = document.getElementById("currentPassword");
+      const newPassword = document.getElementById("newPassword");
+      const confirmPassword = document.getElementById("confirmPassword");
+      const changePasswordBtn = document.getElementById("changePasswordBtn");
+      const passwordStatus = document.getElementById("passwordStatus");
+      const memberSince = document.getElementById("memberSince");
+      const verifiedStatus = document.getElementById("verifiedStatus");
+
+      Auth.renderNav(document.getElementById("navContainer"));
+
+      let originalEmail = "";
+
+      async function loadAccount() {
+        try {
+          const me = await Auth.fetchJson("/auth/me");
+          Auth.setCachedUser(me);
+          displayName.value = me.display_name || "";
+          emailInput.value = me.email || "";
+          originalEmail = me.email || "";
+          verifiedStatus.textContent = me.email_verified ? "Yes" : "No";
+          // Member since from cached user (not in /me response, show dash)
+          memberSince.textContent = "—";
+        } catch (err) {
+          profileStatus.className = "status error";
+          profileStatus.textContent = err.message;
+        }
+      }
+
+      saveProfileBtn.addEventListener("click", async () => {
+        saveProfileBtn.disabled = true;
+        profileStatus.className = "status";
+        profileStatus.textContent = "Saving...";
+        try {
+          const body = {};
+          body.display_name = displayName.value.trim();
+          const newEmail = emailInput.value.trim();
+          if (newEmail && newEmail !== originalEmail) {
+            body.email = newEmail;
+          }
+          const updated = await Auth.fetchJson("/auth/me", {
+            method: "PUT",
+            body: JSON.stringify(body),
+          });
+          Auth.setCachedUser(updated);
+          originalEmail = updated.email;
+          profileStatus.className = "status ok";
+          profileStatus.textContent = "Profile saved.";
+        } catch (err) {
+          profileStatus.className = "status error";
+          profileStatus.textContent = err.message;
+        } finally {
+          saveProfileBtn.disabled = false;
+        }
+      });
+
+      changePasswordBtn.addEventListener("click", async () => {
+        passwordStatus.className = "status";
+        if (!currentPassword.value) {
+          passwordStatus.className = "status error";
+          passwordStatus.textContent = "Enter your current password.";
+          return;
+        }
+        if (newPassword.value.length < 8) {
+          passwordStatus.className = "status error";
+          passwordStatus.textContent = "New password must be at least 8 characters.";
+          return;
+        }
+        if (newPassword.value !== confirmPassword.value) {
+          passwordStatus.className = "status error";
+          passwordStatus.textContent = "Passwords do not match.";
+          return;
+        }
+        changePasswordBtn.disabled = true;
+        passwordStatus.textContent = "Changing password...";
+        try {
+          await Auth.fetchJson("/auth/me", {
+            method: "PUT",
+            body: JSON.stringify({
+              current_password: currentPassword.value,
+              new_password: newPassword.value,
+            }),
+          });
+          passwordStatus.className = "status ok";
+          passwordStatus.textContent = "Password changed.";
+          currentPassword.value = "";
+          newPassword.value = "";
+          confirmPassword.value = "";
+        } catch (err) {
+          passwordStatus.className = "status error";
+          passwordStatus.textContent = err.message;
+        } finally {
+          changePasswordBtn.disabled = false;
+        }
+      });
+
+      loadAccount();
+    </script>
+  </body>
+</html>
