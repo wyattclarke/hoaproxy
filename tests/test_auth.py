@@ -228,3 +228,104 @@ def test_me_includes_hoas():
     data = resp.json()
     assert len(data["hoas"]) >= 1
     assert any(h["hoa_name"] == "Me HOA" for h in data["hoas"])
+
+
+# ---------------------------------------------------------------------------
+# Account update (PUT /auth/me)
+# ---------------------------------------------------------------------------
+
+def _register(email, password="password1234", display_name=None):
+    """Register and return (token, headers)."""
+    body = {"email": email, "password": password}
+    if display_name:
+        body["display_name"] = display_name
+    data = client.post("/auth/register", json=body).json()
+    token = data["token"]
+    return token, {"Authorization": f"Bearer {token}"}
+
+
+def test_update_display_name():
+    _, headers = _register("upd-name@example.com", display_name="Old Name")
+    resp = client.put("/auth/me", json={"display_name": "New Name"}, headers=headers)
+    assert resp.status_code == 200
+    assert resp.json()["display_name"] == "New Name"
+    # Verify persistence
+    me = client.get("/auth/me", headers=headers).json()
+    assert me["display_name"] == "New Name"
+
+
+def test_update_email():
+    _, headers = _register("upd-email-orig@example.com")
+    resp = client.put("/auth/me", json={"email": "upd-email-new@example.com"}, headers=headers)
+    assert resp.status_code == 200
+    assert resp.json()["email"] == "upd-email-new@example.com"
+
+
+def test_update_email_duplicate_rejected():
+    _register("taken@example.com")
+    _, headers = _register("wants-taken@example.com")
+    resp = client.put("/auth/me", json={"email": "taken@example.com"}, headers=headers)
+    assert resp.status_code == 409
+
+
+def test_change_password_success():
+    _, headers = _register("chgpw@example.com", password="oldpass1234")
+    resp = client.put("/auth/me", json={
+        "current_password": "oldpass1234",
+        "new_password": "newpass5678",
+    }, headers=headers)
+    assert resp.status_code == 200
+    # Old password fails
+    login = client.post("/auth/login", json={"email": "chgpw@example.com", "password": "oldpass1234"})
+    assert login.status_code == 401
+    # New password works
+    login = client.post("/auth/login", json={"email": "chgpw@example.com", "password": "newpass5678"})
+    assert login.status_code == 200
+
+
+def test_change_password_wrong_current():
+    _, headers = _register("wrongcur@example.com", password="realpass123")
+    resp = client.put("/auth/me", json={
+        "current_password": "wrongpass123",
+        "new_password": "newpass5678",
+    }, headers=headers)
+    assert resp.status_code == 403
+
+
+def test_change_password_missing_current():
+    _, headers = _register("misscur@example.com")
+    resp = client.put("/auth/me", json={"new_password": "newpass5678"}, headers=headers)
+    assert resp.status_code == 400
+
+
+def test_change_password_too_short():
+    _, headers = _register("shortpw@example.com", password="password1234")
+    resp = client.put("/auth/me", json={
+        "current_password": "password1234",
+        "new_password": "short",
+    }, headers=headers)
+    assert resp.status_code == 400
+
+
+def test_update_unauthenticated():
+    resp = client.put("/auth/me", json={"display_name": "Hacker"})
+    assert resp.status_code == 401
+
+
+def test_update_name_and_email_together():
+    _, headers = _register("combo@example.com", display_name="First Last")
+    resp = client.put("/auth/me", json={
+        "display_name": "Jane Smith",
+        "email": "combo-new@example.com",
+    }, headers=headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["display_name"] == "Jane Smith"
+    assert data["email"] == "combo-new@example.com"
+
+
+def test_update_noop():
+    """PUT with no fields still returns 200."""
+    _, headers = _register("noop@example.com")
+    resp = client.put("/auth/me", json={}, headers=headers)
+    assert resp.status_code == 200

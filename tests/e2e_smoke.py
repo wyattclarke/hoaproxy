@@ -937,6 +937,60 @@ def group8_multi_user_api(base: str, results: SmokeResults):
     except Exception as exc:
         results.failed("Multi-user: proxy stats", str(exc)[:120])
 
+    # ---- Account: password change ----
+    # Register a fresh user, change password, verify old fails and new works
+    try:
+        suffix = f"pwchange-{int(time.time())}"
+        old_pw = f"OldPass{int(time.time())}!"
+        new_pw = f"NewPass{int(time.time())}!"
+        email_pw = f"smoke-{suffix}@test.hoatest.invalid"
+        s, reg = _api_call(base, "POST", "/auth/register", {
+            "email": email_pw, "password": old_pw, "display_name": "PwChange Test",
+        })
+        if s != 200:
+            results.failed("Account: password change", f"Register failed ({s})")
+        else:
+            pw_token = reg["token"]
+
+            # Change password
+            s, resp = _api_call(base, "PUT", "/auth/me",
+                                {"current_password": old_pw, "new_password": new_pw},
+                                pw_token)
+            if s != 200:
+                results.failed("Account: password change", f"PUT /auth/me returned {s}")
+            else:
+                # Old password must fail
+                s_old, _ = _api_call(base, "POST", "/auth/login",
+                                     {"email": email_pw, "password": old_pw})
+                # New password must work
+                s_new, _ = _api_call(base, "POST", "/auth/login",
+                                     {"email": email_pw, "password": new_pw})
+                if s_old == 401 and s_new == 200:
+                    results.passed("Account: password change")
+                else:
+                    results.failed("Account: password change",
+                                   f"old_login={s_old} (want 401), new_login={s_new} (want 200)")
+
+            # Wrong current password must be rejected
+            s_bad, _ = _api_call(base, "PUT", "/auth/me",
+                                 {"current_password": "totallyWrong1!", "new_password": "Whatever123!"},
+                                 pw_token)
+            if s_bad == 403:
+                results.passed("Account: wrong current password rejected")
+            else:
+                results.failed("Account: wrong current password rejected", f"HTTP {s_bad} (want 403)")
+
+            # Missing current password must be rejected
+            s_miss, _ = _api_call(base, "PUT", "/auth/me",
+                                  {"new_password": "Whatever123!"},
+                                  pw_token)
+            if s_miss == 400:
+                results.passed("Account: missing current password rejected")
+            else:
+                results.failed("Account: missing current password rejected", f"HTTP {s_miss} (want 400)")
+    except Exception as exc:
+        results.failed("Account: password change", str(exc)[:120])
+
 
 def group9_multi_user_browser(page1, page2, page3, base: str,
                                results: SmokeResults, js_errors: list[list[str]],

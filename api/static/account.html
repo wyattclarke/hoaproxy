@@ -88,10 +88,17 @@
 
       <div class="card" style="margin-top:16px">
         <h3 class="section-title">Profile</h3>
-        <div class="field">
-          <label for="displayName">Display Name</label>
-          <input id="displayName" type="text" placeholder="How you appear to other members" />
+        <div style="display:flex;gap:12px">
+          <div class="field" style="flex:1">
+            <label for="firstName">First Name</label>
+            <input id="firstName" type="text" autocomplete="given-name" />
+          </div>
+          <div class="field" style="flex:1">
+            <label for="lastName">Last Name</label>
+            <input id="lastName" type="text" autocomplete="family-name" />
+          </div>
         </div>
+        <div class="hint" style="margin-top:-10px;margin-bottom:12px">First and last name are required to assign or accept a proxy.</div>
         <div class="field">
           <label for="email">Email Address</label>
           <input id="email" type="email" />
@@ -131,7 +138,8 @@
     <script>
       if (!Auth.requireAuth()) throw new Error("redirect");
 
-      const displayName = document.getElementById("displayName");
+      const firstName = document.getElementById("firstName");
+      const lastName = document.getElementById("lastName");
       const emailInput = document.getElementById("email");
       const emailHint = document.getElementById("emailHint");
       const saveProfileBtn = document.getElementById("saveProfileBtn");
@@ -152,7 +160,9 @@
         try {
           const me = await Auth.fetchJson("/auth/me");
           Auth.setCachedUser(me);
-          displayName.value = me.display_name || "";
+          const parts = (me.display_name || "").trim().split(/\s+/);
+          firstName.value = parts[0] || "";
+          lastName.value = parts.slice(1).join(" ") || "";
           emailInput.value = me.email || "";
           originalEmail = me.email || "";
           verifiedStatus.textContent = me.email_verified ? "Yes" : "No";
@@ -170,7 +180,15 @@
         profileStatus.textContent = "Saving...";
         try {
           const body = {};
-          body.display_name = displayName.value.trim();
+          const first = firstName.value.trim();
+          const last = lastName.value.trim();
+          if (!first || !last) {
+            profileStatus.className = "status error";
+            profileStatus.textContent = "First and last name are both required.";
+            saveProfileBtn.disabled = false;
+            return;
+          }
+          body.display_name = first + " " + last;
           const newEmail = emailInput.value.trim();
           if (newEmail && newEmail !== originalEmail) {
             body.email = newEmail;
