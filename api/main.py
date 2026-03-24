@@ -777,7 +777,7 @@ def _geocode_from_parts(*, street: str | None, city: str | None, state: str | No
         resp = requests.get(
             "https://nominatim.openstreetmap.org/search",
             params={"q": query, "format": "json", "limit": 1},
-            headers={"User-Agent": "hoaware/0.2 (local-ui-location)"},
+            headers={"User-Agent": "hoaproxy/0.2 (local-ui-location)"},
             timeout=20,
         )
         resp.raise_for_status()
@@ -798,7 +798,7 @@ def _geocode_from_query(query: str) -> dict | None:
         resp = requests.get(
             "https://nominatim.openstreetmap.org/search",
             params={"q": cleaned, "format": "json", "limit": 1},
-            headers={"User-Agent": "hoaware/0.2 (local-ui-location)"},
+            headers={"User-Agent": "hoaproxy/0.2 (local-ui-location)"},
             timeout=20,
         )
         resp.raise_for_status()

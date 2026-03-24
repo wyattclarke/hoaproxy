@@ -192,7 +192,7 @@ def test_send_email_resend_called():
         settings = MagicMock()
         settings.email_provider = "resend"
         settings.resend_api_key = "re_test_key"
-        settings.email_from = "noreply@hoaware.app"
+        settings.email_from = "noreply@hoaproxy.org"
         mock_settings.return_value = settings
 
         with patch("hoaware.email_service._send_via_resend") as mock_resend:
@@ -216,7 +216,7 @@ def test_send_email_smtp_called():
         settings.smtp_port = 587
         settings.smtp_user = "user"
         settings.smtp_password = "pass"
-        settings.email_from = "noreply@hoaware.app"
+        settings.email_from = "noreply@hoaproxy.org"
         mock_settings.return_value = settings
 
         with patch("hoaware.email_service._send_via_smtp") as mock_smtp:

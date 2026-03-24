@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: hoaware-app
+    name: hoaproxy-app
     runtime: docker
     dockerfilePath: ./Dockerfile
     plan: starter
@@ -46,7 +46,7 @@ services:
       - key: EMAIL_PROVIDER
         value: "stub"
       - key: EMAIL_FROM
-        value: "noreply@hoaware.app"
+        value: "noreply@hoaproxy.org"
       - key: RESEND_API_KEY
         sync: false
       - key: SMTP_HOST
@@ -58,6 +58,6 @@ services:
       - key: SMTP_PASSWORD
         sync: false
     disk:
-      name: hoaware-data
+      name: hoaproxy-data
       mountPath: /var/data
       sizeGB: 20

@@ -79,7 +79,7 @@ def load_settings() -> Settings:
         jwt_algorithm=os.environ.get("JWT_ALGORITHM", "HS256"),
         jwt_expiry_days=int(os.environ.get("JWT_EXPIRY_DAYS", "30")),
         email_provider=os.environ.get("EMAIL_PROVIDER", "stub"),
-        email_from=os.environ.get("EMAIL_FROM", "noreply@hoaware.app"),
+        email_from=os.environ.get("EMAIL_FROM", "noreply@hoaproxy.org"),
         resend_api_key=os.environ.get("RESEND_API_KEY"),
         smtp_host=os.environ.get("SMTP_HOST"),
         smtp_port=int(os.environ.get("SMTP_PORT", "587")),

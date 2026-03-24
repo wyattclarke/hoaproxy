@@ -1,30 +1,44 @@
 # HOAproxy
 
-HOAproxy is a semantic search and proxy voting coordination platform for homeowner associations. Residents can upload HOA governing documents, ask grounded Q&A questions with citations, browse state law summaries for HOA records and proxy voting rules, and coordinate proxy assignments with e-signature support for any HOA meeting.
+**A free, transparent civic organizing platform for HOA residents.**
 
-## Features
+Live at [hoaproxy.org](https://hoaproxy.org)
 
-- **HOA Document Search** — upload PDFs, index with OpenAI embeddings, run semantic search with GPT-4o-mini Q&A and citations
-- **Proxy Voting** — create, sign, deliver, and revoke proxy assignments; delegate registration; e-signature via Documenso or click-to-sign fallback
-- **Legal Corpus** — ETL pipeline for 50-state HOA/condo law covering records access, proxy voting, and records sharing limits
-- **HOA Search** — universal address + name lookup with boundary polygon matching
-- **Participation Tracking** — record meeting attendance and quorum data per HOA
+HOAproxy gives homeowners the tools their HOA boards won't: searchable governing documents, coordinated proxy voting, state law summaries, and resident proposals. It's built to work without board cooperation.
+
+## What It Does
+
+- **Document Search** — Upload HOA PDFs, ask questions in plain English, get answers with page citations (powered by OpenAI embeddings + GPT-4o-mini)
+- **Proxy Voting** — Create, e-sign, deliver, and revoke proxy assignments for any HOA meeting. Guerilla online voting.
+- **State Law Corpus** — 47-state coverage of HOA records access, proxy voting rules, and records sharing limits
+- **Resident Proposals** — Draft a proposal, get two neighbors to co-sign, and it goes live for your community to upvote
+- **HOA Lookup** — Search any address to find its HOA and governing documents
+
+## Contributing
+
+If your HOA frustrates you and you know how to code, we'd love your help. See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
+
+**Areas where we need help:**
+- Tell us what HOA residents actually need — feature ideas, pain points, workflow gaps
+- Help us explain this to people — copywriting, outreach, framing
+- Bug reports from real usage (the best kind)
+- Accessibility audit
 
 ## Quick Start
 
 ```bash
-git clone https://github.com/yourorg/hoaware.git
-cd hoaware
+git clone https://github.com/wyattclarke/hoaproxy.git
+cd hoaproxy
 
 # Python 3.10+ required
 python3.10 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-```
 
-Copy `settings.env.example` to `settings.env` and fill in your values (see table below), then:
+# Set up config
+cp settings.env.example settings.env
+# Edit settings.env with your API keys
 
-```bash
 uvicorn api.main:app --reload
 ```
 
@@ -35,80 +49,30 @@ Open `http://127.0.0.1:8000`.
 | Variable | Description | Required |
 |---|---|---|
 | `OPENAI_API_KEY` | OpenAI API key for embeddings and Q&A | Required for search/QA |
-| `JWT_SECRET` | Secret key for JWT auth tokens | Required (set a strong random value in production) |
+| `JWT_SECRET` | Secret key for JWT auth tokens | Required |
 | `HOA_DOCS_ROOT` | Directory for HOA PDF uploads | Optional (default: `casnc_hoa_docs`) |
 | `HOA_DB_PATH` | SQLite database path | Optional (default: `data/hoa_index.db`) |
 | `QDRANT_URL` | Qdrant vector DB endpoint | Optional (default: embedded local) |
-| `QDRANT_API_KEY` | Qdrant auth token | Optional |
-| `HOA_QDRANT_LOCAL_PATH` | Embedded Qdrant fallback path | Optional (default: `data/qdrant_local`) |
 | `HOA_ENABLE_OCR` | Enable Tesseract OCR for scanned PDFs | Optional (default: `1`) |
 | `HOA_ENABLE_DOCAI` | Enable Google Document AI OCR | Optional (default: `0`) |
-| `HOA_DOCAI_PROJECT_ID` | GCP project for Document AI | Required if DocAI enabled |
-| `HOA_DOCAI_LOCATION` | Document AI region | Optional (default: `us`) |
-| `HOA_DOCAI_PROCESSOR_ID` | Document AI processor ID | Required if DocAI enabled |
-| `DOCUMENSO_API_URL` | Documenso instance URL | Optional (default: `https://app.documenso.com`) |
-| `DOCUMENSO_API_KEY` | Documenso API key | Optional (enables e-signature) |
-| `DOCUMENSO_WEBHOOK_SECRET` | Documenso webhook HMAC secret | Optional |
 | `EMAIL_PROVIDER` | Email backend: `stub`, `resend`, or `smtp` | Optional (default: `stub`) |
-| `EMAIL_FROM` | From address for transactional email | Optional |
-| `RESEND_API_KEY` | Resend API key | Required if `EMAIL_PROVIDER=resend` |
-| `SMTP_HOST` | SMTP host | Required if `EMAIL_PROVIDER=smtp` |
-| `SMTP_PORT` | SMTP port | Optional (default: `587`) |
-| `SMTP_USER` | SMTP username | Optional |
-| `SMTP_PASSWORD` | SMTP password | Optional |
-| `PROXY_RETENTION_DAYS` | Days to retain proxy records after expiry before soft-delete | Optional (default: `90`) |
-| `JWT_EXPIRY_DAYS` | JWT token expiry in days | Optional (default: `30`) |
+
+See `settings.env.example` for the full list.
 
 ## Running Tests
 
 ```bash
-.venv/bin/python -m pytest tests/ -q
+python -m pytest tests/ -q
 ```
 
-All 117+ tests should pass. Tests use an in-memory SQLite database; no Qdrant or OpenAI key required.
+Tests use an in-memory SQLite database — no Qdrant or OpenAI key needed.
 
-## Deployment
+## Stack
 
-### Render (recommended)
-
-This repo includes `render.yaml` for a Docker-based Render web service with a persistent disk.
-
-1. Push to GitHub and connect to Render
-2. Render auto-detects `render.yaml`; review env vars and add secrets (`OPENAI_API_KEY`, `JWT_SECRET`)
-3. Attach a persistent disk at `/var/data` (already configured in `render.yaml`)
-4. If using Document AI, upload your GCP service account JSON as a secret file at `/etc/secrets/gcp-service-account.json`
-
-### Docker Compose (local full stack)
-
-```bash
-docker compose up --build
-```
-
-This starts the API and a local Qdrant instance. Configure `settings.env` with your keys.
-
-## State Law Corpus Pipeline
-
-The legal corpus pipeline lives in `scripts/legal/`. To rebuild for a specific state:
-
-```bash
-python3 scripts/legal/run_pipeline.py --state NC --skip-validate --include-aggregators
-```
-
-Full rebuild:
-
-```bash
-python3 scripts/legal/run_pipeline.py --skip-validate --include-aggregators
-```
-
-## Contributing
-
-1. Fork the repository and create a feature branch: `git checkout -b feature/my-change`
-2. Make your changes and add tests
-3. Run `pytest tests/ -q` — all tests must pass
-4. Open a pull request against `master` with a clear description of the change
+FastAPI, SQLite (WAL mode), Qdrant vector DB, OpenAI embeddings, vanilla HTML/CSS/JS frontend. No build step.
 
 ## License
 
-MIT License. See `LICENSE` file for details.
+[Functional Source License (FSL-1.1-Apache-2.0)](LICENSE.md). You can read, use, and contribute to the code. You cannot use it to run a competing service. Each version converts to Apache 2.0 two years after release.
 
 HOAproxy is an informational tool only. Nothing on this platform constitutes legal advice.

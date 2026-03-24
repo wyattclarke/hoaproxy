@@ -69,7 +69,7 @@ def with_retry(fn, label: str):
 
 def main() -> None:
     cfg = dotenv_values(ROOT / "settings.env")
-    base = cfg.get("RENDER_APP_URL", "https://hoaware-app.onrender.com").rstrip("/")
+    base = cfg.get("RENDER_APP_URL", "https://hoaproxy-app.onrender.com").rstrip("/")
     s = requests.Session()
 
     state = load_state()

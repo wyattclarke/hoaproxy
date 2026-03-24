@@ -70,7 +70,7 @@ def clear_retry_blocks() -> bool:
 
 def main() -> None:
     cfg = dotenv_values(ROOT / "settings.env")
-    base_url = cfg.get("RENDER_APP_URL", "https://hoaware-app.onrender.com").rstrip("/")
+    base_url = cfg.get("RENDER_APP_URL", "https://hoaproxy-app.onrender.com").rstrip("/")
     s = requests.Session()
 
     h = s.get(f"{base_url}/healthz", timeout=REQUEST_TIMEOUT)

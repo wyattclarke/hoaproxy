@@ -73,7 +73,7 @@ STATE_NAMES = {
 }
 STATE_ABBR_BY_NAME = {name.lower(): abbr for abbr, name in STATE_NAMES.items()}
 
-USER_AGENT = "Mozilla/5.0 (hoaware legal source discovery)"
+USER_AGENT = "Mozilla/5.0 (hoaproxy legal source discovery)"
 ITEP_STATE_STATUTES_URL = "https://itep.org/state-statutes/"
 
 ANCHOR_RE = re.compile(r"<a[^>]+href=[\"']([^\"']+)[\"'][^>]*>(.*?)</a>", re.IGNORECASE | re.DOTALL)

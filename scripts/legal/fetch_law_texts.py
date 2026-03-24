@@ -22,7 +22,7 @@ from hoaware.config import load_settings
 from scripts.legal.source_quality import classify_source_quality, extraction_allowed
 
 
-USER_AGENT = "hoaware-legal-corpus/0.1 (research fetcher)"
+USER_AGENT = "hoaproxy-legal-corpus/0.1 (research fetcher)"
 REQUEST_TIMEOUT = 30
 RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 INSECURE_TLS_RETRY_HOSTS = {

@@ -12,6 +12,15 @@ settings.env
 
 # docs (PDFs)
 casnc_hoa_docs/
+scraped_hoa_docs/
+legal_corpus/
+
+# Screenshots and design artifacts
+*.png
+
+# Claude Code / Playwright working dirs
+.claude/
+.playwright-mcp/
 
 # macOS
 .DS_Store

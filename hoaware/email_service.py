@@ -159,7 +159,7 @@ def _proxy_status_html(proxy: dict, event: str) -> str:
     <html><body style="font-family:sans-serif;max-width:600px;margin:0 auto">
     <h2>Proxy Update — {hoa}</h2>
     <p>{body}</p>
-    <p><a href="https://hoaware.app/my-proxies">View your proxies</a></p>
+    <p><a href="https://hoaproxy.org/my-proxies">View your proxies</a></p>
     <hr>
     <p style="font-size:12px;color:#666">HOAproxy — Not legal advice.</p>
     </body></html>
@@ -179,7 +179,7 @@ def _delegate_notification_html(proxy: dict, event: str) -> str:
     <html><body style="font-family:sans-serif;max-width:600px;margin:0 auto">
     <h2>{subject_line}</h2>
     <p>{body}</p>
-    <p><a href="https://hoaware.app/delegate-dashboard">View your delegate dashboard</a></p>
+    <p><a href="https://hoaproxy.org/delegate-dashboard">View your delegate dashboard</a></p>
     <hr>
     <p style="font-size:12px;color:#666">HOAproxy — Not legal advice.</p>
     </body></html>
