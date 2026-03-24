@@ -15,8 +15,22 @@ casnc_hoa_docs/
 scraped_hoa_docs/
 legal_corpus/
 
+# Personal / business documents
+*.pdf
+*.docx
+
 # Screenshots and design artifacts
 *.png
+
+# Internal working docs / one-off scripts
+claude-memory/
+TODO.md
+state_hoa_laws.md
+docs/hoa-law-corpus-execution-log.md
+docs/ux-fix-list.md
+scripts/render_resume_upload.py
+scripts/render_upload_supervisor.py
+scripts/backfill_proxy_status.py
 
 # Claude Code / Playwright working dirs
 .claude/

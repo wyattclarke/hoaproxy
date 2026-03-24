@@ -16,16 +16,20 @@ HOAproxy is a semantic search / Q&A platform for HOA documents, with a proxy vot
 
 ## Environment Setup
 ```bash
-# Python 3.10 installed via pyenv; .venv lives in project root
+# Python 3.10+; .venv lives in project root
+python3.10 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 pip install pytest httpx  # test deps, not in requirements.txt
 ```
 
-Python 3.10.12 is installed at `/Users/ngoshaliclarke/.pyenv/versions/3.10.12/`.
-If .venv is missing or wrong version: `rm -rf .venv && /Users/ngoshaliclarke/.pyenv/versions/3.10.12/bin/python3.10 -m venv .venv`
+Settings are loaded from `settings.env` (gitignored). Copy `settings.env.example` to get started:
+```bash
+cp settings.env.example settings.env
+# Edit settings.env with your API keys
+```
 
-Settings are loaded from `settings.env` (gitignored). Key values:
+Key values:
 - `OPENAI_API_KEY` — secret, get from OpenAI dashboard
 - `JWT_SECRET` — secret, use a strong random string in production
 - `HOA_DB_PATH=data/hoa_index.db`
@@ -34,19 +38,9 @@ Settings are loaded from `settings.env` (gitignored). Key values:
 - `HOA_ENABLE_OCR=1`, `HOA_OCR_DPI=300`
 - `HOA_CHUNK_CHAR_LIMIT=1800`, `HOA_CHUNK_OVERLAP=200`
 
-**Google Document AI (enabled):**
-- `HOA_ENABLE_DOCAI=1`
-- `HOA_DOCAI_PROJECT_ID=hoaware`
-- `HOA_DOCAI_LOCATION=us`
-- `HOA_DOCAI_PROCESSOR_ID=2972d086333484a3`
-- `GOOGLE_APPLICATION_CREDENTIALS=hoaware-598872615131.json` — GCP service account key file (gitignored, transfer separately)
-
-**Render deployment:**
-- Service ID: `srv-d62kms68alac738h67b0`
-- `RENDER_API_KEY` and `RENDER_SERVICE_ID` are in `settings.env`
-- When calling Render API from scripts/shell: `set -a && source settings.env && set +a` then use `$RENDER_API_KEY` — never hardcode secrets in commands
-- Render env vars API is PUT-only (replaces all); use the Python snippet pattern in this session to upsert a single key without echoing others
-- `JWT_SECRET` is set on Render (added Mar 2026)
+**Google Document AI (optional):**
+- Set `HOA_ENABLE_DOCAI=1` and configure `HOA_DOCAI_PROJECT_ID`, `HOA_DOCAI_LOCATION`, `HOA_DOCAI_PROCESSOR_ID`
+- `GOOGLE_APPLICATION_CREDENTIALS` — path to your GCP service account key file (gitignored)
 
 ## Running & Testing
 ```bash
@@ -66,14 +60,14 @@ Vanilla HTML/CSS/JS — no build step, no framework. Match existing style:
 - Colors: `--accent: #1662f3`, `--bg: #eef5ff`, `--ink: #12233a`
 - Auth: always load `/static/js/auth.js`, use `Auth.renderNav()`, `Auth.requireAuth()`, `Auth.fetchJson()`
 
-## Proxy Voting System — ALL 8 MILESTONES COMPLETE
-See `docs/proxy-voting-plan.md` for full details. 129 tests, all passing.
+## Proxy Voting System
+See `docs/proxy-voting-plan.md` for full details.
 
 **Key patterns:**
 - DB startup migration: `lifespan` handler in `api/main.py` runs `db.SCHEMA` + expiry sweep on boot
 - Rate limiter: in-memory per-IP, `_check_rate_limit(request, limit=N)` — skips `testclient` host
 - Health check (`/healthz`): verifies all required tables exist, returns 503 if missing
-- E-sign: Documenso API when `DOCUMENSO_API_KEY` set; click-to-sign fallback otherwise
+- E-sign: click-to-sign MVP
 - Email: `EMAIL_PROVIDER=stub|resend|smtp`; defaults to stub (logs only)
 - Data retention: `PROXY_RETENTION_DAYS=90`; expiry sweep runs on startup
 
@@ -91,9 +85,9 @@ ETL pipeline in `scripts/legal/`:
 - Source registry: `data/legal/state_source_registry.json`
 - 47/51 jurisdictions have assembled profiles; OK, PA, SD, WY are inaccessible via static HTML
 
-## Data Directories (not in git — transfer separately)
+## Data Directories (not in git)
 - `data/` — SQLite DBs, Qdrant local store
-- `casnc_hoa_docs/` — Main HOA document library (~1.9 GB)
+- `casnc_hoa_docs/` — Main HOA document library
 - `scraped_hoa_docs/` — Uploaded HOA PDFs
 - `legal_corpus/` — Raw/normalized law texts
 - `settings.env` — Secrets
