@@ -183,6 +183,18 @@ PAGE_TIMEOUT = 15_000  # 15s for Render cold starts
 INTERACTION_TIMEOUT = 20_000  # 20s for API-backed interactions
 
 
+def _hoa_list_from_summary(data: dict) -> list[dict]:
+    """Extract HOA list from summary response, normalising field names."""
+    raw = data.get("results") or data.get("hoas") or []
+    out = []
+    for h in raw:
+        out.append({
+            "id": h.get("hoa_id") or h.get("id"),
+            "name": h.get("hoa") or h.get("name"),
+        })
+    return out
+
+
 def _clear_errors(errors: list[str]) -> list[str]:
     """Return non-benign errors and clear the list."""
     real = [e for e in errors if not _is_benign(e)]
@@ -545,7 +557,7 @@ def group4_authenticated(page, base: str, results: SmokeResults, js_errors: list
         req = urllib.request.Request(f"{base}/hoas/summary?page=1&per_page=1")
         with urllib.request.urlopen(req, timeout=15) as resp:
             summary_data = json.loads(resp.read())
-        hoas = summary_data.get("hoas", [])
+        hoas = _hoa_list_from_summary(summary_data)
         if hoas:
             hoa_name = hoas[0]["name"]
             hoa_slug = hoa_name  # URL uses the name directly
@@ -907,7 +919,7 @@ def group5_interactive(page, base: str, results: SmokeResults, js_errors: list[s
         req = urllib.request.Request(f"{base}/hoas/summary?page=1&per_page=1")
         with urllib.request.urlopen(req, timeout=15) as resp:
             summary_data = json.loads(resp.read())
-        hoas_list = summary_data.get("hoas", [])
+        hoas_list = _hoa_list_from_summary(summary_data)
         if hoas_list:
             hoa_name = hoas_list[0]["name"]
             page.goto(base + f"/hoa/{quote(hoa_name)}", wait_until="domcontentloaded",
@@ -1151,7 +1163,7 @@ def group7_api(base: str, results: SmokeResults):
         req = urllib.request.Request(f"{base}/hoas/summary?page=1&per_page=1")
         with urllib.request.urlopen(req, timeout=15) as resp:
             summary_data = json.loads(resp.read())
-        hoas = summary_data.get("hoas", [])
+        hoas = _hoa_list_from_summary(summary_data)
         if hoas:
             hoa_name = hoas[0]["name"]
             slug = hoa_name.lower().replace(" ", "-").replace("/", "-")
@@ -1254,11 +1266,12 @@ def group8_multi_user_api(base: str, results: SmokeResults):
     # Claim membership in an existing HOA (use the first available one)
     try:
         status, summary = _api_call(base, "GET", "/hoas/summary?page=1&per_page=1")
-        if status != 200 or not summary.get("hoas"):
+        _hoas = _hoa_list_from_summary(summary) if status == 200 else []
+        if not _hoas:
             results.failed("Multi-user: find HOA for testing", "No HOAs available")
             return
-        hoa_id = summary["hoas"][0]["id"]
-        hoa_name = summary["hoas"][0]["name"]
+        hoa_id = _hoas[0]["id"]
+        hoa_name = _hoas[0]["name"]
         for tok in (t1, t2, t3):
             s, _ = _api_call(base, "POST", f"/user/hoas/{hoa_id}/claim",
                              {"unit_number": "SMOKE"}, tok)
@@ -1417,7 +1430,7 @@ def group8_multi_user_api(base: str, results: SmokeResults):
 
     # Step 3: Revoke the draft proxy (signing requires email verification, so we test revoke)
     try:
-        s, resp = _api_call(base, "POST", f"/proxies/{proxy_id}/revoke", None, t1)
+        s, resp = _api_call(base, "POST", f"/proxies/{proxy_id}/revoke", {"reason": "smoke test cleanup"}, t1)
         if s != 200:
             results.failed("Multi-user: revoke proxy", f"HTTP {s}: {resp.get('detail')}")
             return
@@ -1497,9 +1510,10 @@ def group8_multi_user_api(base: str, results: SmokeResults):
 
         # Both claim membership
         s, summary = _api_call(base, "GET", "/hoas/summary?page=1&per_page=1")
-        if s == 200 and summary.get("hoas"):
-            lifecycle_hoa_id = summary["hoas"][0]["id"]
-            lifecycle_hoa_name = summary["hoas"][0]["name"]
+        _lc_hoas = _hoa_list_from_summary(summary) if s == 200 else []
+        if _lc_hoas:
+            lifecycle_hoa_id = _lc_hoas[0]["id"]
+            lifecycle_hoa_name = _lc_hoas[0]["name"]
             for tok in (t_grantor, t_delegate_user):
                 _api_call(base, "POST", f"/user/hoas/{lifecycle_hoa_id}/claim",
                           {"unit_number": "SMOKE"}, tok)
@@ -1535,10 +1549,34 @@ def group8_multi_user_api(base: str, results: SmokeResults):
                 proxy_id = proxy["id"]
                 results.passed("Proxy lifecycle: create (draft)")
 
-                # Sign proxy
+                # Sign proxy (requires email verification — 403 is expected for temp accounts)
                 s, signed = _api_call(base, "POST", f"/proxies/{proxy_id}/sign",
                                       None, t_grantor)
-                if s == 200 and signed.get("status") == "signed":
+                if s == 403 and "verification" in str(signed.get("detail", "")).lower():
+                    results.passed("Proxy lifecycle: sign blocked without email verification (expected)")
+                    # Still test /proxies/mine and /proxies/delegated with draft proxy
+                    s, my_proxies = _api_call(base, "GET", "/proxies/mine", None, t_grantor)
+                    if s == 200:
+                        found = [p for p in my_proxies if p["id"] == proxy_id]
+                        if found and found[0]["status"] == "draft":
+                            results.passed("Proxy lifecycle: draft appears in /proxies/mine")
+                        else:
+                            results.warn("Proxy lifecycle: /proxies/mine", "Proxy not found")
+
+                    s, delegated = _api_call(base, "GET", "/proxies/delegated",
+                                             None, t_delegate_user)
+                    if s == 200:
+                        found = [p for p in delegated if p["id"] == proxy_id]
+                        if found:
+                            results.passed("Proxy lifecycle: draft appears in /proxies/delegated")
+                        else:
+                            results.warn("Proxy lifecycle: /proxies/delegated", "Not found")
+
+                    # Revoke the draft for cleanup
+                    _api_call(base, "POST", f"/proxies/{proxy_id}/revoke",
+                              {"reason": "smoke test cleanup"}, t_grantor)
+
+                elif s == 200 and signed.get("status") == "signed":
                     results.passed("Proxy lifecycle: sign")
 
                     # Verify via /proxies/mine
@@ -2157,8 +2195,9 @@ def group10_edge_cases(base: str, results: SmokeResults):
         t_c, _ = _register_temp(base, "sign-intruder", "SignIntruder Test")
 
         s, summary = _api_call(base, "GET", "/hoas/summary?page=1&per_page=1")
-        if s == 200 and summary.get("hoas"):
-            edge_hoa_id = summary["hoas"][0]["id"]
+        _edge_hoas = _hoa_list_from_summary(summary) if s == 200 else []
+        if _edge_hoas:
+            edge_hoa_id = _edge_hoas[0]["id"]
             for tok in (t_a, t_b, t_c):
                 _api_call(base, "POST", f"/user/hoas/{edge_hoa_id}/claim",
                           {"unit_number": "SMOKE"}, tok)
@@ -2180,7 +2219,7 @@ def group10_edge_cases(base: str, results: SmokeResults):
                     results.failed("Edge: sign others proxy",
                                    f"HTTP {s_intruder} (want 403/404)")
                 # Clean up
-                _api_call(base, "POST", f"/proxies/{proxy_id}/revoke", None, t_a)
+                _api_call(base, "POST", f"/proxies/{proxy_id}/revoke", {"reason": "smoke test cleanup"}, t_a)
             else:
                 results.warn("Edge: sign others proxy", f"Could not create proxy ({s})")
     except Exception as exc:
