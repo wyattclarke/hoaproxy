@@ -1654,6 +1654,40 @@ def health() -> dict:
     return {"status": "ok"}
 
 
+@app.get("/admin/debug-fs")
+def debug_filesystem(request: Request):
+    """TEMPORARY: inspect filesystem for data recovery. Remove after use."""
+    _require_admin(request)
+    import os
+    result = {}
+    for dirpath in ["/var/data", "/app/data", "/app/data/qdrant_local"]:
+        try:
+            entries = []
+            for f in os.listdir(dirpath):
+                full = os.path.join(dirpath, f)
+                size = os.path.getsize(full) if os.path.isfile(full) else -1
+                entries.append({"name": f, "size": size, "is_dir": os.path.isdir(full)})
+            result[dirpath] = entries
+        except FileNotFoundError:
+            result[dirpath] = "NOT FOUND"
+        except Exception as e:
+            result[dirpath] = str(e)
+    # Also check if any .db files exist anywhere common
+    db_files = []
+    for root, dirs, files in os.walk("/app"):
+        for f in files:
+            if f.endswith(".db"):
+                full = os.path.join(root, f)
+                db_files.append({"path": full, "size": os.path.getsize(full)})
+    for root, dirs, files in os.walk("/var/data"):
+        for f in files:
+            if f.endswith(".db"):
+                full = os.path.join(root, f)
+                db_files.append({"path": full, "size": os.path.getsize(full)})
+    result["all_db_files"] = db_files
+    return result
+
+
 class BulkImportRecord(BaseModel):
     name: str
     metadata_type: str | None = None
