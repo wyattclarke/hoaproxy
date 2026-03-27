@@ -1,0 +1,34 @@
+User-agent: *
+Allow: /
+
+# Public pages
+Allow: /about
+Allow: /legal
+Allow: /terms
+Allow: /privacy
+
+# Auth pages (indexable for discoverability)
+Allow: /login
+Allow: /register
+
+# Block authenticated-only areas from crawling
+Disallow: /dashboard
+Disallow: /account
+Disallow: /my-proxies
+Disallow: /delegate-dashboard
+Disallow: /assign-proxy
+Disallow: /proxy-sign/
+Disallow: /become-delegate
+Disallow: /add-hoa
+Disallow: /add-participation
+Disallow: /verify-email
+Disallow: /forgot-password
+Disallow: /reset-password
+
+# Block API endpoints
+Disallow: /api/
+Disallow: /healthz
+Disallow: /docs
+Disallow: /openapi.json
+
+Sitemap: https://hoaproxy.org/sitemap.xml

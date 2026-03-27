@@ -121,6 +121,12 @@ def _derived_fallback_urls(source_url: str) -> list[str]:
         urls.append("https://www.njleg.state.nj.us/statutes")
     if host in {"legis.state.sd.us", "legis.state.sd.us:80"}:
         urls.append("https://sdlegislature.gov/Statutes")
+    if host == "sdlegislature.gov" or host == "www.sdlegislature.gov":
+        # SPA pages need the /api/ HTML endpoint for static fetch
+        path = urlparse(source_url).path
+        if path.startswith("/Statutes/") and "/api/" not in source_url:
+            section = path.removeprefix("/Statutes/")
+            urls.append(f"https://sdlegislature.gov/api/Statutes/{section}.html?all=true")
     if host == "www.legis.state.ak.us":
         urls.append("https://www.akleg.gov/basis/statutes.asp")
     if host in {"alisondb.legislature.state.al.us", "alison.legislature.state.al.us"}:
@@ -208,6 +214,10 @@ def _fetch_with_fallback(candidate_urls: list[str]) -> tuple[requests.Response, 
                 preview = (resp.text or "")[:5000].lower()
                 if "<title>open legislation</title>" in preview and 'id="app"' in preview:
                     attempts.append(f"{url} attempt={attempt} unusable_html=open_legislation_shell")
+                    break
+                # SD Legislature SPA — static fetch returns a JS shell with no content
+                if "sdlegislature.gov" in url and "noscript" in preview and "you need to enable javascript" in preview:
+                    attempts.append(f"{url} attempt={attempt} unusable_html=sd_legislature_spa_shell")
                     break
             return resp, url, attempts
     raise RuntimeError("; ".join(attempts[-8:]) or "all candidate fetch attempts failed")

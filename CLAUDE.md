@@ -83,7 +83,7 @@ ETL pipeline in `scripts/legal/`:
 
 - Rules stored in `legal_corpus/metadata/extracted_rules.jsonl` (not SQLite)
 - Source registry: `data/legal/state_source_registry.json`
-- 47/51 jurisdictions have assembled profiles; OK, PA, SD, WY are inaccessible via static HTML
+- 47/51 jurisdictions had assembled profiles; OK, PA, SD, WY were migrated from dead aggregator URLs to official sources (oscn.net, palegis.us, sdlegislature.gov/api, wyoleg.gov)
 
 ## Data Directories (not in git)
 - `data/` — SQLite DBs, Qdrant local store

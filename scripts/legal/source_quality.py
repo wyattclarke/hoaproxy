@@ -21,6 +21,15 @@ OFFICIAL_HOST_ALLOWLIST = {
     # Oklahoma State Courts Network — official OK legal publisher
     "www.oscn.net",
     "oscn.net",
+    # Pennsylvania General Assembly
+    "www.palegis.us",
+    "palegis.us",
+    # South Dakota Legislature
+    "sdlegislature.gov",
+    "www.sdlegislature.gov",
+    # Wyoming Legislature
+    "wyoleg.gov",
+    "www.wyoleg.gov",
 }
 
 AGGREGATOR_HOST_TOKENS = (

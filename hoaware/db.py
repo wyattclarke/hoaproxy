@@ -296,6 +296,32 @@ CREATE TABLE IF NOT EXISTS proposal_upvotes (
 );
 
 CREATE INDEX IF NOT EXISTS idx_proposal_upvotes_proposal ON proposal_upvotes(proposal_id);
+
+CREATE TABLE IF NOT EXISTS api_usage_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    service TEXT NOT NULL,
+    operation TEXT NOT NULL,
+    units REAL NOT NULL,
+    unit_type TEXT NOT NULL,
+    est_cost_usd REAL,
+    metadata TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_api_usage_log_ts ON api_usage_log(timestamp);
+CREATE INDEX IF NOT EXISTS idx_api_usage_log_service ON api_usage_log(service);
+
+CREATE TABLE IF NOT EXISTS fixed_costs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    service TEXT NOT NULL,
+    description TEXT,
+    amount_usd REAL NOT NULL,
+    frequency TEXT NOT NULL DEFAULT 'monthly',
+    monthly_equiv REAL NOT NULL,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    updated_at TEXT
+);
 """
 
 
@@ -2492,3 +2518,197 @@ def get_upvote(conn: sqlite3.Connection, proposal_id: int, user_id: int) -> dict
         (int(proposal_id), int(user_id)),
     ).fetchone()
     return dict(row) if row else None
+
+
+# ---------------------------------------------------------------------------
+# Cost Tracker
+# ---------------------------------------------------------------------------
+
+def log_api_usage(
+    conn: sqlite3.Connection,
+    *,
+    service: str,
+    operation: str,
+    units: float,
+    unit_type: str,
+    est_cost_usd: float | None = None,
+    metadata: dict | None = None,
+) -> int:
+    cur = conn.execute(
+        """
+        INSERT INTO api_usage_log (service, operation, units, unit_type, est_cost_usd, metadata)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (service, operation, units, unit_type, est_cost_usd, json.dumps(metadata or {})),
+    )
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def get_usage_summary(
+    conn: sqlite3.Connection,
+    *,
+    month: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+) -> list[dict]:
+    """Return aggregated usage grouped by service.
+
+    Filter by month (YYYY-MM) or explicit date range.
+    """
+    if month:
+        date_from = f"{month}-01"
+        # Use first day of next month as exclusive upper bound
+        parts = month.split("-")
+        y, m = int(parts[0]), int(parts[1])
+        m += 1
+        if m > 12:
+            m = 1
+            y += 1
+        date_to = f"{y:04d}-{m:02d}-01"
+
+    clauses: list[str] = []
+    params: list[Any] = []
+    if date_from:
+        clauses.append("timestamp >= ?")
+        params.append(date_from)
+    if date_to:
+        clauses.append("timestamp < ?")
+        params.append(date_to)
+
+    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    rows = conn.execute(
+        f"""
+        SELECT service, unit_type,
+               SUM(units) AS total_units,
+               SUM(est_cost_usd) AS total_est_cost_usd
+        FROM api_usage_log
+        {where}
+        GROUP BY service
+        ORDER BY total_est_cost_usd DESC
+        """,
+        params,
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_usage_daily(
+    conn: sqlite3.Connection,
+    *,
+    month: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+) -> list[dict]:
+    if month:
+        date_from = f"{month}-01"
+        parts = month.split("-")
+        y, m = int(parts[0]), int(parts[1])
+        m += 1
+        if m > 12:
+            m = 1
+            y += 1
+        date_to = f"{y:04d}-{m:02d}-01"
+
+    clauses: list[str] = []
+    params: list[Any] = []
+    if date_from:
+        clauses.append("timestamp >= ?")
+        params.append(date_from)
+    if date_to:
+        clauses.append("timestamp < ?")
+        params.append(date_to)
+
+    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    rows = conn.execute(
+        f"""
+        SELECT date(timestamp) AS day, service,
+               SUM(units) AS total_units,
+               SUM(est_cost_usd) AS total_est_cost_usd
+        FROM api_usage_log
+        {where}
+        GROUP BY day, service
+        ORDER BY day, service
+        """,
+        params,
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def create_fixed_cost(
+    conn: sqlite3.Connection,
+    *,
+    service: str,
+    description: str | None = None,
+    amount_usd: float,
+    frequency: str = "monthly",
+) -> int:
+    monthly_equiv = amount_usd if frequency == "monthly" else round(amount_usd / 12, 2)
+    cur = conn.execute(
+        """
+        INSERT INTO fixed_costs (service, description, amount_usd, frequency, monthly_equiv)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (service, description, amount_usd, frequency, monthly_equiv),
+    )
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def update_fixed_cost(
+    conn: sqlite3.Connection,
+    cost_id: int,
+    *,
+    service: str | None = None,
+    description: str | None = None,
+    amount_usd: float | None = None,
+    frequency: str | None = None,
+    active: bool | None = None,
+) -> dict | None:
+    row = conn.execute("SELECT * FROM fixed_costs WHERE id = ?", (int(cost_id),)).fetchone()
+    if not row:
+        return None
+    current = dict(row)
+    svc = service if service is not None else current["service"]
+    desc = description if description is not None else current["description"]
+    amt = amount_usd if amount_usd is not None else current["amount_usd"]
+    freq = frequency if frequency is not None else current["frequency"]
+    act = int(active) if active is not None else current["active"]
+    monthly = amt if freq == "monthly" else round(amt / 12, 2)
+    conn.execute(
+        """
+        UPDATE fixed_costs
+        SET service = ?, description = ?, amount_usd = ?, frequency = ?,
+            monthly_equiv = ?, active = ?,
+            updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+        WHERE id = ?
+        """,
+        (svc, desc, amt, freq, monthly, act, int(cost_id)),
+    )
+    conn.commit()
+    updated = conn.execute("SELECT * FROM fixed_costs WHERE id = ?", (int(cost_id),)).fetchone()
+    return dict(updated) if updated else None
+
+
+def delete_fixed_cost(conn: sqlite3.Connection, cost_id: int) -> bool:
+    conn.execute(
+        """
+        UPDATE fixed_costs SET active = 0,
+            updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+        WHERE id = ?
+        """,
+        (int(cost_id),),
+    )
+    conn.commit()
+    return True
+
+
+def list_fixed_costs(conn: sqlite3.Connection, active_only: bool = True) -> list[dict]:
+    if active_only:
+        rows = conn.execute(
+            "SELECT * FROM fixed_costs WHERE active = 1 ORDER BY monthly_equiv DESC"
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT * FROM fixed_costs ORDER BY active DESC, monthly_equiv DESC"
+        ).fetchall()
+    return [dict(r) for r in rows]

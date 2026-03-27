@@ -1389,6 +1389,16 @@ def _render_searchable_document_html(hoa_name: str, relative_path: str, chunks: 
 </html>"""
 
 
+@app.get("/robots.txt", include_in_schema=False)
+def robots_txt() -> FileResponse:
+    return FileResponse(STATIC_DIR / "robots.txt", media_type="text/plain")
+
+
+@app.get("/sitemap.xml", include_in_schema=False)
+def sitemap_xml() -> FileResponse:
+    return FileResponse(STATIC_DIR / "sitemap.xml", media_type="application/xml")
+
+
 @app.get("/", include_in_schema=False)
 def index() -> FileResponse:
     if not STATIC_DIR.exists():
@@ -1712,6 +1722,134 @@ def admin_bulk_import(request: Request, body: BulkImportRequest):
     return BulkImportResponse(
         status="ok", imported=imported, skipped=skipped, errors=errors
     )
+
+
+# ---------------------------------------------------------------------------
+# Cost tracker endpoints
+# ---------------------------------------------------------------------------
+
+
+def _require_admin(request: Request) -> None:
+    settings = load_settings()
+    admin_key = settings.jwt_secret
+    auth_header = request.headers.get("Authorization", "")
+    if not admin_key or auth_header != f"Bearer {admin_key}":
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+
+class FixedCostRequest(BaseModel):
+    service: str
+    description: Optional[str] = None
+    amount_usd: float
+    frequency: str = "monthly"
+
+
+class FixedCostUpdateRequest(BaseModel):
+    service: Optional[str] = None
+    description: Optional[str] = None
+    amount_usd: Optional[float] = None
+    frequency: Optional[str] = None
+    active: Optional[bool] = None
+
+
+@app.get("/admin/costs")
+def admin_costs(request: Request, month: Optional[str] = None):
+    """Combined cost summary: metered API usage + fixed subscriptions."""
+    _require_admin(request)
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        metered = db.get_usage_summary(conn, month=month)
+        fixed = db.list_fixed_costs(conn, active_only=True)
+
+    metered_by_service = {}
+    total_metered = 0.0
+    for row in metered:
+        metered_by_service[row["service"]] = {
+            "total_units": row["total_units"],
+            "unit_type": row["unit_type"],
+            "est_cost_usd": round(row["total_est_cost_usd"] or 0, 6),
+        }
+        total_metered += row["total_est_cost_usd"] or 0
+
+    total_fixed = sum(fc["monthly_equiv"] for fc in fixed)
+    return {
+        "period": month or "all-time",
+        "metered": metered_by_service,
+        "fixed": [
+            {
+                "id": fc["id"],
+                "service": fc["service"],
+                "description": fc["description"],
+                "monthly_equiv": fc["monthly_equiv"],
+            }
+            for fc in fixed
+        ],
+        "total_metered_usd": round(total_metered, 6),
+        "total_fixed_usd": round(total_fixed, 2),
+        "total_usd": round(total_metered + total_fixed, 2),
+    }
+
+
+@app.get("/admin/costs/daily")
+def admin_costs_daily(request: Request, month: Optional[str] = None):
+    """Daily metered cost breakdown."""
+    _require_admin(request)
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        rows = db.get_usage_daily(conn, month=month)
+    return {"period": month or "all-time", "daily": rows}
+
+
+@app.get("/admin/costs/fixed")
+def admin_list_fixed_costs(request: Request, all: bool = False):
+    _require_admin(request)
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        costs = db.list_fixed_costs(conn, active_only=not all)
+    return {"fixed_costs": costs}
+
+
+@app.post("/admin/costs/fixed")
+def admin_create_fixed_cost(request: Request, body: FixedCostRequest):
+    _require_admin(request)
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        cost_id = db.create_fixed_cost(
+            conn,
+            service=body.service,
+            description=body.description,
+            amount_usd=body.amount_usd,
+            frequency=body.frequency,
+        )
+    return {"id": cost_id, "status": "created"}
+
+
+@app.put("/admin/costs/fixed/{cost_id}")
+def admin_update_fixed_cost(cost_id: int, request: Request, body: FixedCostUpdateRequest):
+    _require_admin(request)
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        updated = db.update_fixed_cost(
+            conn,
+            cost_id,
+            service=body.service,
+            description=body.description,
+            amount_usd=body.amount_usd,
+            frequency=body.frequency,
+            active=body.active,
+        )
+    if not updated:
+        raise HTTPException(status_code=404, detail="Fixed cost not found")
+    return updated
+
+
+@app.delete("/admin/costs/fixed/{cost_id}")
+def admin_delete_fixed_cost(cost_id: int, request: Request):
+    _require_admin(request)
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        db.delete_fixed_cost(conn, cost_id)
+    return {"status": "deactivated"}
 
 
 # ---------------------------------------------------------------------------

@@ -16,6 +16,7 @@ from email.mime.text import MIMEText
 
 from hoaware import db
 from hoaware.config import load_settings
+from hoaware.cost_tracker import log_email_usage
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +88,7 @@ def _send_email(*, to: list[str], subject: str, html: str) -> bool:
                     subject=subject,
                     html=html,
                 )
+                log_email_usage("resend", recipient_count=len(to))
                 logger.info("Email sent via Resend to %s: %s", to, subject)
                 return True
             except Exception as exc:
@@ -109,6 +111,7 @@ def _send_email(*, to: list[str], subject: str, html: str) -> bool:
                     subject=subject,
                     html=html,
                 )
+                log_email_usage("smtp", recipient_count=len(to))
                 logger.info("Email sent via SMTP to %s: %s", to, subject)
                 return True
             except Exception as exc:

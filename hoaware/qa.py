@@ -8,6 +8,7 @@ from rich.console import Console
 from rich.panel import Panel
 
 from .config import Settings, load_settings, normalize_hoa_name
+from .cost_tracker import log_chat_usage
 from .embeddings import batch_embeddings
 from .vector_store import build_client, ensure_collection, search as qdrant_search
 
@@ -151,6 +152,8 @@ def get_answer(
     if not model.startswith("gpt-5"):
         completion_kwargs["temperature"] = 0.2
     completion = openai_client.chat.completions.create(**completion_kwargs)
+    if hasattr(completion, "usage") and completion.usage:
+        log_chat_usage(completion.usage.prompt_tokens, completion.usage.completion_tokens, model=model)
     answer = completion.choices[0].message.content or ""
     citations = build_citations(results)
     return answer.strip(), citations, results
@@ -185,6 +188,8 @@ def get_answer_multi(
     if not model.startswith("gpt-5"):
         completion_kwargs["temperature"] = 0.2
     completion = openai_client.chat.completions.create(**completion_kwargs)
+    if hasattr(completion, "usage") and completion.usage:
+        log_chat_usage(completion.usage.prompt_tokens, completion.usage.completion_tokens, model=model)
     answer = completion.choices[0].message.content or ""
     citations = build_citations(results)
     return answer.strip(), citations, results

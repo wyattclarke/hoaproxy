@@ -11,6 +11,7 @@ from google.cloud import documentai
 from pypdf import PdfReader, PdfWriter
 
 from .chunker import PageContent
+from .cost_tracker import log_docai_usage
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +87,8 @@ def extract_with_document_ai(
             continue
 
         document = result.document
+        pages_in_chunk = end - start + 1
+        log_docai_usage(pages_in_chunk, document=str(path.name))
         chunk_pages_count = 0
         for page in document.pages:
             number = start + (page.page_number - 1)

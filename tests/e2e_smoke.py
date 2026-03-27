@@ -40,8 +40,10 @@ import os
 import re
 import sys
 import time
+import urllib.error
 import urllib.request
 from pathlib import Path
+from urllib.parse import quote
 
 from playwright.sync_api import sync_playwright, TimeoutError as PwTimeout
 
@@ -340,6 +342,7 @@ def group3_auth_gates(page, base: str, results: SmokeResults, js_errors: list[st
         "/dashboard", "/my-proxies", "/assign-proxy",
         "/become-delegate", "/delegate-dashboard",
         "/proposals", "/add-participation", "/add-hoa",
+        "/account",
     ]
     for path in gated_pages:
         _check_auth_gate(page, base + path, results, f"Auth gate: {path}", js_errors)
@@ -433,6 +436,225 @@ def group4_authenticated(page, base: str, results: SmokeResults, js_errors: list
         else:
             results.warn("Register redirects to dashboard when authed",
                          f"Stayed on {page.url}")
+
+    # ---- Account page interactive tests ----
+    js_errors.clear()
+    try:
+        page.goto(base + "/account", wait_until="domcontentloaded", timeout=PAGE_TIMEOUT)
+        page.wait_for_selector("#firstName", timeout=PAGE_TIMEOUT)
+
+        # Verify fields loaded
+        first_name = page.input_value("#firstName")
+        last_name = page.input_value("#lastName")
+        email_val = page.input_value("#email")
+        if email_val:
+            results.passed("Account: profile fields loaded")
+        else:
+            results.warn("Account: profile fields loaded", "Email field empty")
+
+        # Edit first name and save
+        original_first = first_name
+        test_name = f"SmokeTest{int(time.time())}"
+        page.fill("#firstName", test_name)
+        page.click("#saveProfileBtn")
+        page.wait_for_function(
+            "document.querySelector('#profileStatus')?.classList.contains('ok')",
+            timeout=INTERACTION_TIMEOUT,
+        )
+        results.passed("Account: profile save")
+
+        # Reload and verify persistence
+        page.goto(base + "/account", wait_until="domcontentloaded", timeout=PAGE_TIMEOUT)
+        page.wait_for_selector("#firstName", timeout=PAGE_TIMEOUT)
+        page.wait_for_function(
+            "document.getElementById('firstName').value.length > 0",
+            timeout=INTERACTION_TIMEOUT,
+        )
+        saved_name = page.input_value("#firstName")
+        if saved_name == test_name:
+            results.passed("Account: profile edit persisted")
+        else:
+            results.failed("Account: profile edit persisted",
+                           f"Expected '{test_name}', got '{saved_name}'")
+
+        # Restore original name
+        page.fill("#firstName", original_first or "")
+        page.click("#saveProfileBtn")
+        page.wait_for_timeout(1000)
+    except PwTimeout:
+        results.failed("Account: profile tests", "Timeout")
+    except Exception as exc:
+        results.failed("Account: profile tests", str(exc)[:120])
+
+    # ---- Account password change via UI ----
+    js_errors.clear()
+    try:
+        page.goto(base + "/account", wait_until="domcontentloaded", timeout=PAGE_TIMEOUT)
+        page.wait_for_selector("#currentPassword", timeout=PAGE_TIMEOUT)
+
+        # Try with wrong current password
+        page.fill("#currentPassword", "definitelyWrong1!")
+        page.fill("#newPassword", "TempNewPass123!")
+        page.fill("#confirmPassword", "TempNewPass123!")
+        page.click("#changePasswordBtn")
+        page.wait_for_function(
+            "document.querySelector('#passwordStatus')?.classList.contains('error')",
+            timeout=INTERACTION_TIMEOUT,
+        )
+        results.passed("Account: wrong current password rejected (UI)")
+    except PwTimeout:
+        results.warn("Account: wrong current password rejected (UI)", "Timeout")
+    except Exception as exc:
+        results.failed("Account: wrong current password rejected (UI)", str(exc)[:120])
+
+    # ---- Dashboard Q&A widget ----
+    js_errors.clear()
+    try:
+        page.goto(base + "/dashboard", wait_until="domcontentloaded", timeout=PAGE_TIMEOUT)
+        page.wait_for_selector("#qaInput", timeout=PAGE_TIMEOUT)
+
+        # Check if HOA dropdown has options (user has claimed HOAs)
+        qa_select = page.locator("#qaHoaSelect, #hoaSelect")
+        if qa_select.count() > 0:
+            page.wait_for_timeout(1500)  # let HOA list populate
+            page.fill("#qaInput", "What are the rules?")
+            qa_btn = page.locator("#qaBtn, #qaSubmitBtn, button:has-text('Ask')")
+            if qa_btn.count() > 0:
+                qa_btn.first.click()
+                try:
+                    page.wait_for_function(
+                        "(document.getElementById('qaAnswer') || document.getElementById('qaResult'))?.textContent.trim().length > 0",
+                        timeout=30000,  # QA can be slow
+                    )
+                    results.passed("Dashboard: Q&A widget returns answer")
+                except PwTimeout:
+                    results.warn("Dashboard: Q&A widget returns answer",
+                                 "Answer did not appear within 30s")
+            else:
+                results.warn("Dashboard: Q&A widget", "No QA submit button found")
+        else:
+            results.warn("Dashboard: Q&A widget", "No HOA selector — user may not have claimed HOAs")
+    except Exception as exc:
+        results.failed("Dashboard: Q&A widget", str(exc)[:120])
+
+    # ---- HOA profile page (authed) ----
+    hoas = []
+    js_errors.clear()
+    try:
+        # Get the user's first HOA name from the summary API
+        req = urllib.request.Request(f"{base}/hoas/summary?page=1&per_page=1")
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            summary_data = json.loads(resp.read())
+        hoas = summary_data.get("hoas", [])
+        if hoas:
+            hoa_name = hoas[0]["name"]
+            hoa_slug = hoa_name  # URL uses the name directly
+            page.goto(base + f"/hoa/{quote(hoa_slug)}", wait_until="domcontentloaded",
+                       timeout=PAGE_TIMEOUT)
+            page.wait_for_timeout(2000)  # let JS fetch data
+            title_text = page.text_content("#hoaTitle, h1") or ""
+            if title_text and title_text != "Loading...":
+                results.passed(f"HOA profile: page loads ({hoa_name[:30]})")
+            else:
+                results.warn("HOA profile: page loads", f"Title still loading: '{title_text}'")
+
+            real_errors = _clear_errors(js_errors)
+            if real_errors:
+                results.failed("HOA profile: no JS errors", f"{real_errors[:3]}")
+            else:
+                results.passed("HOA profile: no JS errors")
+        else:
+            results.skipped("HOA profile page", "No HOAs in summary")
+    except Exception as exc:
+        results.failed("HOA profile page", str(exc)[:120])
+
+    # ---- Participation page ----
+    js_errors.clear()
+    try:
+        if hoas:
+            hoa_name = hoas[0]["name"]
+            page.goto(base + f"/participation/{quote(hoa_name)}",
+                       wait_until="domcontentloaded", timeout=PAGE_TIMEOUT)
+            page.wait_for_timeout(2000)
+            title_text = page.text_content("#hoaTitle, h1") or ""
+            if title_text and title_text != "Loading...":
+                results.passed(f"Participation: page loads ({hoa_name[:30]})")
+            else:
+                results.warn("Participation: page loads", f"Title: '{title_text}'")
+            real_errors = _clear_errors(js_errors)
+            if real_errors:
+                results.failed("Participation: no JS errors", f"{real_errors[:3]}")
+        else:
+            results.skipped("Participation page", "No HOAs")
+    except Exception as exc:
+        results.failed("Participation page", str(exc)[:120])
+
+    # ---- My Proxies content check ----
+    js_errors.clear()
+    try:
+        page.goto(base + "/my-proxies", wait_until="domcontentloaded", timeout=PAGE_TIMEOUT)
+        page.wait_for_timeout(2000)
+        # Should have either proxy cards or empty state
+        has_cards = page.locator(".card, .proxy-card").count() > 0
+        has_empty = page.locator(".empty").count() > 0
+        if has_cards or has_empty:
+            results.passed("My Proxies: content renders")
+        else:
+            results.warn("My Proxies: content renders", "Neither cards nor empty state found")
+    except Exception as exc:
+        results.failed("My Proxies: content renders", str(exc)[:120])
+
+    # ---- Delegate Dashboard content check ----
+    js_errors.clear()
+    try:
+        page.goto(base + "/delegate-dashboard", wait_until="domcontentloaded", timeout=PAGE_TIMEOUT)
+        page.wait_for_timeout(2000)
+        has_stats = page.locator(".stat, .stat-row").count() > 0
+        has_empty = page.locator(".empty").count() > 0
+        has_cards = page.locator(".card").count() > 0
+        if has_stats or has_empty or has_cards:
+            results.passed("Delegate Dashboard: content renders")
+        else:
+            results.warn("Delegate Dashboard: content renders", "No stats/cards/empty found")
+    except Exception as exc:
+        results.failed("Delegate Dashboard: content renders", str(exc)[:120])
+
+    # ---- Logout flow ----
+    js_errors.clear()
+    try:
+        page.goto(base + "/dashboard", wait_until="domcontentloaded", timeout=PAGE_TIMEOUT)
+        page.wait_for_selector("#greeting", timeout=PAGE_TIMEOUT)
+        # Find and click logout
+        logout_link = page.locator("a:has-text('Logout'), a:has-text('Log out'), button:has-text('Logout')")
+        if logout_link.count() > 0:
+            logout_link.first.click()
+            page.wait_for_timeout(2000)
+            # Should be redirected away from dashboard
+            if "/dashboard" not in page.url:
+                results.passed("Logout: redirected away from dashboard")
+            else:
+                results.warn("Logout: redirected away from dashboard",
+                             f"Still on {page.url}")
+
+            # Verify can't access dashboard anymore
+            page.goto(base + "/dashboard", wait_until="domcontentloaded", timeout=PAGE_TIMEOUT)
+            page.wait_for_timeout(2000)
+            if "/login" in page.url:
+                results.passed("Logout: dashboard redirects to login after logout")
+            else:
+                results.warn("Logout: dashboard redirects to login",
+                             f"Ended up on {page.url}")
+
+            # Re-login for any subsequent tests
+            page.goto(base + "/login", wait_until="domcontentloaded", timeout=PAGE_TIMEOUT)
+            page.fill("#email", email)
+            page.fill("#password", password)
+            page.click("#loginBtn")
+            page.wait_for_url("**/dashboard**", timeout=INTERACTION_TIMEOUT)
+        else:
+            results.warn("Logout flow", "No logout link found")
+    except Exception as exc:
+        results.failed("Logout flow", str(exc)[:120])
 
 
 def group5_interactive(page, base: str, results: SmokeResults, js_errors: list[str]):
@@ -572,6 +794,226 @@ def group5_interactive(page, base: str, results: SmokeResults, js_errors: list[s
     except Exception as exc:
         results.failed("Password show/hide toggle", str(exc)[:120])
 
+    # ---- Login with wrong password ----
+    js_errors.clear()
+    try:
+        page.goto(base + "/login", wait_until="domcontentloaded", timeout=PAGE_TIMEOUT)
+        page.fill("#email", "smoketest@example.com")
+        page.fill("#password", "totallyWrongPassword1!")
+        page.click("#loginBtn")
+        page.wait_for_function(
+            "document.getElementById('status')?.classList.contains('error')",
+            timeout=INTERACTION_TIMEOUT,
+        )
+        results.passed("Login: wrong password shows error")
+    except PwTimeout:
+        # Check if we ended up on dashboard (meaning login unexpectedly succeeded)
+        if "/dashboard" in page.url:
+            results.failed("Login: wrong password shows error", "Login succeeded with wrong password!")
+        else:
+            status_text = page.text_content("#status") or ""
+            if status_text:
+                results.passed("Login: wrong password shows error")
+            else:
+                results.failed("Login: wrong password shows error", "No error message shown")
+    except Exception as exc:
+        results.failed("Login: wrong password shows error", str(exc)[:120])
+
+    # ---- Register validation (client-side) ----
+    js_errors.clear()
+    try:
+        page.goto(base + "/register", wait_until="domcontentloaded", timeout=PAGE_TIMEOUT)
+        page.wait_for_selector("#registerBtn", timeout=PAGE_TIMEOUT)
+
+        # Try with short password
+        page.fill("#email", "test@example.com")
+        page.fill("#password", "short")
+        # Check TOS if present
+        tos = page.locator("#tos, #tosCheckbox, input[type='checkbox']")
+        if tos.count() > 0:
+            tos.first.check()
+        page.click("#registerBtn")
+        page.wait_for_timeout(1500)
+        status_text = page.text_content("#status") or ""
+        if "8" in status_text or "short" in status_text.lower() or "password" in status_text.lower():
+            results.passed("Register: weak password validation")
+        else:
+            # May have hit server-side validation instead
+            results.warn("Register: weak password validation",
+                         f"Status: '{status_text[:80]}'")
+    except Exception as exc:
+        results.failed("Register: weak password validation", str(exc)[:120])
+
+    # ---- Register password toggle ----
+    js_errors.clear()
+    try:
+        page.goto(base + "/register", wait_until="domcontentloaded", timeout=PAGE_TIMEOUT)
+        pw_input = page.locator("#password")
+        toggle_btn = page.locator("#togglePassword")
+        if toggle_btn.count() > 0:
+            initial_type = pw_input.get_attribute("type")
+            toggle_btn.click()
+            new_type = pw_input.get_attribute("type")
+            if initial_type == "password" and new_type == "text":
+                results.passed("Register: password show/hide toggle")
+            else:
+                results.failed("Register: password show/hide toggle",
+                               f"Type went from '{initial_type}' to '{new_type}'")
+        else:
+            results.warn("Register: password show/hide toggle", "Toggle button not found")
+    except Exception as exc:
+        results.failed("Register: password show/hide toggle", str(exc)[:120])
+
+    # ---- Full registration flow ----
+    js_errors.clear()
+    try:
+        page.goto(base + "/register", wait_until="domcontentloaded", timeout=PAGE_TIMEOUT)
+        page.wait_for_selector("#registerBtn", timeout=PAGE_TIMEOUT)
+        reg_email = f"smoke-reg-{int(time.time())}@test.hoatest.invalid"
+        reg_password = f"SmokeReg{int(time.time())}!"
+
+        name_field = page.locator("#name, #displayName, #fullName")
+        if name_field.count() > 0:
+            name_field.first.fill("Smoke Register Test")
+        page.fill("#email", reg_email)
+        page.fill("#password", reg_password)
+        tos = page.locator("#tos, #tosCheckbox, input[type='checkbox']")
+        if tos.count() > 0:
+            tos.first.check()
+        page.click("#registerBtn")
+        page.wait_for_url("**/dashboard**", timeout=INTERACTION_TIMEOUT)
+        results.passed("Registration: full flow to dashboard")
+
+        # Verify greeting is shown
+        try:
+            page.wait_for_selector("#greeting", timeout=PAGE_TIMEOUT)
+            results.passed("Registration: dashboard greeting after register")
+        except PwTimeout:
+            results.warn("Registration: dashboard greeting", "Greeting not found")
+
+        # Log out after registration test (clear localStorage)
+        page.evaluate("localStorage.clear()")
+        page.goto(base + "/login", wait_until="domcontentloaded", timeout=PAGE_TIMEOUT)
+    except PwTimeout:
+        results.failed("Registration: full flow",
+                       f"Timeout — ended on {page.url}")
+    except Exception as exc:
+        results.failed("Registration: full flow", str(exc)[:120])
+
+    # ---- HOA profile page (public) ----
+    hoas_list = []
+    js_errors.clear()
+    try:
+        req = urllib.request.Request(f"{base}/hoas/summary?page=1&per_page=1")
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            summary_data = json.loads(resp.read())
+        hoas_list = summary_data.get("hoas", [])
+        if hoas_list:
+            hoa_name = hoas_list[0]["name"]
+            page.goto(base + f"/hoa/{quote(hoa_name)}", wait_until="domcontentloaded",
+                       timeout=PAGE_TIMEOUT)
+            page.wait_for_timeout(2500)
+            title = page.text_content("#hoaTitle, h1") or ""
+            if title and title != "Loading...":
+                results.passed(f"HOA profile (public): loads ({hoa_name[:30]})")
+            else:
+                results.warn("HOA profile (public): loads", f"Title: '{title}'")
+            real_errors = _clear_errors(js_errors)
+            if real_errors:
+                results.failed("HOA profile (public): JS errors", f"{real_errors[:3]}")
+        else:
+            results.skipped("HOA profile (public)", "No HOAs in summary")
+    except Exception as exc:
+        results.failed("HOA profile (public)", str(exc)[:120])
+
+    # ---- Participation page (public) ----
+    js_errors.clear()
+    try:
+        if hoas_list:
+            hoa_name = hoas_list[0]["name"]
+            page.goto(base + f"/participation/{quote(hoa_name)}",
+                       wait_until="domcontentloaded", timeout=PAGE_TIMEOUT)
+            page.wait_for_timeout(2500)
+            title = page.text_content("#hoaTitle, h1") or ""
+            if title and title != "Loading...":
+                results.passed(f"Participation (public): loads ({hoa_name[:30]})")
+            else:
+                results.warn("Participation (public): loads", f"Title: '{title}'")
+            real_errors = _clear_errors(js_errors)
+            if real_errors:
+                results.failed("Participation (public): JS errors", f"{real_errors[:3]}")
+        else:
+            results.skipped("Participation (public)", "No HOAs")
+    except Exception as exc:
+        results.failed("Participation (public)", str(exc)[:120])
+
+    # ---- Verify proxy page — invalid code ----
+    js_errors.clear()
+    try:
+        page.goto(base + "/verify-proxy", wait_until="domcontentloaded", timeout=PAGE_TIMEOUT)
+        code_input = page.locator("#code, #verifyCode, input[type='text']")
+        if code_input.count() > 0:
+            code_input.first.fill("INVALIDCODE999")
+            verify_btn = page.locator("#verifyBtn, button:has-text('Verify'), button.primary")
+            if verify_btn.count() > 0:
+                verify_btn.first.click()
+                page.wait_for_timeout(3000)
+                body_text = page.text_content("body") or ""
+                if "not found" in body_text.lower() or "invalid" in body_text.lower() or "error" in body_text.lower():
+                    results.passed("Verify proxy: invalid code handled")
+                else:
+                    results.warn("Verify proxy: invalid code handled",
+                                 f"No error message visible")
+            else:
+                results.warn("Verify proxy: invalid code", "No verify button found")
+        else:
+            results.warn("Verify proxy: invalid code", "No code input found")
+    except Exception as exc:
+        results.failed("Verify proxy: invalid code", str(exc)[:120])
+
+    # ---- Reset password — no token ----
+    js_errors.clear()
+    try:
+        page.goto(base + "/reset-password", wait_until="domcontentloaded", timeout=PAGE_TIMEOUT)
+        page.wait_for_timeout(1500)
+        body_text = page.text_content("body") or ""
+        if "token" in body_text.lower() or "invalid" in body_text.lower() or "expired" in body_text.lower() or "error" in body_text.lower():
+            results.passed("Reset password: no token shows error")
+        else:
+            results.warn("Reset password: no token shows error",
+                         "No clear error message found")
+    except Exception as exc:
+        results.failed("Reset password: no token", str(exc)[:120])
+
+    # ---- Reset password — invalid token ----
+    js_errors.clear()
+    try:
+        page.goto(base + "/reset-password?token=invalidtoken123",
+                   wait_until="domcontentloaded", timeout=PAGE_TIMEOUT)
+        page.wait_for_timeout(1000)
+        pw_field = page.locator("#password, #newPassword")
+        confirm_field = page.locator("#confirmPassword, #confirm")
+        if pw_field.count() > 0 and confirm_field.count() > 0:
+            pw_field.first.fill("NewPassword123!")
+            confirm_field.first.fill("NewPassword123!")
+            submit_btn = page.locator("#submitBtn, button.primary, button:has-text('Reset')")
+            if submit_btn.count() > 0:
+                submit_btn.first.click()
+                page.wait_for_timeout(3000)
+                body_text = page.text_content("body") or ""
+                if "invalid" in body_text.lower() or "expired" in body_text.lower() or "error" in body_text.lower():
+                    results.passed("Reset password: invalid token rejected")
+                else:
+                    results.warn("Reset password: invalid token rejected",
+                                 "No clear error after submit")
+            else:
+                results.warn("Reset password: invalid token", "No submit button found")
+        else:
+            # Page may show error immediately for missing/invalid token
+            results.passed("Reset password: invalid token — form not shown")
+    except Exception as exc:
+        results.failed("Reset password: invalid token", str(exc)[:120])
+
 
 def group6_email(base: str, results: SmokeResults):
     """Email delivery tests via testmail.app."""
@@ -689,6 +1131,9 @@ def group7_api(base: str, results: SmokeResults):
         ("/hoas/map-points", "HOA map points"),
         ("/law/jurisdictions", "Law jurisdictions"),
         ("/hoas/states", "HOA states"),
+        ("/hoas/locations", "HOA locations"),
+        ("/law/NC/proxy-electronic", "Law NC proxy-electronic"),
+        ("/law/proxy-electronic/summary", "Law proxy-electronic summary"),
     ]
     for path, name in endpoints:
         try:
@@ -700,6 +1145,60 @@ def group7_api(base: str, results: SmokeResults):
                     results.failed(f"API: {name}", f"HTTP {resp.status}")
         except Exception as exc:
             results.failed(f"API: {name}", str(exc)[:120])
+
+    # Dynamic endpoints that require a known HOA name
+    try:
+        req = urllib.request.Request(f"{base}/hoas/summary?page=1&per_page=1")
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            summary_data = json.loads(resp.read())
+        hoas = summary_data.get("hoas", [])
+        if hoas:
+            hoa_name = hoas[0]["name"]
+            slug = hoa_name.lower().replace(" ", "-").replace("/", "-")
+
+            # HOA documents
+            try:
+                req = urllib.request.Request(f"{base}/hoas/{quote(hoa_name)}/documents")
+                with urllib.request.urlopen(req, timeout=15) as resp:
+                    if resp.status == 200:
+                        results.passed(f"API: HOA documents")
+                    else:
+                        results.failed("API: HOA documents", f"HTTP {resp.status}")
+            except Exception as exc:
+                results.failed("API: HOA documents", str(exc)[:120])
+
+            # HOA resolve
+            try:
+                req = urllib.request.Request(f"{base}/hoas/resolve/{quote(slug)}")
+                with urllib.request.urlopen(req, timeout=15) as resp:
+                    if resp.status == 200:
+                        results.passed("API: HOA resolve slug")
+                    else:
+                        results.warn("API: HOA resolve slug", f"HTTP {resp.status}")
+            except urllib.error.HTTPError as exc:
+                if exc.code == 404:
+                    results.warn("API: HOA resolve slug", "404 — slug format may differ")
+                else:
+                    results.failed("API: HOA resolve slug", f"HTTP {exc.code}")
+            except Exception as exc:
+                results.failed("API: HOA resolve slug", str(exc)[:120])
+
+            # HOA location
+            try:
+                req = urllib.request.Request(f"{base}/hoas/{quote(hoa_name)}/location")
+                with urllib.request.urlopen(req, timeout=15) as resp:
+                    results.passed("API: HOA location")
+            except urllib.error.HTTPError as exc:
+                if exc.code == 404:
+                    results.passed("API: HOA location (none set — 404 expected)")
+                else:
+                    results.failed("API: HOA location", f"HTTP {exc.code}")
+            except Exception as exc:
+                results.failed("API: HOA location", str(exc)[:120])
+        else:
+            results.skipped("API: HOA dynamic endpoints", "No HOAs in summary")
+    except Exception as exc:
+        results.failed("API: HOA dynamic endpoints", str(exc)[:120])
 
 
 # ---------------------------------------------------------------------------
@@ -991,6 +1490,193 @@ def group8_multi_user_api(base: str, results: SmokeResults):
     except Exception as exc:
         results.failed("Account: password change", str(exc)[:120])
 
+    # ---- Full proxy sign + deliver + verify lifecycle ----
+    try:
+        t_grantor, uid_grantor = _register_temp(base, "proxy-lifecycle", "Eve Smoketest")
+        t_delegate_user, uid_delegate = _register_temp(base, "proxy-delegate", "Frank Smoketest")
+
+        # Both claim membership
+        s, summary = _api_call(base, "GET", "/hoas/summary?page=1&per_page=1")
+        if s == 200 and summary.get("hoas"):
+            lifecycle_hoa_id = summary["hoas"][0]["id"]
+            lifecycle_hoa_name = summary["hoas"][0]["name"]
+            for tok in (t_grantor, t_delegate_user):
+                _api_call(base, "POST", f"/user/hoas/{lifecycle_hoa_id}/claim",
+                          {"unit_number": "SMOKE"}, tok)
+
+            # Register delegate
+            s, delegate_resp = _api_call(base, "POST", "/delegates/register", {
+                "hoa_id": lifecycle_hoa_id,
+                "bio": "Lifecycle test delegate",
+                "contact_email": "lifecycle-delegate@test.hoatest.invalid",
+            }, t_delegate_user)
+            delegate_id = delegate_resp.get("id") if s == 200 else None
+            if s == 409:
+                # Already registered, find delegate
+                s2, delegates = _api_call(base, "GET",
+                                          f"/hoas/{lifecycle_hoa_id}/delegates", None, t_grantor)
+                delegate_id = next((d["id"] for d in delegates
+                                    if d.get("user_id") == uid_delegate), None)
+
+            if delegate_id:
+                # Fetch delegate profile
+                s, d_profile = _api_call(base, "GET", f"/delegates/{delegate_id}")
+                if s == 200 and d_profile.get("id"):
+                    results.passed("Proxy lifecycle: delegate profile fetch")
+                else:
+                    results.failed("Proxy lifecycle: delegate profile fetch", f"HTTP {s}")
+
+            # Create proxy
+            s, proxy = _api_call(base, "POST", "/proxies", {
+                "hoa_id": lifecycle_hoa_id,
+                "delegate_user_id": uid_delegate,
+            }, t_grantor)
+            if s == 200 and proxy.get("status") == "draft":
+                proxy_id = proxy["id"]
+                results.passed("Proxy lifecycle: create (draft)")
+
+                # Sign proxy
+                s, signed = _api_call(base, "POST", f"/proxies/{proxy_id}/sign",
+                                      None, t_grantor)
+                if s == 200 and signed.get("status") == "signed":
+                    results.passed("Proxy lifecycle: sign")
+
+                    # Verify via /proxies/mine
+                    s, my_proxies = _api_call(base, "GET", "/proxies/mine", None, t_grantor)
+                    if s == 200:
+                        found = [p for p in my_proxies if p["id"] == proxy_id]
+                        if found and found[0]["status"] == "signed":
+                            results.passed("Proxy lifecycle: appears in /proxies/mine")
+                        else:
+                            results.warn("Proxy lifecycle: /proxies/mine",
+                                         "Proxy not found or wrong status")
+
+                    # Verify via /proxies/delegated
+                    s, delegated = _api_call(base, "GET", "/proxies/delegated",
+                                             None, t_delegate_user)
+                    if s == 200:
+                        found = [p for p in delegated if p["id"] == proxy_id]
+                        if found:
+                            results.passed("Proxy lifecycle: appears in /proxies/delegated")
+                        else:
+                            results.warn("Proxy lifecycle: /proxies/delegated",
+                                         "Proxy not found in delegated list")
+
+                    # Deliver proxy
+                    s, delivered = _api_call(base, "POST",
+                                             f"/proxies/{proxy_id}/deliver", None, t_grantor)
+                    if s == 200 and delivered.get("status") == "delivered":
+                        results.passed("Proxy lifecycle: deliver")
+
+                        # Verify via verification code
+                        vcode = delivered.get("verification_code")
+                        if vcode:
+                            s, verified = _api_call(base, "GET",
+                                                     f"/proxies/verify/{vcode}")
+                            if s == 200 and verified.get("valid"):
+                                results.passed("Proxy lifecycle: verification code valid")
+                            else:
+                                results.warn("Proxy lifecycle: verification code",
+                                             f"HTTP {s}, valid={verified.get('valid')}")
+                        else:
+                            results.warn("Proxy lifecycle: verification code",
+                                         "No code in deliver response")
+                    else:
+                        results.failed("Proxy lifecycle: deliver",
+                                       f"HTTP {s}, status={delivered.get('status')}")
+                else:
+                    results.failed("Proxy lifecycle: sign",
+                                   f"HTTP {s}, status={signed.get('status')}")
+            elif s == 409:
+                results.warn("Proxy lifecycle", "User already has active proxy — skipping")
+            else:
+                results.failed("Proxy lifecycle: create",
+                               f"HTTP {s}: {proxy.get('detail')}")
+
+            # Check proxy status endpoint
+            s, pstatus = _api_call(base, "GET",
+                                    f"/hoas/{lifecycle_hoa_id}/proxy-status", None, t_grantor)
+            if s == 200:
+                results.passed("API: proxy status endpoint")
+            else:
+                results.warn("API: proxy status endpoint", f"HTTP {s}")
+
+        else:
+            results.skipped("Proxy lifecycle", "No HOAs available")
+    except Exception as exc:
+        results.failed("Proxy lifecycle", str(exc)[:120])
+
+    # ---- Profile update via API ----
+    try:
+        s, me = _api_call(base, "GET", "/auth/me", None, t1)
+        if s == 200:
+            old_name = me.get("display_name", "")
+            new_name = f"Updated{int(time.time())}"
+            s, updated = _api_call(base, "PUT", "/auth/me",
+                                    {"display_name": new_name}, t1)
+            if s == 200:
+                s, me2 = _api_call(base, "GET", "/auth/me", None, t1)
+                if s == 200 and me2.get("display_name") == new_name:
+                    results.passed("Profile update: display_name round-trip")
+                else:
+                    results.failed("Profile update: display_name",
+                                   f"Expected '{new_name}', got '{me2.get('display_name')}'")
+                # Restore
+                _api_call(base, "PUT", "/auth/me", {"display_name": old_name}, t1)
+            else:
+                results.failed("Profile update: PUT /auth/me", f"HTTP {s}")
+    except Exception as exc:
+        results.failed("Profile update", str(exc)[:120])
+
+    # ---- HOA documents endpoint ----
+    try:
+        s, docs = _api_call(base, "GET",
+                             f"/hoas/{quote(hoa_name)}/documents")
+        if s == 200:
+            results.passed("API: HOA documents (authed)")
+        else:
+            results.warn("API: HOA documents (authed)", f"HTTP {s}")
+    except Exception as exc:
+        results.failed("API: HOA documents (authed)", str(exc)[:120])
+
+    # ---- Participation submit + read ----
+    try:
+        part_data = {
+            "meeting_date": "2024-01-15",
+            "meeting_type": "annual",
+            "total_units": 100,
+            "votes_cast": 45,
+            "quorum_required": True,
+            "quorum_met": True,
+            "notes": "Automated smoke test entry",
+        }
+        s, part = _api_call(base, "POST",
+                             f"/hoas/{hoa_id}/participation", part_data, t1)
+        if s == 200:
+            results.passed("Participation: submit meeting data")
+
+            # Read back
+            s, history = _api_call(base, "GET",
+                                    f"/hoas/{hoa_id}/participation", None, t1)
+            if s == 200 and isinstance(history, list):
+                results.passed("Participation: read history")
+            else:
+                results.warn("Participation: read history", f"HTTP {s}")
+
+            # Magic number
+            s, magic = _api_call(base, "GET",
+                                  f"/hoas/{hoa_id}/magic-number", None, t1)
+            if s == 200:
+                results.passed("Participation: magic number endpoint")
+            else:
+                results.warn("Participation: magic number", f"HTTP {s}")
+        elif s == 409:
+            results.warn("Participation: submit", "Duplicate entry — skipping read tests")
+        else:
+            results.warn("Participation: submit", f"HTTP {s}: {part.get('detail', '')[:80]}")
+    except Exception as exc:
+        results.failed("Participation", str(exc)[:120])
+
 
 def group9_multi_user_browser(page1, page2, page3, base: str,
                                results: SmokeResults, js_errors: list[list[str]],
@@ -1220,6 +1906,286 @@ def group9_multi_user_browser(page1, page2, page3, base: str,
     except Exception as exc:
         results.warn("Multi-user browser: assign proxy", str(exc)[:120])
 
+    # ---- Proxy sign flow in browser ----
+    # User 1 may now have a draft proxy from assigning above; try to sign it
+    try:
+        page1.goto(f"{base}/my-proxies", wait_until="domcontentloaded", timeout=PAGE_TIMEOUT)
+        page1.wait_for_timeout(2000)
+        sign_link = page1.locator("a:has-text('Sign'), a[href*='proxy-sign']")
+        if sign_link.count() > 0:
+            sign_link.first.click()
+            page1.wait_for_url("**/proxy-sign/**", timeout=INTERACTION_TIMEOUT)
+            page1.wait_for_timeout(2000)
+
+            # Verify form renders
+            doc_mount = page1.locator(".doc-mount, .doc-shell")
+            if doc_mount.count() > 0:
+                results.passed("Multi-user browser: proxy sign page loads with form")
+            else:
+                results.warn("Multi-user browser: proxy sign page", "No doc-mount found")
+
+            # Check consent and sign
+            consent = page1.locator("#consent, input[type='checkbox']")
+            sign_btn = page1.locator("#signBtn, button:has-text('Sign')")
+            if consent.count() > 0 and sign_btn.count() > 0:
+                consent.first.check()
+                page1.wait_for_timeout(300)
+                sign_btn.first.click()
+                page1.wait_for_timeout(3000)
+                body_text = page1.text_content("body") or ""
+                if "signed" in body_text.lower():
+                    results.passed("Multi-user browser: proxy signed via UI")
+                else:
+                    results.warn("Multi-user browser: proxy sign",
+                                 "Could not confirm signed status")
+            else:
+                results.warn("Multi-user browser: proxy sign",
+                             "Consent checkbox or sign button not found")
+        else:
+            results.warn("Multi-user browser: proxy sign flow",
+                         "No sign link found in my-proxies")
+    except Exception as exc:
+        results.warn("Multi-user browser: proxy sign flow", str(exc)[:120])
+
+    # ---- Delegate dashboard verification (user 2) ----
+    try:
+        page2.goto(f"{base}/delegate-dashboard", wait_until="domcontentloaded",
+                    timeout=PAGE_TIMEOUT)
+        page2.wait_for_timeout(2000)
+        stats = page2.locator(".stat, .stat-row")
+        cards = page2.locator(".card")
+        if stats.count() > 0 or cards.count() > 0:
+            results.passed("Multi-user browser: delegate dashboard has content")
+        else:
+            empty = page2.locator(".empty")
+            if empty.count() > 0:
+                results.passed("Multi-user browser: delegate dashboard shows empty state")
+            else:
+                results.warn("Multi-user browser: delegate dashboard", "No content found")
+    except Exception as exc:
+        results.warn("Multi-user browser: delegate dashboard", str(exc)[:120])
+
+    # ---- My Proxies content verification (user 1) ----
+    try:
+        page1.goto(f"{base}/my-proxies", wait_until="domcontentloaded", timeout=PAGE_TIMEOUT)
+        page1.wait_for_timeout(2000)
+        badges = page1.locator(".badge")
+        if badges.count() > 0:
+            badge_text = badges.first.text_content() or ""
+            results.passed(f"Multi-user browser: my-proxies shows badge ({badge_text.strip()})")
+        else:
+            empty = page1.locator(".empty")
+            if empty.count() > 0:
+                results.passed("Multi-user browser: my-proxies shows empty state")
+            else:
+                results.warn("Multi-user browser: my-proxies", "No badges or empty state")
+    except Exception as exc:
+        results.warn("Multi-user browser: my-proxies content", str(exc)[:120])
+
+    # ---- Account page round-trip (user 1) ----
+    try:
+        page1.goto(f"{base}/account", wait_until="domcontentloaded", timeout=PAGE_TIMEOUT)
+        page1.wait_for_selector("#firstName", timeout=PAGE_TIMEOUT)
+        page1.wait_for_function(
+            "document.getElementById('email').value.length > 0",
+            timeout=INTERACTION_TIMEOUT,
+        )
+        original_last = page1.input_value("#lastName")
+        test_last = f"SmokeTest{int(time.time())}"
+        page1.fill("#lastName", test_last)
+        page1.click("#saveProfileBtn")
+        page1.wait_for_function(
+            "document.querySelector('#profileStatus')?.classList.contains('ok')",
+            timeout=INTERACTION_TIMEOUT,
+        )
+        # Reload and verify
+        page1.goto(f"{base}/account", wait_until="domcontentloaded", timeout=PAGE_TIMEOUT)
+        page1.wait_for_selector("#lastName", timeout=PAGE_TIMEOUT)
+        page1.wait_for_function(
+            "document.getElementById('lastName').value.length > 0",
+            timeout=INTERACTION_TIMEOUT,
+        )
+        saved = page1.input_value("#lastName")
+        if saved == test_last:
+            results.passed("Multi-user browser: account edit round-trip")
+        else:
+            results.failed("Multi-user browser: account edit round-trip",
+                           f"Expected '{test_last}', got '{saved}'")
+        # Restore
+        page1.fill("#lastName", original_last or "")
+        page1.click("#saveProfileBtn")
+        page1.wait_for_timeout(1000)
+    except Exception as exc:
+        results.warn("Multi-user browser: account edit round-trip", str(exc)[:120])
+
+
+def group10_edge_cases(base: str, results: SmokeResults):
+    """Edge cases and error handling — API-only, no browser needed."""
+    print("\n--- Group 10: Edge Cases & Error Handling ---")
+
+    # ---- Auth errors ----
+    # Login wrong password
+    s, _ = _api_call(base, "POST", "/auth/login",
+                      {"email": "smoketest@example.com", "password": "totallyWrong1!"})
+    if s == 401:
+        results.passed("Edge: login wrong password → 401")
+    else:
+        results.failed("Edge: login wrong password", f"HTTP {s} (want 401)")
+
+    # Login nonexistent email
+    s, _ = _api_call(base, "POST", "/auth/login",
+                      {"email": "nonexistent-smoke@test.hoatest.invalid",
+                       "password": "Whatever123!"})
+    if s == 401:
+        results.passed("Edge: login nonexistent email → 401")
+    else:
+        results.failed("Edge: login nonexistent email", f"HTTP {s} (want 401)")
+
+    # Register duplicate email
+    reg_email = f"smoke-edge-{int(time.time())}@test.hoatest.invalid"
+    reg_pw = f"EdgeTest{int(time.time())}!"
+    s, _ = _api_call(base, "POST", "/auth/register",
+                      {"email": reg_email, "password": reg_pw,
+                       "display_name": "Edge Test"})
+    if s == 200:
+        s2, _ = _api_call(base, "POST", "/auth/register",
+                           {"email": reg_email, "password": reg_pw,
+                            "display_name": "Edge Test Dup"})
+        if s2 == 409:
+            results.passed("Edge: duplicate registration → 409")
+        else:
+            results.failed("Edge: duplicate registration", f"HTTP {s2} (want 409)")
+    else:
+        results.failed("Edge: first registration for dup test", f"HTTP {s}")
+
+    # Register weak password
+    s, resp = _api_call(base, "POST", "/auth/register",
+                         {"email": f"smoke-weak-{int(time.time())}@test.hoatest.invalid",
+                          "password": "short",
+                          "display_name": "Weak Test"})
+    if s in (400, 422):
+        results.passed(f"Edge: weak password → {s}")
+    else:
+        results.failed("Edge: weak password", f"HTTP {s} (want 400/422)")
+
+    # Register missing email
+    s, _ = _api_call(base, "POST", "/auth/register",
+                      {"password": "ValidPass123!",
+                       "display_name": "No Email Test"})
+    if s in (400, 422):
+        results.passed(f"Edge: missing email → {s}")
+    else:
+        results.failed("Edge: missing email", f"HTTP {s} (want 400/422)")
+
+    # ---- Auth token errors ----
+    # No token
+    s, _ = _api_call(base, "GET", "/auth/me")
+    if s == 401:
+        results.passed("Edge: /auth/me without token → 401")
+    else:
+        results.failed("Edge: /auth/me without token", f"HTTP {s} (want 401)")
+
+    # Garbage token
+    s, _ = _api_call(base, "GET", "/auth/me", None, "garbage.token.here")
+    if s == 401:
+        results.passed("Edge: /auth/me garbage token → 401")
+    else:
+        results.failed("Edge: /auth/me garbage token", f"HTTP {s} (want 401)")
+
+    # ---- Resource not found ----
+    # Invalid proxy
+    try:
+        t_edge, _ = _register_temp(base, "edge", "Edge Tester")
+    except Exception as exc:
+        results.failed("Edge: setup", str(exc)[:80])
+        return
+
+    s, _ = _api_call(base, "GET", "/proxies/99999", None, t_edge)
+    if s == 404:
+        results.passed("Edge: invalid proxy → 404")
+    else:
+        results.failed("Edge: invalid proxy", f"HTTP {s} (want 404)")
+
+    # Invalid delegate
+    s, _ = _api_call(base, "GET", "/delegates/99999")
+    if s == 404:
+        results.passed("Edge: invalid delegate → 404")
+    else:
+        results.failed("Edge: invalid delegate", f"HTTP {s} (want 404)")
+
+    # Invalid verification code
+    s, _ = _api_call(base, "GET", "/proxies/verify/INVALIDCODE999")
+    if s == 404:
+        results.passed("Edge: invalid verification code → 404")
+    else:
+        results.failed("Edge: invalid verification code", f"HTTP {s} (want 404)")
+
+    # Invalid reset token
+    s, resp = _api_call(base, "POST", "/auth/reset-password",
+                         {"token": "invalidtoken123", "password": "NewPass123!"})
+    if s in (400, 404):
+        results.passed(f"Edge: invalid reset token → {s}")
+    else:
+        results.failed("Edge: invalid reset token", f"HTTP {s} (want 400/404)")
+
+    # ---- Permission errors ----
+    # Claim membership in nonexistent HOA
+    s, _ = _api_call(base, "POST", "/user/hoas/99999/claim",
+                      {"unit_number": "SMOKE"}, t_edge)
+    if s in (400, 404):
+        results.passed(f"Edge: claim nonexistent HOA → {s}")
+    else:
+        results.failed("Edge: claim nonexistent HOA", f"HTTP {s} (want 400/404)")
+
+    # Create proposal without membership
+    s, _ = _api_call(base, "POST", "/proposals", {
+        "hoa_id": 99999,
+        "title": "Edge test proposal",
+        "description": "Should fail",
+        "category": "Other",
+    }, t_edge)
+    if s in (400, 403, 404):
+        results.passed(f"Edge: proposal without membership → {s}")
+    else:
+        results.failed("Edge: proposal without membership", f"HTTP {s} (want 400/403/404)")
+
+    # Sign someone else's proxy
+    # Create a proxy between two new users, then try to sign it as a third
+    try:
+        t_a, uid_a = _register_temp(base, "sign-owner", "SignOwner Test")
+        t_b, uid_b = _register_temp(base, "sign-delegate", "SignDelegate Test")
+        t_c, _ = _register_temp(base, "sign-intruder", "SignIntruder Test")
+
+        s, summary = _api_call(base, "GET", "/hoas/summary?page=1&per_page=1")
+        if s == 200 and summary.get("hoas"):
+            edge_hoa_id = summary["hoas"][0]["id"]
+            for tok in (t_a, t_b, t_c):
+                _api_call(base, "POST", f"/user/hoas/{edge_hoa_id}/claim",
+                          {"unit_number": "SMOKE"}, tok)
+            _api_call(base, "POST", "/delegates/register", {
+                "hoa_id": edge_hoa_id, "bio": "Edge delegate",
+                "contact_email": "edge-del@test.hoatest.invalid",
+            }, t_b)
+            s, proxy = _api_call(base, "POST", "/proxies", {
+                "hoa_id": edge_hoa_id, "delegate_user_id": uid_b,
+            }, t_a)
+            if s == 200:
+                proxy_id = proxy["id"]
+                # Third user tries to sign
+                s_intruder, _ = _api_call(base, "POST",
+                                           f"/proxies/{proxy_id}/sign", None, t_c)
+                if s_intruder in (403, 404):
+                    results.passed(f"Edge: sign others proxy → {s_intruder}")
+                else:
+                    results.failed("Edge: sign others proxy",
+                                   f"HTTP {s_intruder} (want 403/404)")
+                # Clean up
+                _api_call(base, "POST", f"/proxies/{proxy_id}/revoke", None, t_a)
+            else:
+                results.warn("Edge: sign others proxy", f"Could not create proxy ({s})")
+    except Exception as exc:
+        results.failed("Edge: sign others proxy", str(exc)[:120])
+
 
 # ---------------------------------------------------------------------------
 # Main
@@ -1238,7 +2204,7 @@ def parse_args():
     parser.add_argument("--slow-mo", type=int, default=0,
                         help="Slow down actions by N ms")
     parser.add_argument("--group", type=int, default=0,
-                        help="Run only a specific group (1-9), 0 = all")
+                        help="Run only a specific group (1-10), 0 = all")
     return parser.parse_args()
 
 
@@ -1383,8 +2349,16 @@ def main():
                     "Multi-user browser: withdraw proposal",
                     "Multi-user browser: register as delegate",
                     "Multi-user browser: assign proxy",
+                    "Multi-user browser: proxy sign flow",
+                    "Multi-user browser: delegate dashboard",
+                    "Multi-user browser: my-proxies content",
+                    "Multi-user browser: account edit round-trip",
                 ]:
                     results.skipped(name, reason)
+
+        # Group 10: edge cases & error handling (no browser needed)
+        if run_group in (0, 10):
+            group10_edge_cases(base, results)
 
         browser.close()
 
