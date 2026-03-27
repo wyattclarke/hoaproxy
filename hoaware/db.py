@@ -617,7 +617,8 @@ def list_hoa_map_points(
             COALESCE(ds.doc_count, 0) AS doc_count,
             l.state,
             l.latitude,
-            l.longitude
+            l.longitude,
+            l.boundary_geojson
         FROM hoas h
         LEFT JOIN (
             SELECT hoa_id, COUNT(*) AS doc_count FROM documents GROUP BY hoa_id
@@ -634,6 +635,7 @@ def list_hoa_map_points(
             "state": str(row["state"]) if row["state"] is not None else None,
             "latitude": float(row["latitude"]) if row["latitude"] is not None else None,
             "longitude": float(row["longitude"]) if row["longitude"] is not None else None,
+            "boundary_geojson": _load_geojson(row["boundary_geojson"]),
         }
         for row in cur.fetchall()
     ]

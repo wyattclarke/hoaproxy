@@ -524,6 +524,7 @@ class HoaMapPoint(BaseModel):
     longitude: float | None = None
     state: str | None = None
     doc_count: int
+    boundary_geojson: dict | None = None
 
 
 # ---------------------------------------------------------------------------
