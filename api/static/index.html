@@ -982,6 +982,9 @@
           : L.layerGroup()
         ).addTo(state.map);
         state.polygonLayer = L.layerGroup().addTo(state.map);
+
+        state.map.on("zoomend", renderPolygons);
+        state.map.on("moveend", renderPolygons);
       }
 
       function renderMapVisibility() {
@@ -1117,6 +1120,30 @@
         }
       }
 
+      const POLYGON_ZOOM_THRESHOLD = 14;
+
+      function renderPolygons() {
+        if (!state.map || !state.polygonLayer) return;
+        state.polygonLayer.clearLayers();
+        if (state.map.getZoom() < POLYGON_ZOOM_THRESHOLD) return;
+        const bounds = state.map.getBounds();
+        for (const item of state.mapData) {
+          if (!item.boundary_geojson) continue;
+          if (item.latitude != null && item.longitude != null) {
+            if (!bounds.contains([item.latitude, item.longitude])) continue;
+          }
+          const popupHtml =
+            `<a class="hoa-name-link" href="${profileHref(item.hoa)}"><strong>${escapeHtml(item.hoa)}</strong></a><br>` +
+            `<span class="meta">${escapeHtml(locationText(item))}</span><br>` +
+            `${item.doc_count} docs`;
+          const layer = buildBoundaryLayer(item);
+          if (layer) {
+            layer.bindPopup(popupHtml);
+            layer.addTo(state.polygonLayer);
+          }
+        }
+      }
+
       function renderMarkers() {
         if (!state.map || !state.markerLayer) return;
         state.markerLayer.clearLayers();
@@ -1144,6 +1171,7 @@
         } else {
           state.map.setView([35.78, -78.64], 7);
         }
+        renderPolygons();
       }
 
       let _searchDebounceTimer = null;
