@@ -85,6 +85,15 @@ ETL pipeline in `scripts/legal/`:
 - Source registry: `data/legal/state_source_registry.json`
 - All 51 jurisdictions now have official source URLs in the registry (OK, PA, SD, WY were migrated from dead aggregator URLs to oscn.net, palegis.us, sdlegislature.gov/api, wyoleg.gov, oklegislature.gov)
 
+## Database Backup
+- `POST /admin/backup` — snapshots SQLite DB via `VACUUM INTO`, uploads to GCS bucket `hoaproxy-backups`
+- Protected by admin auth (`Bearer {JWT_SECRET}`)
+- Triggered twice daily (6am/6pm ET) by cron-job.org
+- Blobs stored as `gs://hoaproxy-backups/db/hoa_index-{timestamp}.db`
+- GCS uses the `hoaware-ocr` service account (same as Document AI)
+- **Recovery:** download latest blob from bucket, upload to Render persistent disk at `/var/data/hoa_index.db`
+- Qdrant does NOT need backup — it's rebuildable by re-running the ingestion pipeline
+
 ## Data Directories (not in git)
 - `data/` — SQLite DBs, Qdrant local store
 - `casnc_hoa_docs/` — Main HOA document library

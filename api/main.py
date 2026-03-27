@@ -1899,6 +1899,39 @@ def admin_send_cost_report(request: Request, email: Optional[str] = None):
     return {"status": "sent", "to": to_email}
 
 
+@app.post("/admin/backup")
+def admin_backup(request: Request):
+    """Snapshot the SQLite DB and upload to GCS."""
+    _require_admin(request)
+    import tempfile
+    from datetime import datetime, timezone
+    from google.cloud import storage as gcs
+
+    settings = load_settings()
+    bucket_name = os.environ.get("BACKUP_GCS_BUCKET", "hoaproxy-backups")
+
+    # Safe, consistent copy of the DB (no reader locking)
+    tmp_dir = tempfile.mkdtemp()
+    tmp_path = os.path.join(tmp_dir, "backup.db")
+    try:
+        with db.get_connection(settings.db_path) as conn:
+            conn.execute(f"VACUUM INTO '{tmp_path}'")
+
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+        blob_name = f"db/hoa_index-{stamp}.db"
+
+        client = gcs.Client()
+        bucket = client.bucket(bucket_name)
+        blob = bucket.blob(blob_name)
+        blob.upload_from_filename(tmp_path)
+
+        return {"status": "ok", "bucket": bucket_name, "blob": blob_name}
+    finally:
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+        os.rmdir(tmp_dir)
+
+
 # ---------------------------------------------------------------------------
 # Auth endpoints
 # ---------------------------------------------------------------------------
