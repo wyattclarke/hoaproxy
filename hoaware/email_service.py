@@ -328,3 +328,194 @@ def notify_delegate(proxy_id: int, event: str) -> bool:
         subject=subject,
         html=_delegate_notification_html(proxy, event),
     )
+
+
+# ---------------------------------------------------------------------------
+# Weekly cost report
+# ---------------------------------------------------------------------------
+
+def _fetch_ga4_traffic(property_id: str) -> dict | None:
+    """Pull 7-day traffic summary from GA4 Data API. Returns None on failure."""
+    try:
+        from google.analytics.data_v1beta import BetaAnalyticsDataClient
+        from google.analytics.data_v1beta.types import (
+            RunReportRequest, DateRange, Metric, Dimension,
+        )
+    except ImportError:
+        logger.debug("google-analytics-data not installed, skipping GA4")
+        return None
+
+    try:
+        client = BetaAnalyticsDataClient()
+        request = RunReportRequest(
+            property=f"properties/{property_id}",
+            date_ranges=[DateRange(start_date="7daysAgo", end_date="today")],
+            metrics=[
+                Metric(name="activeUsers"),
+                Metric(name="sessions"),
+                Metric(name="screenPageViews"),
+                Metric(name="averageSessionDuration"),
+            ],
+        )
+        response = client.run_report(request)
+        if not response.rows:
+            return None
+        row = response.rows[0]
+        return {
+            "active_users": int(row.metric_values[0].value),
+            "sessions": int(row.metric_values[1].value),
+            "pageviews": int(row.metric_values[2].value),
+            "avg_session_sec": float(row.metric_values[3].value),
+        }
+    except Exception:
+        logger.debug("GA4 report fetch failed", exc_info=True)
+        return None
+
+
+def _fetch_site_stats(conn) -> dict:
+    """Pull key site metrics from the DB."""
+    def _count(sql):
+        return conn.execute(sql).fetchone()[0]
+
+    return {
+        "hoas": _count("SELECT COUNT(*) FROM hoas"),
+        "documents": _count("SELECT COUNT(*) FROM documents"),
+        "chunks": _count("SELECT COUNT(*) FROM chunks"),
+        "users": _count("SELECT COUNT(*) FROM users"),
+        "proxies": _count("SELECT COUNT(*) FROM proxy_assignments"),
+        "proposals_active": _count("SELECT COUNT(*) FROM proposals WHERE status != 'archived'"),
+        "new_users_7d": _count("SELECT COUNT(*) FROM users WHERE created_at >= datetime('now', '-7 days')"),
+        "new_proxies_7d": _count("SELECT COUNT(*) FROM proxy_assignments WHERE created_at >= datetime('now', '-7 days')"),
+        "new_proposals_7d": _count("SELECT COUNT(*) FROM proposals WHERE created_at >= datetime('now', '-7 days')"),
+    }
+
+
+def send_cost_report(*, to_email: str, month: str | None = None) -> bool:
+    """Build and send a cost summary email for the given month (default: current)."""
+    settings = load_settings()
+    if not month:
+        now = datetime.now(timezone.utc)
+        month = f"{now.year:04d}-{now.month:02d}"
+
+    with db.get_connection(settings.db_path) as conn:
+        metered = db.get_usage_summary(conn, month=month)
+        fixed = db.list_fixed_costs(conn, active_only=True)
+        site = _fetch_site_stats(conn)
+
+    # Build metered rows
+    total_metered = 0.0
+    metered_rows = ""
+    for row in metered:
+        cost = row["total_est_cost_usd"] or 0
+        total_metered += cost
+        metered_rows += (
+            f"<tr><td style='padding:6px 12px'>{row['service']}</td>"
+            f"<td style='padding:6px 12px;text-align:right'>{row['total_units']:,.0f} {row['unit_type']}</td>"
+            f"<td style='padding:6px 12px;text-align:right'>${cost:,.4f}</td></tr>"
+        )
+    if not metered_rows:
+        metered_rows = "<tr><td colspan='3' style='padding:6px 12px;color:#888'>No metered usage this period</td></tr>"
+
+    # Build fixed rows
+    total_fixed = 0.0
+    fixed_rows = ""
+    for fc in fixed:
+        total_fixed += fc["monthly_equiv"]
+        fixed_rows += (
+            f"<tr><td style='padding:6px 12px'>{fc['service']}</td>"
+            f"<td style='padding:6px 12px'>{fc['description'] or ''}</td>"
+            f"<td style='padding:6px 12px;text-align:right'>${fc['monthly_equiv']:,.2f}</td></tr>"
+        )
+
+    total = total_metered + total_fixed
+
+    # --- Site stats section ---
+    site_html = f"""
+    <h3>Site Stats</h3>
+    <table style="border-collapse:collapse;width:100%">
+    <tr style="background:#eef5ff"><th style="padding:6px 12px;text-align:left">Metric</th>
+    <th style="padding:6px 12px;text-align:right">Total</th>
+    <th style="padding:6px 12px;text-align:right">Last 7 days</th></tr>
+    <tr><td style="padding:6px 12px">Users</td>
+        <td style="padding:6px 12px;text-align:right">{site['users']:,}</td>
+        <td style="padding:6px 12px;text-align:right">+{site['new_users_7d']}</td></tr>
+    <tr><td style="padding:6px 12px">Proxy assignments</td>
+        <td style="padding:6px 12px;text-align:right">{site['proxies']:,}</td>
+        <td style="padding:6px 12px;text-align:right">+{site['new_proxies_7d']}</td></tr>
+    <tr><td style="padding:6px 12px">Active proposals</td>
+        <td style="padding:6px 12px;text-align:right">{site['proposals_active']:,}</td>
+        <td style="padding:6px 12px;text-align:right">+{site['new_proposals_7d']}</td></tr>
+    <tr><td style="padding:6px 12px">HOAs indexed</td>
+        <td style="padding:6px 12px;text-align:right">{site['hoas']:,}</td>
+        <td style="padding:6px 12px;text-align:right">—</td></tr>
+    <tr><td style="padding:6px 12px">Documents / chunks</td>
+        <td style="padding:6px 12px;text-align:right">{site['documents']:,} / {site['chunks']:,}</td>
+        <td style="padding:6px 12px;text-align:right">—</td></tr>
+    </table>
+    """
+
+    # --- GA4 traffic section (optional) ---
+    ga4_html = ""
+    ga4 = _fetch_ga4_traffic(settings.ga4_property_id) if settings.ga4_property_id else None
+    if ga4:
+        avg_min = ga4["avg_session_sec"] / 60
+        ga4_html = f"""
+        <h3>Traffic (last 7 days)</h3>
+        <table style="border-collapse:collapse;width:100%">
+        <tr style="background:#eef5ff"><th style="padding:6px 12px;text-align:left">Metric</th>
+        <th style="padding:6px 12px;text-align:right">Value</th></tr>
+        <tr><td style="padding:6px 12px">Active users</td>
+            <td style="padding:6px 12px;text-align:right">{ga4['active_users']:,}</td></tr>
+        <tr><td style="padding:6px 12px">Sessions</td>
+            <td style="padding:6px 12px;text-align:right">{ga4['sessions']:,}</td></tr>
+        <tr><td style="padding:6px 12px">Pageviews</td>
+            <td style="padding:6px 12px;text-align:right">{ga4['pageviews']:,}</td></tr>
+        <tr><td style="padding:6px 12px">Avg session duration</td>
+            <td style="padding:6px 12px;text-align:right">{avg_min:.1f} min</td></tr>
+        </table>
+        """
+
+    html = f"""
+    <html><body style="font-family:sans-serif;max-width:650px;margin:0 auto;color:#12233a">
+    <h2 style="color:#1662f3">HOAproxy Weekly Report — {month}</h2>
+
+    {site_html}
+    {ga4_html}
+
+    <h3>Fixed Costs</h3>
+    <table style="border-collapse:collapse;width:100%">
+    <tr style="background:#eef5ff"><th style="padding:6px 12px;text-align:left">Service</th>
+    <th style="padding:6px 12px;text-align:left">Description</th>
+    <th style="padding:6px 12px;text-align:right">$/mo</th></tr>
+    {fixed_rows}
+    <tr style="font-weight:bold;border-top:2px solid #1662f3">
+    <td colspan="2" style="padding:6px 12px">Subtotal</td>
+    <td style="padding:6px 12px;text-align:right">${total_fixed:,.2f}</td></tr>
+    </table>
+
+    <h3>Metered Usage (MTD)</h3>
+    <table style="border-collapse:collapse;width:100%">
+    <tr style="background:#eef5ff"><th style="padding:6px 12px;text-align:left">Service</th>
+    <th style="padding:6px 12px;text-align:right">Units</th>
+    <th style="padding:6px 12px;text-align:right">Est. Cost</th></tr>
+    {metered_rows}
+    <tr style="font-weight:bold;border-top:2px solid #1662f3">
+    <td colspan="2" style="padding:6px 12px">Subtotal</td>
+    <td style="padding:6px 12px;text-align:right">${total_metered:,.4f}</td></tr>
+    </table>
+
+    <h2 style="margin-top:20px;color:#1662f3">Total: ${total:,.2f}/mo</h2>
+
+    <hr>
+    <p style="font-size:12px;color:#666">
+    Automated weekly report from HOAproxy cost tracker.
+    <a href="{settings.app_base_url}">hoaproxy.org</a>
+    </p>
+    </body></html>
+    """
+
+    return _send_email(
+        to=[to_email],
+        subject=f"HOAproxy costs — {month} — ${total:,.2f}/mo",
+        html=html,
+    )

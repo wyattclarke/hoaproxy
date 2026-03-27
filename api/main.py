@@ -232,6 +232,35 @@ def _run_proxy_status_backfill() -> None:
             logger.exception("Proxy status classification failed for HOA %d (%s)", hoa_id, name)
 
 
+def _cost_report_scheduler() -> None:
+    """Send a weekly cost report email every Sunday at 18:00 UTC."""
+    import time as _time
+    from hoaware.email_service import send_cost_report
+
+    while True:
+        now = datetime.now(timezone.utc)
+        # Find next Sunday 18:00 UTC
+        days_until_sunday = (6 - now.weekday()) % 7
+        if days_until_sunday == 0 and now.hour >= 18:
+            days_until_sunday = 7
+        next_sunday = now.replace(hour=18, minute=0, second=0, microsecond=0)
+        next_sunday = next_sunday + __import__("datetime").timedelta(days=days_until_sunday)
+        wait_seconds = (next_sunday - now).total_seconds()
+        logger.info("Cost report scheduler: next run at %s (%.0f seconds)", next_sunday.isoformat(), wait_seconds)
+        _time.sleep(wait_seconds)
+
+        settings = load_settings()
+        to_email = settings.cost_report_email
+        if not to_email:
+            logger.info("COST_REPORT_EMAIL not set, skipping weekly report")
+            continue
+        try:
+            send_cost_report(to_email=to_email)
+            logger.info("Weekly cost report sent to %s", to_email)
+        except Exception:
+            logger.exception("Failed to send weekly cost report")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = load_settings()
@@ -247,6 +276,7 @@ async def lifespan(app: FastAPI):
     _run_verification_link_backfill()
     import threading
     threading.Thread(target=_run_proxy_status_backfill, daemon=True).start()
+    threading.Thread(target=_cost_report_scheduler, daemon=True).start()
     yield
 
 
@@ -1850,6 +1880,22 @@ def admin_delete_fixed_cost(cost_id: int, request: Request):
     with db.get_connection(settings.db_path) as conn:
         db.delete_fixed_cost(conn, cost_id)
     return {"status": "deactivated"}
+
+
+@app.post("/admin/costs/report")
+def admin_send_cost_report(request: Request, email: Optional[str] = None):
+    """Manually trigger a cost report email."""
+    _require_admin(request)
+    from hoaware.email_service import send_cost_report
+
+    settings = load_settings()
+    to_email = email or settings.cost_report_email
+    if not to_email:
+        raise HTTPException(status_code=400, detail="No email provided and COST_REPORT_EMAIL not set")
+    ok = send_cost_report(to_email=to_email)
+    if not ok:
+        raise HTTPException(status_code=502, detail="Failed to send report email")
+    return {"status": "sent", "to": to_email}
 
 
 # ---------------------------------------------------------------------------

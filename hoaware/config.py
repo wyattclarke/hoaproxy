@@ -49,6 +49,9 @@ class Settings:
     proxy_retention_days: int
     # App base URL for email links
     app_base_url: str
+    # Cost report
+    cost_report_email: str | None
+    ga4_property_id: str | None
 
 
 def load_settings() -> Settings:
@@ -87,6 +90,8 @@ def load_settings() -> Settings:
         smtp_password=os.environ.get("SMTP_PASSWORD"),
         proxy_retention_days=int(os.environ.get("PROXY_RETENTION_DAYS", "90")),
         app_base_url=os.environ.get("APP_BASE_URL", "https://hoaproxy.org"),
+        cost_report_email=os.environ.get("COST_REPORT_EMAIL"),
+        ga4_property_id=os.environ.get("GA4_PROPERTY_ID"),
     )
 
 
