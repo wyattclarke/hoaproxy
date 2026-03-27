@@ -10,7 +10,7 @@ HOAproxy gives homeowners the tools their HOA boards won't: searchable governing
 
 - **Document Search** — Upload HOA PDFs, ask questions in plain English, get answers with page citations (powered by OpenAI embeddings + GPT-4o-mini)
 - **Proxy Voting** — Create, e-sign, deliver, and revoke proxy assignments for any HOA meeting. Guerilla online voting.
-- **State Law Corpus** — 47-state coverage of HOA records access, proxy voting rules, and records sharing limits
+- **State Law Corpus** — 51-jurisdiction coverage of HOA records access, proxy voting rules, and records sharing limits
 - **Resident Proposals** — Draft a proposal, get two neighbors to co-sign, and it goes live for your community to upvote
 - **HOA Lookup** — Search any address to find its HOA and governing documents
 

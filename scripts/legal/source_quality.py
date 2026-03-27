@@ -30,6 +30,9 @@ OFFICIAL_HOST_ALLOWLIST = {
     # Wyoming Legislature
     "wyoleg.gov",
     "www.wyoleg.gov",
+    # Oklahoma Legislature
+    "www.oklegislature.gov",
+    "oklegislature.gov",
 }
 
 AGGREGATOR_HOST_TOKENS = (

@@ -142,20 +142,15 @@ Allow residents to sign in with their Google or Apple account instead of (or in 
 
 ---
 
-## Manual Legal Corpus: Missing States
+## ~~Manual Legal Corpus: Missing States~~ (Resolved)
 
-Four states could not be scraped automatically because their legislature sites use JavaScript rendering or CAPTCHAs. Their proxy voting rules need to be added manually.
+All 51 jurisdictions now have official source URLs in the registry. The four previously missing states (OK, PA, SD, WY) were resolved by replacing dead aggregator URLs with official state sources:
 
-| State | Blocker | Suggested approach |
-|-------|---------|-------------------|
-| **OK** | `oscn.net` — Cloudflare Turnstile CAPTCHA | Copy statute text manually from [oscn.net](https://www.oscn.net) or use the Oklahoma Legislature site at [osclegislature.gov](https://www.osclegislature.gov) |
-| **PA** | `legis.state.pa.us` — JS-rendered | Copy from [legis.pa.gov](https://www.legis.pa.gov) (Consolidated Statutes, Title 68 for HOA) |
-| **SD** | `sdlegislature.gov` — React SPA | Copy from [sdlegislature.gov](https://sdlegislature.gov) (Title 43A, Chapter 44 for HOA) |
-| **WY** | Static HTML inaccessible | Copy from [wyoleg.gov](https://www.wyoleg.gov) (Title 34 for HOA) |
+| State | Old blocker | Resolution |
+|-------|-------------|------------|
+| **OK** | `law.onecle.com` (404) | Switched to `oscn.net` (OSCN) for condo act + `oklegislature.gov` PDFs for nonprofit corp & UETA statutes |
+| **PA** | `law.onecle.com` (404) | Switched to `palegis.us` iframe API (official PA General Assembly) |
+| **SD** | `law.onecle.com` (404) + `sdlegislature.gov` SPA | Discovered `sdlegislature.gov/api/` static HTML endpoint that bypasses the SPA |
+| **WY** | `law.onecle.com` (404) + invalid citation (§ 34-20-114 doesn't exist) | Fixed citation; switched to `wyoleg.gov` bulk PDFs. WY has no dedicated HOA act — governance is via nonprofit corp act |
 
-**To add a state manually:**
-1. Copy the relevant statute text into `legal_corpus/raw/{STATE}/hoa/proxy_voting/manual.txt`
-2. Run `python3 scripts/legal/normalize_law_texts.py --state {STATE}`
-3. Run `python3 scripts/legal/extract_rules.py --state {STATE} --include-aggregators`
-4. Run `python3 scripts/legal/assemble_profiles.py --state {STATE}`
-5. Re-export seed files: `python3 scripts/legal/export_seeds.py` (see `scripts/legal/README.md`)
+No manual steps needed. Run the standard fetch pipeline to pull these sources.
