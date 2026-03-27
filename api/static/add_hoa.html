@@ -239,11 +239,12 @@
   <body>
     <main class="shell">
       <section class="card">
-        <h1 class="brand-wrap">
-          <a class="brand brand-link" href="/"><span class="brand-mark" aria-hidden="true"></span><span class="brand-hoa">HOA</span><span class="brand-proxy">proxy</span></a>
-        </h1>
-        <p class="subtitle">Create a new HOA workspace by uploading documents and providing location data for the map.</p>
-        <div class="actions"><a class="link-btn" href="/">Back to Dashboard</a> <a class="link-btn" href="/about">About</a></div>
+        <nav style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:16px">
+          <a class="brand brand-link" href="/"><span class="brand-hoa">HOA</span><span class="brand-proxy">proxy</span></a>
+          <div class="nav" id="navContainer"></div>
+        </nav>
+        <h1 style="font-size:clamp(1.4rem,3.2vw,2rem);margin-bottom:8px">Add Your HOA</h1>
+        <p class="subtitle">Upload your HOA's governing documents — CC&Rs, bylaws, rules — and make them searchable for your whole community. Takes about 2 minutes.</p>
 
         <div class="form-grid">
           <div class="full">
@@ -254,6 +255,12 @@
           <div class="full">
             <label for="files" class="req">PDF Documents</label>
             <input id="files" type="file" accept=".pdf,application/pdf" multiple />
+          </div>
+
+          <div class="full" id="emailRow" hidden>
+            <label for="uploaderEmail">Your email (to verify this upload)</label>
+            <input id="uploaderEmail" type="email" placeholder="you@example.com" />
+            <div class="hint">We'll send a verification link. Your HOA will appear on the site once verified.</div>
           </div>
 
           <div class="full">
@@ -322,7 +329,17 @@
     ></script>
     <script src="/static/js/auth.js"></script>
     <script>
-      Auth.requireAuth();
+      Auth.renderNav(document.getElementById("navContainer"));
+      // Show email field for anonymous users
+      if (!Auth.isLoggedIn()) {
+        document.getElementById("emailRow").hidden = false;
+      }
+      // Pre-fill HOA name from URL param
+      (function() {
+        var params = new URLSearchParams(window.location.search);
+        var hoa = params.get("hoa");
+        if (hoa) document.getElementById("hoaName").value = hoa;
+      })();
     </script>
     <script>
       const hoaName = document.getElementById("hoaName");
@@ -374,6 +391,16 @@
           return;
         }
 
+        const isAnonymous = !Auth.isLoggedIn();
+        const uploaderEmail = document.getElementById("uploaderEmail");
+        if (isAnonymous) {
+          const email = uploaderEmail ? uploaderEmail.value.trim() : "";
+          if (!email || !email.includes("@")) {
+            setStatus("Enter a valid email so we can verify your upload.", "error");
+            return;
+          }
+        }
+
         submitBtn.disabled = true;
         setStatus("Uploading documents and creating HOA...", "");
 
@@ -393,9 +420,17 @@
           if (boundaryGeojson.value.trim()) form.append("boundary_geojson", boundaryGeojson.value.trim());
 
           const token = Auth.getToken();
-          const res = await fetch("/upload", {
+          let endpoint = "/upload";
+          const headers = {};
+          if (token) {
+            headers["Authorization"] = `Bearer ${token}`;
+          } else {
+            endpoint = "/upload/anonymous";
+            form.append("email", uploaderEmail.value.trim());
+          }
+          const res = await fetch(endpoint, {
             method: "POST",
-            headers: token ? { Authorization: `Bearer ${token}` } : {},
+            headers: headers,
             body: form,
           });
           if (!res.ok) {
@@ -407,11 +442,15 @@
             throw new Error(detail);
           }
           await res.json();
-          setStatus("HOA created and upload queued. Redirecting to dashboard...", "ok");
-          const redirect = `/hoa/${encodeURIComponent(hoa)}`;
-          setTimeout(() => {
-            window.location.href = redirect;
-          }, 700);
+          if (isAnonymous) {
+            setStatus("Upload received! Check your email to verify and publish this HOA.", "ok");
+          } else {
+            setStatus("HOA created and upload queued. Redirecting...", "ok");
+            const redirect = `/hoa/${encodeURIComponent(hoa)}`;
+            setTimeout(() => {
+              window.location.href = redirect;
+            }, 700);
+          }
         } catch (err) {
           setStatus(String(err.message || err), "error");
         } finally {

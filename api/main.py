@@ -2926,6 +2926,102 @@ async def upload_documents(
     )
 
 
+@app.post("/upload/anonymous", response_model=UploadResponse)
+async def upload_documents_anonymous(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    hoa: str = Form(...),
+    email: str = Form(...),
+    files: List[UploadFile] = File(...),
+    website_url: str | None = Form(default=None),
+    street: str | None = Form(default=None),
+    city: str | None = Form(default=None),
+    state: str | None = Form(default=None),
+    postal_code: str | None = Form(default=None),
+    latitude: float | None = Form(default=None),
+    longitude: float | None = Form(default=None),
+    boundary_geojson: str | None = Form(default=None),
+) -> UploadResponse:
+    """Accept HOA uploads without authentication. Rate-limited to 3/hour per IP."""
+    _check_rate_limit(request, limit=3)
+    if not email or "@" not in email:
+        raise HTTPException(status_code=400, detail="A valid email address is required")
+    settings = load_settings()
+    resolved_hoa = _resolve_hoa_name(hoa)
+    if not settings.openai_api_key:
+        raise HTTPException(status_code=400, detail="OPENAI_API_KEY is required for ingestion")
+    if not files:
+        raise HTTPException(status_code=400, detail="At least one file is required")
+
+    settings.docs_root.mkdir(parents=True, exist_ok=True)
+    hoa_dir = settings.docs_root / resolved_hoa
+    hoa_dir.mkdir(parents=True, exist_ok=True)
+
+    saved_paths: list[Path] = []
+    saved_files: list[str] = []
+    for upload in files:
+        filename = _safe_pdf_filename(upload.filename)
+        target = hoa_dir / filename
+        with target.open("wb") as f:
+            shutil.copyfileobj(upload.file, f)
+        saved_paths.append(target)
+        saved_files.append(filename)
+        await upload.close()
+
+    normalized_website = _normalize_website_url(website_url)
+    normalized_boundary = _parse_boundary_geojson(boundary_geojson)
+    location_saved = False
+    if any(value is not None and str(value).strip() for value in [normalized_website, street, city, state, postal_code, normalized_boundary]) or (
+        latitude is not None and longitude is not None
+    ):
+        if latitude is not None and not (-90 <= latitude <= 90):
+            raise HTTPException(status_code=400, detail="latitude must be between -90 and 90")
+        if longitude is not None and not (-180 <= longitude <= 180):
+            raise HTTPException(status_code=400, detail="longitude must be between -180 and 180")
+        if (latitude is None or longitude is None) and any([street, city, state, postal_code]):
+            coords = _geocode_from_parts(
+                street=(street.strip() if street else None),
+                city=(city.strip() if city else None),
+                state=(state.strip().upper() if state else None),
+                postal_code=(postal_code.strip() if postal_code else None),
+            )
+            if coords:
+                latitude, longitude = coords
+        if (latitude is None or longitude is None) and normalized_boundary:
+            center = _center_from_boundary_geojson(normalized_boundary)
+            if center:
+                latitude, longitude = center
+        with db.get_connection(settings.db_path) as conn:
+            db.upsert_hoa_location(
+                conn,
+                resolved_hoa,
+                website_url=normalized_website,
+                street=(street.strip() if street else None),
+                city=(city.strip() if city else None),
+                state=(state.strip().upper() if state else None),
+                postal_code=(postal_code.strip() if postal_code else None),
+                latitude=latitude,
+                longitude=longitude,
+                boundary_geojson=normalized_boundary,
+                source="anonymous_upload",
+            )
+        location_saved = True
+
+    logger.info("anonymous_upload hoa=%s email=%s files=%d ip=%s",
+                resolved_hoa, email, len(saved_files),
+                request.client.host if request.client else "unknown")
+    background_tasks.add_task(_ingest_uploaded_files, resolved_hoa, saved_paths)
+    return UploadResponse(
+        hoa=resolved_hoa,
+        saved_files=saved_files,
+        indexed=0,
+        skipped=0,
+        failed=0,
+        queued=True,
+        location_saved=location_saved,
+    )
+
+
 @app.post("/search", response_model=SearchResponse)
 def search(body: SearchRequest) -> SearchResponse:
     settings = load_settings()

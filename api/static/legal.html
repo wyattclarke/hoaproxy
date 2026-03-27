@@ -77,8 +77,13 @@
 
       .disclaimer { font-size: 0.8rem; color: var(--muted); border-top: 1px solid var(--line); margin-top: 16px; padding-top: 12px; line-height: 1.5; }
 
-      .faq dt { font-weight: 700; margin: 14px 0 4px; }
-      .faq dd { margin: 0 0 8px; color: var(--muted); font-size: 0.93rem; line-height: 1.6; }
+      .faq details { border-bottom: 1px solid var(--line); padding: 10px 0; }
+      .faq details:last-child { border-bottom: none; }
+      .faq summary { font-weight: 700; cursor: pointer; list-style: none; }
+      .faq summary::-webkit-details-marker { display: none; }
+      .faq summary::before { content: "▸ "; color: var(--muted); }
+      .faq details[open] summary::before { content: "▾ "; }
+      .faq p { margin: 8px 0 0; color: var(--muted); font-size: 0.93rem; line-height: 1.6; }
 
       .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.75rem; font-weight: 700; background: #e8f0ff; color: #244a7f; border: 1px solid #cae0ff; }
 
@@ -135,28 +140,36 @@
 
       <div class="card">
         <h2>Frequently Asked Questions</h2>
-        <dl class="faq">
-          <dt>What is a proxy vote?</dt>
-          <dd>A proxy is written authorization that allows another person (your "proxy holder" or "delegate") to vote on your behalf at an HOA meeting. This lets your vote count even when you can't attend in person.</dd>
-
-          <dt>What's the difference between a directed and undirected proxy?</dt>
-          <dd>A <strong>directed proxy</strong> tells your delegate exactly how to vote on specific agenda items — they must follow your instructions. An <strong>undirected proxy</strong> gives your delegate full discretion to vote as they see fit.</dd>
-
-          <dt>Does my state allow electronic proxies?</dt>
-          <dd>Most states do allow electronic proxy submission and electronic signatures for HOA proxies, thanks to the federal ESIGN Act and state UETA laws. Use the lookup above to check your state's specific rules.</dd>
-
-          <dt>Can a board member be my proxy holder?</dt>
-          <dd>State laws vary. Some states prohibit board members from serving as proxy holders for members whose votes they may count; others have no restriction. Check your HOA's bylaws and your state's HOA statutes.</dd>
-
-          <dt>When does a proxy expire?</dt>
-          <dd>Many states limit proxy validity to 11 months unless the proxy specifies a different duration, or limit proxies to a specific named meeting. HOAproxy marks proxies as expired automatically after 90 days.</dd>
-
-          <dt>Can I revoke a proxy?</dt>
-          <dd>Yes. A proxy can generally be revoked at any time before it is exercised — by sending written notice to the HOA secretary, by attending the meeting in person, or by submitting a later-dated proxy. HOAproxy supports proxy revocation from your dashboard.</dd>
-
-          <dt>What federal law governs electronic signatures on proxies?</dt>
-          <dd>The Electronic Signatures in Global and National Commerce Act (E-SIGN Act, 15 U.S.C. § 7001) and the Uniform Electronic Transactions Act (UETA), adopted in nearly every state, give electronic signatures the same legal effect as handwritten signatures on proxy forms.</dd>
-        </dl>
+        <div class="faq">
+          <details>
+            <summary>What is a proxy vote?</summary>
+            <p>A proxy is written authorization that allows another person (your "proxy holder" or "delegate") to vote on your behalf at an HOA meeting. This lets your vote count even when you can't attend in person.</p>
+          </details>
+          <details>
+            <summary>What's the difference between a directed and undirected proxy?</summary>
+            <p>A <strong>directed proxy</strong> tells your delegate exactly how to vote on specific agenda items — they must follow your instructions. An <strong>undirected proxy</strong> gives your delegate full discretion to vote as they see fit.</p>
+          </details>
+          <details>
+            <summary>Does my state allow electronic proxies?</summary>
+            <p>Most states do allow electronic proxy submission and electronic signatures for HOA proxies, thanks to the federal ESIGN Act and state UETA laws. Use the lookup above to check your state's specific rules.</p>
+          </details>
+          <details>
+            <summary>Can a board member be my proxy holder?</summary>
+            <p>State laws vary. Some states prohibit board members from serving as proxy holders for members whose votes they may count; others have no restriction. Check your HOA's bylaws and your state's HOA statutes.</p>
+          </details>
+          <details>
+            <summary>When does a proxy expire?</summary>
+            <p>Many states limit proxy validity to 11 months unless the proxy specifies a different duration, or limit proxies to a specific named meeting. HOAproxy marks proxies as expired automatically after 90 days.</p>
+          </details>
+          <details>
+            <summary>Can I revoke a proxy?</summary>
+            <p>Yes. A proxy can generally be revoked at any time before it is exercised — by sending written notice to the HOA secretary, by attending the meeting in person, or by submitting a later-dated proxy. HOAproxy supports proxy revocation from your dashboard.</p>
+          </details>
+          <details>
+            <summary>What federal law governs electronic signatures on proxies?</summary>
+            <p>The Electronic Signatures in Global and National Commerce Act (E-SIGN Act, 15 U.S.C. § 7001) and the Uniform Electronic Transactions Act (UETA), adopted in nearly every state, give electronic signatures the same legal effect as handwritten signatures on proxy forms.</p>
+          </details>
+        </div>
       </div>
 
       <div class="card" style="background:#f5f8ff">

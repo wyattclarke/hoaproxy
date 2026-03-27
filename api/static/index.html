@@ -46,14 +46,10 @@
          BASE = MOBILE (< 600px)
          ───────────────────────────── */
 
-      /* ── MOBILE REORDER: search before pitch ── */
       .main-content {
         display: flex;
         flex-direction: column;
       }
-
-      .search-section { order: 1; }
-      .hero { order: 2; }
 
       /* ── NAV ── */
       .site-nav {
@@ -78,14 +74,14 @@
       .brand-hoa { color: #0f2f6d; letter-spacing: 0.03em; }
       .brand-proxy { color: #1a66ff; }
 
-      .nav-links {
+      .nav-links, .nav {
         display: flex;
         gap: 4px;
         flex-wrap: wrap;
         justify-content: flex-end;
       }
 
-      .nav-links a {
+      .nav-links a, .nav a {
         font-family: "Manrope", sans-serif;
         font-size: 0.8rem;
         font-weight: 700;
@@ -98,12 +94,40 @@
         transition: background 0.15s;
       }
 
-      .nav-links a:hover { background: rgba(22, 98, 243, 0.08); }
-      .nav-links a.primary {
+      .nav-links a:hover, .nav a:hover { background: rgba(22, 98, 243, 0.08); }
+      .nav-links a.primary, .nav a.primary {
         background: linear-gradient(180deg, var(--accent), var(--accent-strong));
         color: #fff;
       }
-      .nav-links a.primary:hover { opacity: 0.9; }
+      .nav-links a.primary:hover, .nav a.primary:hover { opacity: 0.9; }
+      .nav a.active {
+        background: var(--accent);
+        color: #fff;
+      }
+
+      /* ── TAGLINE ── */
+      .tagline-section {
+        text-align: center;
+        padding: 28px 16px 0;
+      }
+
+      .tagline {
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 1.45rem;
+        font-weight: 700;
+        line-height: 1.25;
+        letter-spacing: -0.02em;
+        color: var(--ink);
+        margin-bottom: 12px;
+      }
+
+      .positioning {
+        font-size: 0.88rem;
+        line-height: 1.6;
+        color: var(--muted);
+        max-width: 520px;
+        margin: 0 auto;
+      }
 
       /* ── HERO: PITCH COLUMNS ── */
       .hero {
@@ -166,7 +190,7 @@
       /* ── SEARCH BAR ── */
       .search-section {
         padding: 0 16px;
-        margin-top: 24px;
+        margin-top: 20px;
       }
 
       .search-bar {
@@ -629,18 +653,37 @@
 
       .site-footer a:hover { text-decoration: underline; }
 
+      .footer-links {
+        display: flex;
+        gap: 16px;
+        justify-content: center;
+        flex-wrap: wrap;
+        margin-bottom: 12px;
+      }
+
+      .footer-links a {
+        color: var(--accent);
+        font-weight: 600;
+        font-size: 0.85rem;
+        text-decoration: none;
+      }
+
+      .footer-links a:hover { text-decoration: underline; }
+
       /* ─────────────────────────────
          TABLET (600px+)
          ───────────────────────────── */
       @media (min-width: 600px) {
         .main-content { display: block; }
-        .search-section { order: unset; }
-        .hero { order: unset; }
 
         .site-nav { padding: 20px 24px 0; }
         .brand { font-size: 1.65rem; }
-        .nav-links { gap: 6px; }
-        .nav-links a { font-size: 0.85rem; padding: 7px 14px; }
+        .nav-links, .nav { gap: 6px; }
+        .nav-links a, .nav a { font-size: 0.85rem; padding: 7px 14px; }
+
+        .tagline-section { padding: 40px 24px 0; }
+        .tagline { font-size: 1.75rem; }
+        .positioning { font-size: 0.92rem; max-width: 560px; }
 
         .hero { padding: 48px 24px 36px; }
         .pitch-grid { gap: 28px; }
@@ -671,8 +714,12 @@
       @media (min-width: 900px) {
         .site-nav { max-width: 1200px; margin: 0 auto; padding: 24px 32px 0; }
         .brand { font-size: 1.8rem; }
-        .nav-links { gap: 8px; }
-        .nav-links a { font-size: 0.88rem; padding: 8px 16px; }
+        .nav-links, .nav { gap: 8px; }
+        .nav-links a, .nav a { font-size: 0.88rem; padding: 8px 16px; }
+
+        .tagline-section { max-width: 1200px; margin: 0 auto; padding: 56px 32px 0; }
+        .tagline { font-size: 2.2rem; }
+        .positioning { font-size: 0.95rem; max-width: 600px; }
 
         .hero { max-width: 1200px; margin: 0 auto; padding: 72px 32px 56px; }
         .pitch-grid { grid-template-columns: repeat(3, 1fr); gap: 40px; }
@@ -722,40 +769,16 @@
       <a class="brand" href="/">
         <span class="brand-hoa">HOA</span><span class="brand-proxy">proxy</span>
       </a>
-      <div class="nav-links" id="navContainer">
-        <a class="primary" href="/add-hoa">Add HOA</a>
-        <a href="/about">About</a>
-      </div>
+      <div class="nav" id="navContainer"></div>
     </nav>
 
-    <div class="main-content">
-    <!-- HERO: THREE-COLUMN PITCH -->
-    <section class="hero">
-      <div class="pitch-grid">
-        <div class="pitch-col">
-          <div class="pitch-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-          </div>
-          <h2 class="pitch-title">Transparent rules</h2>
-          <p class="pitch-desc">Searchable documents, with a chatbot. Upload your CC&Rs, bylaws, and rules — then ask questions in plain English.</p>
-        </div>
-        <div class="pitch-col">
-          <div class="pitch-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-          </div>
-          <h2 class="pitch-title">Guerrilla online voting</h2>
-          <p class="pitch-desc">HOAs rarely allow online voting, but almost all allow proxy votes. Assign your vote to a trusted neighbor right here. Or nominate yourself, gather proxies, and join the board!</p>
-        </div>
-        <div class="pitch-col">
-          <div class="pitch-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-          </div>
-          <h2 class="pitch-title">Community proposals</h2>
-          <p class="pitch-desc">Three co-signers required. Confirmed residents only. No comments. No gossip. Serious proposals from real neighbors.</p>
-        </div>
-      </div>
+    <!-- TAGLINE -->
+    <section class="tagline-section">
+      <h1 class="tagline">Find your HOA. Read the rules. Vote without showing up.</h1>
+      <p class="positioning">HOAproxy is an independent tool for homeowners — not your board, not your management company. Upload your HOA's governing documents and let anyone in your community search them, assign proxy votes, and propose changes.</p>
     </section>
 
+    <div class="main-content">
     <!-- SEARCH BAR -->
     <section class="search-section">
       <div class="search-bar">
@@ -771,6 +794,33 @@
       <div id="stateFilter" class="state-filter-row"></div>
       <div class="meta" id="countMeta" style="text-align:center;margin-top:6px"></div>
       <div id="homeStatus" class="status"></div>
+    </section>
+
+    <!-- PITCH COLUMNS -->
+    <section class="hero">
+      <div class="pitch-grid">
+        <div class="pitch-col">
+          <div class="pitch-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+          </div>
+          <h2 class="pitch-title">Transparent rules</h2>
+          <p class="pitch-desc">Searchable documents, with a chatbot. Upload your CC&Rs, bylaws, and rules — then ask questions in plain English.</p>
+        </div>
+        <div class="pitch-col">
+          <div class="pitch-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          </div>
+          <h2 class="pitch-title">Online voting, already legal</h2>
+          <p class="pitch-desc">HOAs rarely allow online voting, but almost all allow proxy votes. Assign your vote to a trusted neighbor right here. Or nominate yourself, gather proxies, and join the board!</p>
+        </div>
+        <div class="pitch-col">
+          <div class="pitch-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          </div>
+          <h2 class="pitch-title">Community proposals</h2>
+          <p class="pitch-desc">Three co-signers required. Confirmed residents only. No comments. No gossip. Serious proposals from real neighbors.</p>
+        </div>
+      </div>
     </section>
     </div><!-- /.main-content -->
 
@@ -858,6 +908,13 @@
 
     <!-- FOOTER -->
     <footer class="site-footer">
+      <nav class="footer-links">
+        <a href="/about">About</a>
+        <a href="/legal">Legal</a>
+        <a href="/privacy">Privacy</a>
+        <a href="/terms">Terms</a>
+        <a href="mailto:wyatt.clarke@gmail.com">Contact</a>
+      </nav>
       <p>HOAproxy is a free, transparent civic organizing platform to empower HOA residents.<br>
       Built in the open — contribute at <a href="https://github.com/wyattclarke/hoaproxy" target="_blank" rel="noopener noreferrer">github.com/wyattclarke/hoaproxy</a></p>
     </footer>
@@ -1061,10 +1118,8 @@
         const pager = document.getElementById("pager");
         if (!state.filtered.length) {
           if (state.searchQuery) {
-            const loggedIn = typeof Auth !== "undefined" && Auth.isLoggedIn();
-            const ctaHtml = loggedIn
-              ? `<a class="btn primary" href="/add-hoa" style="display:inline-block;margin-top:12px">Add Your HOA →</a>`
-              : `<a class="btn primary" href="/register" style="display:inline-block;margin-top:12px">Create a free account to add it →</a>`;
+            const addHoaUrl = `/add-hoa?hoa=${encodeURIComponent(state.searchQuery)}`;
+            const ctaHtml = `<a class="btn primary" href="${addHoaUrl}" style="display:inline-block;margin-top:12px">Add "${escapeHtml(state.searchQuery)}" →</a>`;
             hoaList.innerHTML =
               `<div class="hoa-card" style="padding:24px 20px;text-align:center">` +
               `<div style="font-size:1.05rem;font-weight:600;color:var(--ink);margin-bottom:8px">Your HOA isn't here yet.</div>` +
@@ -1316,12 +1371,16 @@
           return;
         }
         const suggestionsCount = suggestions.length;
+        const locationLabel = addressLookup.display_name || "Address resolved";
+        const summaryLine = suggestionsCount
+          ? `${suggestionsCount} HOA suggestion${suggestionsCount === 1 ? "" : "s"} nearby`
+          : "No HOAs registered here yet.";
+        const actionHtml = suggestionsCount
+          ? '<div style="margin-top:8px"><button class="btn primary" id="useAddressBtn" type="button">Use Address Suggestions</button></div>'
+          : `<div style="margin-top:8px"><a class="btn primary" href="/add-hoa?hoa=&address=${encodeURIComponent(locationLabel)}">Add your HOA →</a></div>`;
         addressIntentCard.innerHTML =
-          `<div class="intent-item"><strong>${escapeHtml(addressLookup.display_name || "Address resolved")}</strong><div class="suggestion-meta">` +
-          `${addressLookup.latitude.toFixed(6)}, ${addressLookup.longitude.toFixed(6)} · ${suggestionsCount} HOA suggestion${suggestionsCount === 1 ? "" : "s"}</div></div>` +
-          (suggestionsCount
-            ? '<div style="margin-top:8px"><button class="btn primary" id="useAddressBtn" type="button">Use Address Suggestions</button></div>'
-            : "");
+          `<div class="intent-item"><strong>${escapeHtml(locationLabel)}</strong><div class="suggestion-meta">${summaryLine}</div></div>` +
+          actionHtml;
 
         const button = document.getElementById("useAddressBtn");
         if (button) {
@@ -1518,20 +1577,7 @@
     </script>
     <script src="/static/js/auth.js"></script>
     <script>
-      const navContainer = document.getElementById("navContainer");
-      if (navContainer) {
-        const baseLinks = '<a class="primary" href="/add-hoa">Add HOA</a><a href="/about">About</a>';
-        if (Auth.isLoggedIn()) {
-          navContainer.innerHTML = baseLinks +
-            '<a href="/dashboard">Dashboard</a>' +
-            '<a id="logoutBtn">Logout</a>';
-          document.getElementById("logoutBtn").addEventListener("click", Auth.logout);
-        } else {
-          navContainer.innerHTML = baseLinks +
-            '<a href="/login">Login</a>' +
-            '<a href="/register">Register</a>';
-        }
-      }
+      Auth.renderNav(document.getElementById("navContainer"));
     </script>
   </body>
 </html>

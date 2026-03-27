@@ -205,6 +205,15 @@
         overflow: hidden;
       }
 
+      details.card > summary {
+        cursor: pointer;
+        list-style: none;
+        padding: 4px 0;
+      }
+      details.card > summary::-webkit-details-marker { display: none; }
+      details.card > summary::before { content: "▸ "; color: var(--muted); }
+      details.card[open] > summary::before { content: "▾ "; }
+
       h2 {
         margin: 0 0 10px;
         font-family: "Space Grotesk", "Manrope", sans-serif;
@@ -377,11 +386,7 @@
           <h1 class="brand-wrap">
             <a class="brand brand-link" href="/"><span class="brand-mark" aria-hidden="true"></span><span class="brand-hoa">HOA</span><span class="brand-proxy">proxy</span></a>
           </h1>
-          <div class="nav" id="navContainer">
-            <a class="btn" href="/">Home</a>
-            <a class="btn" href="/about">About</a>
-            <a class="btn primary" href="/add-hoa">Add Your HOA</a>
-          </div>
+          <div class="nav" id="navContainer"></div>
         </div>
         <h2 class="hoa-title" id="hoaTitle">Loading HOA...</h2>
         <div class="hoa-meta" id="hoaMeta"></div>
@@ -394,12 +399,12 @@
           <article class="card">
             <h2>Document Browser</h2>
             <p class="section-caption">View full text or download the original PDF.</p>
-            <button id="refreshDocsBtn" class="secondary" type="button">Reload Docs</button>
+            <button id="refreshDocsBtn" class="ghost" type="button" style="font-size:0.82rem;padding:4px 8px">Reload Docs</button>
             <div id="docs" class="docs"></div>
           </article>
 
-          <article class="card">
-            <h2>Upload Documents</h2>
+          <details class="card">
+            <summary><h2 style="display:inline">Upload Documents</h2></summary>
             <p class="section-caption">Upload additional PDFs into this HOA workspace.</p>
             <label for="uploadFiles">PDF files</label>
             <input id="uploadFiles" type="file" accept=".pdf,application/pdf" multiple />
@@ -407,7 +412,7 @@
               <button id="uploadBtn" type="button">Upload</button>
             </div>
             <div id="uploadStatus" class="status"></div>
-          </article>
+          </details>
         </div>
 
         <div class="right-col">
@@ -425,17 +430,17 @@
             <div id="assistantSources" class="sources"></div>
           </article>
 
-          <article class="card">
-            <h2>HOA Location</h2>
+          <details class="card">
+            <summary><h2 style="display:inline">HOA Location</h2></summary>
             <div id="map"></div>
             <div class="row" style="margin-top: 10px">
               <button id="inferBtn" class="ghost" type="button">Infer Location</button>
             </div>
             <div id="mapStatus" class="status"></div>
-          </article>
+          </details>
 
-          <article class="card">
-            <h2>HOA Details</h2>
+          <details class="card">
+            <summary><h2 style="display:inline">HOA Details</h2></summary>
             <p class="section-caption">Add or edit website and location details for this HOA.</p>
             <div class="detail-grid">
               <div class="full">
@@ -471,24 +476,24 @@
               </div>
             </div>
             <div id="detailStatus" class="status"></div>
-          </article>
+          </details>
 
-          <article class="card">
-            <h2>Delegates</h2>
+          <details class="card">
+            <summary><h2 style="display:inline">Delegates</h2></summary>
             <p class="section-caption">Community members who can hold proxies for this HOA.</p>
             <div id="delegatesList"></div>
-          </article>
+          </details>
 
-          <article class="card">
-            <h2>Proxy Stats</h2>
+          <details class="card">
+            <summary><h2 style="display:inline">Proxy Stats</h2></summary>
             <div id="proxyStats" style="display:flex;gap:14px;flex-wrap:wrap;"></div>
-          </article>
+          </details>
 
-          <article class="card">
-            <h2>Participation</h2>
+          <details class="card">
+            <summary><h2 style="display:inline">Participation</h2></summary>
             <p class="section-caption">Meeting attendance history and the proxy magic number.</p>
             <div id="participationLink"></div>
-          </article>
+          </details>
         </div>
       </section>
     </main>
@@ -726,8 +731,10 @@
             .map((doc) => {
               const rawHref = `/hoas/${encodeURIComponent(state.hoaName)}/documents/file?path=${encodeURIComponent(doc.relative_path)}`;
               const searchableHref = `/hoas/${encodeURIComponent(state.hoaName)}/documents/searchable?path=${encodeURIComponent(doc.relative_path)}`;
+              // Clean display name: strip HOA folder prefix, remove _1_ artifacts, remove .pdf extension
+              let displayName = doc.relative_path.replace(/^[^/]+\//, "").replace(/_1_/g, " ").replace(/\.pdf$/i, "").replace(/_/g, " ").trim() || doc.relative_path;
               return (
-                `<div class="doc-item"><strong>${escapeHtml(doc.relative_path)}</strong>` +
+                `<div class="doc-item"><strong>${escapeHtml(displayName)}</strong>` +
                 `<span class="chip">${doc.chunk_count} sections</span><br>` +
                 `<span class="meta">${doc.page_count ?? "?"} pages, ${doc.bytes} bytes, added ${escapeHtml(doc.last_ingested)}</span><br>` +
                 `<a class="doc-link" href="${searchableHref}" target="_blank" rel="noopener noreferrer">View Full Text</a> · ` +
@@ -1008,7 +1015,7 @@
           await loadDelegates();
           await loadProxyStats();
           showParticipationLink();
-          setStatus(pageStatus, "Profile loaded.", "ok");
+          setStatus(pageStatus, "", "");
         } catch (err) {
           hoaTitle.textContent = "HOA Not Found";
           hoaMeta.innerHTML = `<a href="/">Return to Home</a>`;
@@ -1018,32 +1025,8 @@
     </script>
     <script src="/static/js/auth.js"></script>
     <script>
-      // Auth-aware nav
-      const navContainer = document.getElementById("navContainer");
-      if (navContainer && typeof Auth !== "undefined") {
-        const baseLinks = '<a class="btn" href="/">Home</a><a class="btn" href="/about">About</a>';
-        if (Auth.isLoggedIn()) {
-          navContainer.innerHTML = baseLinks +
-            '<a class="btn" href="/dashboard">Dashboard</a><a class="btn" id="logoutBtn">Logout</a>';
-          document.getElementById("logoutBtn").addEventListener("click", Auth.logout);
-        } else {
-          navContainer.innerHTML = baseLinks +
-            '<a class="btn" href="/login">Login</a><a class="btn" href="/register">Register</a>';
-        }
-      }
+      Auth.renderNav(document.getElementById("navContainer"));
       showMembershipActions();
-      // Inject mobile hamburger
-      if (navContainer && !navContainer.parentElement.querySelector(".nav-hamburger")) {
-        const hb = document.createElement("button");
-        hb.className = "nav-hamburger";
-        hb.setAttribute("aria-label", "Toggle navigation");
-        hb.innerHTML = "<span></span><span></span><span></span>";
-        hb.addEventListener("click", function() {
-          const open = navContainer.classList.toggle("nav-open");
-          hb.classList.toggle("open", open);
-        });
-        navContainer.parentElement.insertBefore(hb, navContainer);
-      }
     </script>
   </body>
 </html>

@@ -56,11 +56,7 @@
   <body>
     <main class="shell">
       <a href="/" class="brand"><span class="brand-hoa">HOA</span><span class="brand-proxy">proxy</span></a>
-      <div class="nav">
-        <a href="/">Home</a>
-        <a href="/about">About</a>
-        <div class="nav-right" id="navContainer"></div>
-      </div>
+      <nav class="nav" id="navContainer"></nav>
 
       <h1 id="hoaTitle">Loading...</h1>
       <p id="hoaMeta" style="color:var(--muted);margin:0 0 20px;font-size:0.93rem;"></p>
@@ -96,21 +92,7 @@
 
     <script src="/static/js/auth.js"></script>
     <script>
-      // Render nav
-      const navContainer = document.getElementById("navContainer");
-      if (navContainer && typeof Auth !== "undefined") {
-        if (Auth.isLoggedIn()) {
-          navContainer.innerHTML =
-            '<a href="/dashboard" style="color:var(--accent);font-weight:700;text-decoration:none;font-size:0.9rem;">Dashboard</a>' +
-            '<a href="#" id="logoutBtn" style="color:var(--accent);font-weight:700;text-decoration:none;font-size:0.9rem;margin-left:8px;">Logout</a>';
-          const lb = document.getElementById("logoutBtn");
-          if (lb) lb.addEventListener("click", e => { e.preventDefault(); Auth.logout(); });
-        } else {
-          navContainer.innerHTML =
-            '<a href="/login" style="color:var(--accent);font-weight:700;text-decoration:none;font-size:0.9rem;">Login</a>' +
-            '<a href="/register" style="color:var(--accent);font-weight:700;text-decoration:none;font-size:0.9rem;margin-left:8px;">Register</a>';
-        }
-      }
+      Auth.renderNav(document.getElementById("navContainer"));
 
       // Extract HOA name from URL: /participation/{hoa_name}
       const hoaName = decodeURIComponent(window.location.pathname.replace(/^\/participation\/?/, ""));

@@ -110,6 +110,11 @@ label.req::after {
     text-align: center;
   }
 
+  .nav a.btn.active, .nav a.active {
+    background: var(--accent, #1662f3);
+    color: #fff;
+  }
+
   /* Top row: let it wrap so hamburger + brand fit, nav drops below */
   .top-row {
     flex-wrap: wrap;

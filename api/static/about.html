@@ -121,7 +121,7 @@
         color: #1a66ff;
       }
 
-      .actions {
+      .nav {
         display: flex;
         gap: 8px;
         flex-wrap: wrap;
@@ -202,7 +202,7 @@
           <h1 class="brand-wrap">
             <a class="brand brand-link" href="/"><span class="brand-mark" aria-hidden="true"></span><span class="brand-hoa">HOA</span><span class="brand-proxy">proxy</span></a>
           </h1>
-          <div class="actions">
+          <div class="nav" id="navContainer">
             <a class="btn" href="/">Home</a>
             <a class="btn primary" href="/add-hoa">Add Your HOA</a>
           </div>
@@ -337,20 +337,9 @@
         </div>
       </section>
     </main>
+    <script src="/static/js/auth.js"></script>
     <script>
-      (function() {
-        var nav = document.querySelector(".actions");
-        if (!nav || !nav.parentElement) return;
-        var hb = document.createElement("button");
-        hb.className = "nav-hamburger";
-        hb.setAttribute("aria-label", "Toggle navigation");
-        hb.innerHTML = "<span></span><span></span><span></span>";
-        hb.addEventListener("click", function() {
-          var open = nav.classList.toggle("nav-open");
-          hb.classList.toggle("open", open);
-        });
-        nav.parentElement.insertBefore(hb, nav);
-      })();
+      Auth.renderNav(document.getElementById("navContainer"));
     </script>
   </body>
 </html>

@@ -38,6 +38,11 @@
       .brand-hoa { color: #0f2f6d; } .brand-proxy { color: #1a66ff; }
       .nav-link { color: var(--muted); text-decoration: none; font-size: 0.9rem; font-weight: 600; }
       .nav-link:hover { color: var(--accent); }
+      .nav { display: flex; gap: 4px; flex-wrap: wrap; }
+      .nav a { font-family: "Manrope", sans-serif; font-size: 0.85rem; font-weight: 700; padding: 6px 10px; border-radius: 8px; text-decoration: none; color: var(--ink); white-space: nowrap; cursor: pointer; }
+      .nav a:hover { background: rgba(22, 98, 243, 0.08); }
+      .nav a.primary { background: linear-gradient(180deg, var(--accent), var(--accent-strong)); color: #fff; }
+      .nav a.active { background: var(--accent); color: #fff; }
 
       main { width: min(800px, 94vw); margin: 40px auto 80px; }
 
@@ -62,9 +67,7 @@
   <body>
     <nav>
       <a href="/" class="brand"><span class="brand-hoa">HOA</span><span class="brand-proxy">proxy</span></a>
-      <a href="/" class="nav-link">Home</a>
-      <a href="/about" class="nav-link">About</a>
-      <a href="/privacy" class="nav-link">Privacy</a>
+      <div class="nav" id="navContainer"></div>
     </nav>
 
     <main>
@@ -130,5 +133,7 @@
       <h2>10. Contact</h2>
       <p>Questions about these terms? Contact us at <a href="mailto:hello@hoaproxy.org">hello@hoaproxy.org</a></p>
     </main>
+    <script src="/static/js/auth.js"></script>
+    <script>Auth.renderNav(document.getElementById("navContainer"));</script>
   </body>
 </html>

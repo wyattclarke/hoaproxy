@@ -92,23 +92,31 @@ const Auth = (() => {
    */
   function renderNav(container) {
     if (!container) return;
+    var common = '<a class="btn" href="/add-hoa">Add HOA</a>' +
+        '<a class="btn" href="/about">About</a>';
     if (isLoggedIn()) {
-      const user = getCachedUser();
-      const name = (user && user.display_name) || (user && user.email) || "Account";
-      container.innerHTML =
+      container.innerHTML = common +
         '<a class="btn" href="/dashboard">Dashboard</a>' +
         '<a class="btn" href="/my-proxies">My Proxies</a>' +
         '<a class="btn" href="/proposals">Proposals</a>' +
         '<a class="btn" href="/legal">Legal</a>' +
         '<a class="btn" href="/account">Account</a>' +
         '<a class="btn" id="logoutBtn">Logout</a>';
-      const logoutBtn = container.querySelector("#logoutBtn");
+      var logoutBtn = container.querySelector("#logoutBtn");
       if (logoutBtn) logoutBtn.addEventListener("click", logout);
     } else {
-      container.innerHTML =
+      container.innerHTML = common +
         '<a class="btn" href="/legal">Legal</a>' +
         '<a class="btn" href="/login">Login</a>' +
         '<a class="btn primary" href="/register">Register</a>';
+    }
+    // Highlight active page
+    var current = window.location.pathname;
+    var links = container.querySelectorAll("a.btn");
+    for (var i = 0; i < links.length; i++) {
+      if (links[i].getAttribute("href") === current) {
+        links[i].classList.add("active");
+      }
     }
     _injectHamburger(container);
   }
