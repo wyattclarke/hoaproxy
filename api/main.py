@@ -9,6 +9,7 @@ import logging
 import math
 import re
 import shutil
+import threading
 import time
 from pathlib import Path
 from typing import List, Optional
@@ -764,19 +765,23 @@ def _normalize_metadata_type(raw_value: str | None) -> str | None:
     return cleaned
 
 
+_ingest_semaphore = threading.Semaphore(1)  # only one ingestion at a time
+
+
 def _ingest_uploaded_files(hoa_name: str, saved_paths: list[Path]) -> None:
-    settings = load_settings()
-    try:
-        stats = ingest_pdf_paths(hoa_name, saved_paths, settings=settings, show_progress=False)
-        logger.info(
-            "Background ingest complete for %s: indexed=%s skipped=%s failed=%s",
-            hoa_name,
-            stats.indexed,
-            stats.skipped,
-            stats.failed,
-        )
-    except Exception:
-        logger.exception("Background ingest failed for HOA %s", hoa_name)
+    with _ingest_semaphore:
+        settings = load_settings()
+        try:
+            stats = ingest_pdf_paths(hoa_name, saved_paths, settings=settings, show_progress=False)
+            logger.info(
+                "Background ingest complete for %s: indexed=%s skipped=%s failed=%s",
+                hoa_name,
+                stats.indexed,
+                stats.skipped,
+                stats.failed,
+            )
+        except Exception:
+            logger.exception("Background ingest failed for HOA %s", hoa_name)
 
 
 def _safe_relative_document_path(raw_path: str) -> str:
