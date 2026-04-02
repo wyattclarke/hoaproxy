@@ -1328,9 +1328,13 @@
         hoaIntentList.innerHTML = items
           .map(
             (item) => {
-              const reason = item.match_reason === "inside_boundary"
-                ? "Your address is inside this HOA boundary"
-                : "Matched by HOA name";
+              const reasonMap = {
+                "inside_boundary": "Your address is inside this HOA boundary",
+                "near_boundary": "Near your address",
+                "nearby_point": "Near your address",
+                "name_contains": "Matched by HOA name",
+              };
+              const reason = reasonMap[item.match_reason] || "Matched by HOA name";
               return `<div class="intent-item"><a class="hoa-name-link" href="${profileHref(item.hoa)}">${escapeHtml(item.hoa)}</a><div class="suggestion-meta">${reason}</div></div>`;
             }
           )

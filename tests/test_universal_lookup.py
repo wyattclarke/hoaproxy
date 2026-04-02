@@ -128,8 +128,8 @@ class TestUniversalLookup(unittest.TestCase):
         self.assertEqual(suggestions["Point HOA B"]["match_type"], "nearby_point")
         self.assertNotIn("Far HOA", suggestions)
 
-    def test_address_only_promotes_boundary_matches(self) -> None:
-        """When query is an address (no HOA name match), inside-boundary
+    def test_address_only_promotes_all_suggestions(self) -> None:
+        """When query is an address (no HOA name match), all address
         suggestions should be promoted to hoa_matches."""
         geocode_payload = [
             {
@@ -148,7 +148,11 @@ class TestUniversalLookup(unittest.TestCase):
         body = response.json()
         hoa_match_names = [item["hoa"] for item in body["hoa_matches"]]
         self.assertIn("Master HOA", hoa_match_names)
+        self.assertIn("Point HOA A", hoa_match_names)
+        self.assertIn("Point HOA B", hoa_match_names)
         self.assertEqual(body["hoa_matches"][0]["match_reason"], "inside_boundary")
+        # Far HOA should still be excluded
+        self.assertNotIn("Far HOA", hoa_match_names)
 
     def test_point_in_polygon_excludes_hole(self) -> None:
         geo = {

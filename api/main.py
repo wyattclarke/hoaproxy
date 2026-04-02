@@ -1103,6 +1103,9 @@ def _suggestions_for_point(
                 )
                 continue
 
+        # Fall through to point-distance check for HOAs with or without
+        # polygons — an HOA whose boundary is far away may still have a
+        # point marker within a mile.
         lat = row.get("latitude")
         lon = row.get("longitude")
         if lat is None or lon is None:
@@ -2735,12 +2738,11 @@ def universal_lookup(body: UniversalLookupRequest) -> UniversalLookupResponse:
             max_suggestions=body.max_suggestions,
         )
 
-    # Promote inside-boundary address matches to hoa_matches when no name
-    # matches were found — so the user's HOA shows in the primary results.
+    # Promote address suggestions to hoa_matches when no name matches were
+    # found — so the user's nearby HOAs show in the primary results.
     if not hoa_matches:
         for s in suggestions:
-            if s.get("match_type") == "inside_boundary":
-                hoa_matches.append({"hoa": s["hoa"], "match_reason": "inside_boundary"})
+            hoa_matches.append({"hoa": s["hoa"], "match_reason": s.get("match_type", "nearby")})
 
     return UniversalLookupResponse(
         query=query,
