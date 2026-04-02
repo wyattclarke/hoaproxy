@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Top node -->
+  <circle cx="16" cy="5.5" r="4.5" fill="#12233a"/>
+  <!-- Vertical stem from top node down to branch point -->
+  <rect x="14" y="10" width="4" height="5" rx="1" fill="#12233a"/>
+  <!-- Horizontal bar -->
+  <rect x="5" y="14" width="22" height="4" rx="2" fill="#12233a"/>
+  <!-- Left vertical stem -->
+  <rect x="5" y="14" width="4" height="6" rx="1" fill="#12233a"/>
+  <!-- Right vertical stem -->
+  <rect x="23" y="14" width="4" height="6" rx="1" fill="#12233a"/>
+  <!-- Bottom-left node -->
+  <circle cx="7" cy="25.5" r="5" fill="#12233a"/>
+  <!-- Bottom-right node -->
+  <circle cx="25" cy="25.5" r="5" fill="#12233a"/>
+</svg>
