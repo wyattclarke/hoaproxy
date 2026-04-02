@@ -456,7 +456,17 @@
         padding: 8px 10px;
       }
 
-      .address-workflow { margin-top: 12px; border-top: 1px solid #d8e4f7; padding-top: 12px; }
+      .address-resolved-line {
+        font-size: 0.85rem;
+        color: var(--muted);
+        padding: 6px 10px;
+        background: #f4f8ff;
+        border-radius: 8px;
+        margin-bottom: 10px;
+      }
+      .address-resolved-line[hidden] { display: none; }
+
+      .address-workflow { margin-top: 10px; }
       .address-workflow[hidden] { display: none; }
 
       .suggestion-list { display: grid; gap: 8px; }
@@ -830,19 +840,11 @@
     <!-- LOOKUP PANEL -->
     <section class="lookup-section">
       <div id="lookupPanel" class="lookup-panel" hidden>
-        <div class="intent-grid">
-          <article class="intent-card">
-            <h3 class="intent-title">HOA Matches</h3>
-            <div class="intent-list" id="hoaIntentList"></div>
-          </article>
-          <article class="intent-card">
-            <h3 class="intent-title">Address Match</h3>
-            <div id="addressIntentCard"></div>
-          </article>
-        </div>
+        <div id="addressResolvedLine" class="address-resolved-line" hidden></div>
         <div id="lookupStatus" class="status"></div>
+        <div id="hoaIntentList" class="intent-list"></div>
+        <div id="addressIntentCard" hidden></div>
         <section id="addressWorkflow" class="address-workflow" hidden>
-          <h3 class="intent-title">Suggested HOAs</h3>
           <div class="suggestion-list" id="addressSuggestions"></div>
           <div class="mode-row">
             <button class="btn primary" id="multiModeQaBtn" type="button">Ask</button>
@@ -959,6 +961,7 @@
       const toggleMapBtn = document.getElementById("toggleMapBtn");
       const hoaIntentList = document.getElementById("hoaIntentList");
       const addressIntentCard = document.getElementById("addressIntentCard");
+      const addressResolvedLine = document.getElementById("addressResolvedLine");
       const lookupStatus = document.getElementById("lookupStatus");
       const addressWorkflow = document.getElementById("addressWorkflow");
       const addressSuggestions = document.getElementById("addressSuggestions");
@@ -1324,8 +1327,12 @@
         }
         hoaIntentList.innerHTML = items
           .map(
-            (item) =>
-              `<div class="intent-item"><a class="hoa-name-link" href="${profileHref(item.hoa)}">${escapeHtml(item.hoa)}</a><div class="suggestion-meta">Matched by HOA name</div></div>`
+            (item) => {
+              const reason = item.match_reason === "inside_boundary"
+                ? "Your address is inside this HOA boundary"
+                : "Matched by HOA name";
+              return `<div class="intent-item"><a class="hoa-name-link" href="${profileHref(item.hoa)}">${escapeHtml(item.hoa)}</a><div class="suggestion-meta">${reason}</div></div>`;
+            }
           )
           .join("");
       }
@@ -1369,29 +1376,18 @@
 
       function renderAddressIntent(addressLookup, suggestions) {
         if (!addressLookup || !addressLookup.resolved) {
-          addressIntentCard.innerHTML = '<div class="intent-item">No address match from this input.</div>';
+          addressResolvedLine.hidden = true;
           addressWorkflow.hidden = true;
           return;
         }
-        const suggestionsCount = suggestions.length;
         const locationLabel = addressLookup.display_name || "Address resolved";
-        const summaryLine = suggestionsCount
-          ? `${suggestionsCount} HOA suggestion${suggestionsCount === 1 ? "" : "s"} nearby`
-          : "No HOAs registered here yet.";
-        const actionHtml = suggestionsCount
-          ? '<div style="margin-top:8px"><button class="btn primary" id="useAddressBtn" type="button">Use Address Suggestions</button></div>'
-          : `<div style="margin-top:8px"><a class="btn primary" href="/add-hoa?hoa=&address=${encodeURIComponent(locationLabel)}">Add your HOA →</a></div>`;
-        addressIntentCard.innerHTML =
-          `<div class="intent-item"><strong>${escapeHtml(locationLabel)}</strong><div class="suggestion-meta">${summaryLine}</div></div>` +
-          actionHtml;
+        addressResolvedLine.innerHTML = `&#x1F4CD; ${escapeHtml(locationLabel)}`;
+        addressResolvedLine.hidden = false;
 
-        const button = document.getElementById("useAddressBtn");
-        if (button) {
-          button.addEventListener("click", () => {
-            addressWorkflow.hidden = false;
-            renderAddressSuggestions();
-            setLookupStatus("Review HOA selections, then run Ask or Search.", "ok");
-          });
+        if (suggestions.length) {
+          addressWorkflow.hidden = false;
+          renderAddressSuggestions();
+          setLookupStatus("Review HOA selections, then run Ask or Search.", "ok");
         } else {
           addressWorkflow.hidden = true;
         }
@@ -1404,18 +1400,39 @@
             .filter((item) => item.default_selected)
             .map((item) => item.hoa)
         );
+        // Also auto-select any HOA matches (name or boundary-promoted)
+        (payload.hoa_matches || []).forEach((item) => state.selectedHoas.add(item.hoa));
         lookupPanel.hidden = false;
-        // Hide action cards when results are showing
+        // Hide action cards and directory when results are showing
         if (howSection) howSection.style.display = "none";
+        const directoryCard = document.getElementById("directoryCard");
+        const resultsSection = document.querySelector(".results-section");
+        if (directoryCard) directoryCard.hidden = true;
+        if (resultsSection) resultsSection.style.display = "none";
         clearMultiResults();
         setMultiStatus("");
-        renderHoaMatches(payload.hoa_matches || []);
+
+        const hasSuggestions = (payload.address_suggestions || []).length > 0;
+        const hasHoaMatches = (payload.hoa_matches || []).length > 0;
+        const hasAddress = payload.address_lookup && payload.address_lookup.resolved;
+
+        // Show HOA name matches only when there are no address suggestions
+        // (boundary-promoted matches already appear in address suggestions)
+        if (hasHoaMatches && !hasSuggestions) {
+          renderHoaMatches(payload.hoa_matches || []);
+        } else {
+          hoaIntentList.innerHTML = "";
+        }
+
         renderAddressIntent(payload.address_lookup, payload.address_suggestions || []);
-        if (!(payload.hoa_matches || []).length && !(payload.address_lookup && payload.address_lookup.resolved)) {
+
+        if (!hasHoaMatches && !hasAddress) {
           setLookupStatus("No HOA or address match found.", "error");
           return;
         }
-        setLookupStatus("Lookup complete.", "ok");
+        if (!hasSuggestions && hasHoaMatches) {
+          setLookupStatus("Lookup complete.", "ok");
+        }
         setTimeout(function() { lookupPanel.scrollIntoView({ behavior: "smooth", block: "start" }); }, 100);
       }
 
@@ -1503,12 +1520,16 @@
         if (!q) {
           lookupPanel.hidden = true;
           if (howSection) howSection.style.display = "";
+          const resultsSection = document.querySelector(".results-section");
+          if (resultsSection) resultsSection.style.display = "";
           setLookupStatus("");
           return;
         }
         lookupPanel.hidden = false;
         addressWorkflow.hidden = true;
-        setLookupStatus("Looking up HOA names and address...");
+        addressResolvedLine.hidden = true;
+        hoaIntentList.innerHTML = "";
+        setLookupStatus("Searching...");
         try {
           const payload = await fetchJson("/lookup/universal", {
             method: "POST",
@@ -1520,21 +1541,49 @@
         }
       }
 
+      function looksLikeAddress(q) {
+        if (!q) return false;
+        // ZIP code (5 digits, optionally +4)
+        if (/^\d{5}(-\d{4})?$/.test(q)) return true;
+        // Starts with a street number
+        if (/^\d+\s+\w/.test(q)) return true;
+        // Contains common address tokens
+        if (/\b(st|street|ave|avenue|blvd|rd|road|dr|drive|ln|lane|cir|circle|ct|court|way|pl|place)\b/i.test(q)) return true;
+        // Contains a state abbreviation + ZIP or comma-separated city/state
+        if (/,\s*[A-Z]{2}\b/i.test(q)) return true;
+        return false;
+      }
+
       searchInput.addEventListener("input", () => {
         clearTimeout(_searchDebounceTimer);
         _searchDebounceTimer = setTimeout(() => {
-          state.searchQuery = searchInput.value.trim();
+          const q = searchInput.value.trim();
+          state.searchQuery = q;
           state.offset = 0;
-          fetchSummaries();
-        }, 300);
+          if (looksLikeAddress(q)) {
+            runUniversalLookup();
+          } else {
+            // Reset lookup panel for plain text search
+            lookupPanel.hidden = true;
+            addressWorkflow.hidden = true;
+            const resultsSection = document.querySelector(".results-section");
+            if (resultsSection) resultsSection.style.display = "";
+            if (howSection) howSection.style.display = q ? "none" : "";
+            fetchSummaries();
+          }
+        }, 400);
       });
       searchInput.addEventListener("keydown", (e) => {
         if (e.key === "Enter") {
           e.preventDefault();
+          clearTimeout(_searchDebounceTimer);
           runUniversalLookup();
         }
       });
-      searchSubmitBtn.addEventListener("click", runUniversalLookup);
+      searchSubmitBtn.addEventListener("click", () => {
+        clearTimeout(_searchDebounceTimer);
+        runUniversalLookup();
+      });
       if (focusSearchBtn) {
         focusSearchBtn.addEventListener("click", (e) => {
           e.preventDefault();

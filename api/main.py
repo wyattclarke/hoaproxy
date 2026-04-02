@@ -840,7 +840,7 @@ def _geocode_from_query(query: str) -> dict | None:
     try:
         resp = requests.get(
             "https://nominatim.openstreetmap.org/search",
-            params={"q": cleaned, "format": "json", "limit": 1},
+            params={"q": cleaned, "format": "json", "limit": 1, "countrycodes": "us"},
             headers={"User-Agent": "hoaproxy/0.2 (local-ui-location)"},
             timeout=20,
         )
@@ -2693,6 +2693,13 @@ def universal_lookup(body: UniversalLookupRequest) -> UniversalLookupResponse:
             rows=location_rows,
             max_suggestions=body.max_suggestions,
         )
+
+    # Promote inside-boundary address matches to hoa_matches when no name
+    # matches were found — so the user's HOA shows in the primary results.
+    if not hoa_matches:
+        for s in suggestions:
+            if s.get("match_type") == "inside_boundary":
+                hoa_matches.append({"hoa": s["hoa"], "match_reason": "inside_boundary"})
 
     return UniversalLookupResponse(
         query=query,
