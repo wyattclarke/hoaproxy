@@ -1931,12 +1931,18 @@ def admin_backup(request: Request):
     uploaded_blobs: list[str] = []
     errors: list[str] = []
 
-    # --- 1. SQLite DB snapshot ---
+    # --- 1. SQLite DB snapshot (incremental backup, low memory) ---
+    # Copies 50 pages at a time with 50ms sleep between batches,
+    # avoiding the memory spike of VACUUM INTO.
     tmp_dir = tempfile.mkdtemp()
     tmp_db = os.path.join(tmp_dir, "backup.db")
     try:
-        with db.get_connection(settings.db_path) as conn:
-            conn.execute(f"VACUUM INTO '{tmp_db}'")
+        import sqlite3 as _sqlite3
+        src = _sqlite3.connect(settings.db_path)
+        dst = _sqlite3.connect(tmp_db)
+        src.backup(dst, pages=50, sleep=0.05)
+        dst.close()
+        src.close()
         db_blob_name = f"db/hoa_index-{stamp}.db"
         gcs_bucket.blob(db_blob_name).upload_from_filename(tmp_db)
         uploaded_blobs.append(db_blob_name)
