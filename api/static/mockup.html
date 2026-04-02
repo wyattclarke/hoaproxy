@@ -1,0 +1,568 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="ga-measurement-id" content="G-BV7JXG4JDE" />
+    <script src="/static/js/analytics.js"></script>
+    <link rel="icon" href="/favicon.ico" sizes="32x32">
+    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+    <title>HOAproxy — Mockup</title>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Space+Grotesk:wght@600;700&display=swap");
+
+      :root {
+        --bg: #eef5ff;
+        --ink: #12233a;
+        --muted: #587091;
+        --line: #d3e0f4;
+        --panel: #fff;
+        --accent: #1662f3;
+        --accent-strong: #0d49be;
+        --ok: #177c45;
+        --teal: #0d9488;
+        --amber: #d97706;
+      }
+
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+
+      body {
+        font-family: "Manrope", "Segoe UI", sans-serif;
+        color: var(--ink);
+        background: linear-gradient(180deg, #f8fbff 0%, var(--bg) 40%, #edf3ff 100%);
+        min-height: 100vh;
+        -webkit-text-size-adjust: 100%;
+      }
+
+      /* ─────────────────────────────
+         BASE = MOBILE (< 600px)
+         ───────────────────────────── */
+
+      /* ── NAV ── */
+      nav {
+        padding: 16px 16px 0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .brand {
+        display: inline-flex;
+        align-items: baseline;
+        gap: 0.05em;
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 1.5rem;
+        font-weight: 700;
+        text-decoration: none;
+        flex-shrink: 0;
+      }
+
+      .brand-hoa { color: #0f2f6d; letter-spacing: 0.03em; }
+      .brand-proxy { color: #1a66ff; }
+
+      .nav-links {
+        display: flex;
+        gap: 4px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+      }
+
+      .nav-links a {
+        font-family: "Manrope", sans-serif;
+        font-size: 0.8rem;
+        font-weight: 700;
+        padding: 6px 10px;
+        border-radius: 8px;
+        text-decoration: none;
+        color: var(--ink);
+        white-space: nowrap;
+        transition: background 0.15s;
+      }
+
+      .nav-links a:hover { background: rgba(22, 98, 243, 0.08); }
+      .nav-links a.primary {
+        background: linear-gradient(180deg, var(--accent), var(--accent-strong));
+        color: #fff;
+      }
+      .nav-links a.primary:hover { opacity: 0.9; }
+
+      /* ── HERO: PITCH COLUMNS ── */
+      .hero {
+        padding: 36px 16px 28px;
+      }
+
+      .pitch-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 24px;
+      }
+
+      .pitch-col {
+        padding-left: 18px;
+        border-left: 3px solid var(--accent);
+      }
+
+      .pitch-col:nth-child(2) { border-left-color: var(--teal); }
+      .pitch-col:nth-child(3) { border-left-color: var(--amber); }
+
+      .pitch-icon {
+        width: 44px;
+        height: 44px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 12px;
+        background: rgba(22, 98, 243, 0.1);
+        color: var(--accent);
+      }
+
+      .pitch-icon svg { width: 22px; height: 22px; }
+
+      .pitch-col:nth-child(2) .pitch-icon {
+        background: rgba(13, 148, 136, 0.1);
+        color: var(--teal);
+      }
+
+      .pitch-col:nth-child(3) .pitch-icon {
+        background: rgba(217, 119, 6, 0.1);
+        color: var(--amber);
+      }
+
+      .pitch-title {
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 1.25rem;
+        font-weight: 700;
+        line-height: 1.15;
+        letter-spacing: -0.02em;
+        margin-bottom: 6px;
+      }
+
+      .pitch-desc {
+        font-size: 0.9rem;
+        line-height: 1.6;
+        color: var(--muted);
+      }
+
+      /* ── SEARCH BAR ── */
+      .search-section {
+        padding: 0 16px;
+        margin-top: 32px;
+      }
+
+      .search-bar {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 8px;
+        background: #fff;
+        border: 2px solid var(--line);
+        border-radius: 14px;
+        padding: 10px;
+        box-shadow: 0 6px 24px rgba(17, 40, 74, 0.08);
+        transition: border-color 0.2s, box-shadow 0.2s;
+      }
+
+      .search-bar:focus-within {
+        border-color: var(--accent);
+        box-shadow: 0 6px 24px rgba(22, 98, 243, 0.12);
+      }
+
+      .search-bar input {
+        border: none;
+        outline: none;
+        font: inherit;
+        font-size: 1rem;
+        color: var(--ink);
+        background: transparent;
+        padding: 4px 2px;
+      }
+
+      .search-bar input::placeholder { color: #a0b4cc; }
+
+      .search-btn {
+        padding: 12px 24px;
+        border: none;
+        border-radius: 10px;
+        background: linear-gradient(180deg, var(--accent), var(--accent-strong));
+        color: #fff;
+        font-family: "Manrope", sans-serif;
+        font-size: 0.95rem;
+        font-weight: 800;
+        cursor: pointer;
+        width: 100%;
+        transition: opacity 0.15s;
+      }
+
+      .search-btn:hover { opacity: 0.88; }
+
+      .search-hint {
+        text-align: center;
+        margin-top: 12px;
+        color: var(--muted);
+        font-size: 0.82rem;
+        line-height: 2;
+      }
+
+      .search-hint span {
+        display: inline-block;
+        background: #f0f5ff;
+        border: 1px solid #d6e4fa;
+        border-radius: 999px;
+        padding: 3px 10px;
+        margin: 2px 2px;
+        font-size: 0.78rem;
+        font-weight: 600;
+        color: #3b6bb5;
+      }
+
+      /* ── HOW IT WORKS: ACTION CARDS ── */
+      .how-section {
+        margin-top: 48px;
+        padding: 0 16px;
+      }
+
+      .section-label {
+        text-align: center;
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 0.78rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: var(--accent);
+        margin-bottom: 8px;
+      }
+
+      .section-heading {
+        text-align: center;
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 1.4rem;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        margin-bottom: 24px;
+      }
+
+      .action-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 14px;
+      }
+
+      .action-card {
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        padding: 24px 20px;
+        box-shadow: 0 4px 16px rgba(16, 40, 73, 0.05);
+        display: flex;
+        align-items: flex-start;
+        gap: 16px;
+        transition: transform 0.2s, box-shadow 0.2s;
+      }
+
+      .action-num {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        height: 36px;
+        min-width: 36px;
+        border-radius: 50%;
+        background: var(--bg);
+        border: 2px solid var(--line);
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 0.9rem;
+        font-weight: 700;
+        color: var(--accent);
+      }
+
+      .action-body h3 {
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 1.05rem;
+        font-weight: 700;
+        margin-bottom: 4px;
+      }
+
+      .action-body p {
+        font-size: 0.88rem;
+        line-height: 1.55;
+        color: var(--muted);
+        margin-bottom: 10px;
+      }
+
+      .action-link {
+        display: inline-block;
+        font-size: 0.85rem;
+        font-weight: 800;
+        color: var(--accent);
+        text-decoration: none;
+        transition: color 0.15s;
+      }
+
+      .action-link:hover { color: var(--accent-strong); text-decoration: underline; }
+
+      .map-link {
+        text-align: center;
+        margin-top: 16px;
+        font-size: 0.85rem;
+        color: var(--muted);
+      }
+
+      .map-link a {
+        color: var(--accent);
+        font-weight: 700;
+        text-decoration: none;
+      }
+
+      .map-link a:hover { text-decoration: underline; }
+
+      /* ── FOOTER ── */
+      footer {
+        margin-top: 48px;
+        padding: 28px 16px;
+        border-top: 1px solid var(--line);
+        text-align: center;
+        color: var(--muted);
+        font-size: 0.85rem;
+        line-height: 1.6;
+      }
+
+      footer a {
+        color: var(--accent);
+        font-weight: 700;
+        text-decoration: none;
+      }
+
+      footer a:hover { text-decoration: underline; }
+
+      /* ─────────────────────────────
+         TABLET (600px+)
+         ───────────────────────────── */
+      @media (min-width: 600px) {
+        nav { padding: 20px 24px 0; }
+        .brand { font-size: 1.65rem; }
+
+        .nav-links { gap: 6px; }
+        .nav-links a { font-size: 0.85rem; padding: 7px 14px; }
+
+        .hero { padding: 48px 24px 36px; }
+        .pitch-grid { gap: 28px; }
+        .pitch-title { font-size: 1.35rem; }
+        .pitch-desc { font-size: 0.95rem; }
+
+        .search-section {
+          max-width: 560px;
+          margin: 40px auto 0;
+          padding: 0 24px;
+        }
+
+        .search-bar {
+          grid-template-columns: 1fr auto;
+          padding: 8px 8px 8px 18px;
+          gap: 10px;
+        }
+
+        .search-btn { width: auto; padding: 12px 24px; }
+
+        .how-section { padding: 0 24px; margin-top: 56px; }
+        .section-heading { font-size: 1.6rem; margin-bottom: 28px; }
+
+        .action-card { padding: 28px 24px; }
+
+        footer { padding: 32px 24px; margin-top: 56px; font-size: 0.88rem; }
+      }
+
+      /* ─────────────────────────────
+         DESKTOP (900px+)
+         ───────────────────────────── */
+      @media (min-width: 900px) {
+        nav {
+          max-width: 1200px;
+          margin: 0 auto;
+          padding: 24px 32px 0;
+        }
+
+        .brand { font-size: 1.8rem; }
+
+        .nav-links { gap: 8px; }
+        .nav-links a { font-size: 0.88rem; padding: 8px 16px; }
+
+        .hero {
+          max-width: 1200px;
+          margin: 0 auto;
+          padding: 72px 32px 56px;
+        }
+
+        .pitch-grid {
+          grid-template-columns: repeat(3, 1fr);
+          gap: 40px;
+        }
+
+        .pitch-col {
+          padding-left: 24px;
+          border-left-width: 4px;
+        }
+
+        .pitch-icon { width: 56px; height: 56px; border-radius: 14px; margin-bottom: 20px; }
+        .pitch-icon svg { width: 28px; height: 28px; }
+        .pitch-title { font-size: 1.55rem; margin-bottom: 12px; }
+        .pitch-desc { font-size: 1rem; line-height: 1.65; }
+
+        .search-section {
+          max-width: 720px;
+          margin: 56px auto 0;
+          padding: 0 32px;
+        }
+
+        .search-bar {
+          border-radius: 16px;
+          padding: 8px 8px 8px 20px;
+          gap: 12px;
+          box-shadow: 0 8px 32px rgba(17, 40, 74, 0.08);
+        }
+
+        .search-bar input { font-size: 1.05rem; }
+        .search-btn { padding: 12px 28px; font-size: 0.95rem; }
+
+        .search-hint { font-size: 0.88rem; margin-top: 14px; }
+        .search-hint span { font-size: 0.82rem; padding: 4px 12px; }
+
+        .how-section {
+          max-width: 1200px;
+          margin: 80px auto 0;
+          padding: 0 32px;
+        }
+
+        .section-label { font-size: 0.82rem; margin-bottom: 12px; }
+        .section-heading { font-size: 2rem; margin-bottom: 40px; }
+
+        .action-grid {
+          grid-template-columns: repeat(3, 1fr);
+          gap: 24px;
+        }
+
+        .action-card {
+          flex-direction: column;
+          align-items: center;
+          text-align: center;
+          padding: 32px 28px;
+          box-shadow: 0 4px 20px rgba(16, 40, 73, 0.06);
+        }
+
+        .action-card:hover {
+          transform: translateY(-4px);
+          box-shadow: 0 12px 36px rgba(16, 40, 73, 0.12);
+        }
+
+        .action-num { width: 40px; height: 40px; min-width: 40px; margin-bottom: 4px; }
+
+        .action-body h3 { font-size: 1.15rem; margin-bottom: 10px; }
+        .action-body p { font-size: 0.93rem; line-height: 1.6; margin-bottom: 20px; }
+        .action-link { font-size: 0.9rem; }
+
+        .map-link { margin-top: 20px; font-size: 0.9rem; }
+
+        footer {
+          max-width: 1200px;
+          margin: 80px auto 0;
+          padding: 40px 32px;
+          font-size: 0.92rem;
+        }
+      }
+    </style>
+  </head>
+  <body>
+
+    <!-- NAV -->
+    <nav>
+      <a class="brand" href="/">
+        <span class="brand-hoa">HOA</span><span class="brand-proxy">proxy</span>
+      </a>
+      <div class="nav-links">
+        <a href="/about">About</a>
+        <a href="/login">Login</a>
+        <a class="primary" href="/add-hoa">Add HOA</a>
+      </div>
+    </nav>
+
+    <!-- HERO: THREE-COLUMN PITCH -->
+    <section class="hero">
+      <div class="pitch-grid">
+        <div class="pitch-col">
+          <div class="pitch-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+          </div>
+          <h2 class="pitch-title">Transparent rules</h2>
+          <p class="pitch-desc">Searchable documents, with a chatbot. Upload your CC&Rs, bylaws, and rules — then ask questions in plain English.</p>
+        </div>
+        <div class="pitch-col">
+          <div class="pitch-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          </div>
+          <h2 class="pitch-title">Guerrilla online voting</h2>
+          <p class="pitch-desc">HOAs rarely allow online voting, but almost all allow proxy votes. Assign your vote to a trusted neighbor right here. Or nominate yourself, gather proxies, and join the board!</p>
+        </div>
+        <div class="pitch-col">
+          <div class="pitch-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          </div>
+          <h2 class="pitch-title">Community proposals</h2>
+          <p class="pitch-desc">Three co-signers required. Confirmed residents only. No comments. No gossip. Serious proposals from real neighbors.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- SEARCH BAR -->
+    <section class="search-section">
+      <div class="search-bar">
+        <input type="text" placeholder="HOA name or home address..." />
+        <button class="search-btn" type="button">Search</button>
+      </div>
+      <div class="search-hint">
+        Try: <span>Parkway Community Association</span> <span>123 Main St Cary NC</span> <span>Sunset Pines HOA</span>
+      </div>
+    </section>
+
+    <!-- HOW IT WORKS -->
+    <section class="how-section">
+      <div class="section-label">Get started</div>
+      <h2 class="section-heading">Three ways to take action</h2>
+      <div class="action-grid">
+        <article class="action-card">
+          <div class="action-num">1</div>
+          <div class="action-body">
+            <h3>Find My HOA</h3>
+            <p>Search your HOA or address to confirm your community and browse its governing documents.</p>
+            <a class="action-link" href="#">Start searching &rarr;</a>
+          </div>
+        </article>
+        <article class="action-card">
+          <div class="action-num">2</div>
+          <div class="action-body">
+            <h3>Assign My Vote</h3>
+            <p>Choose one trusted person who can vote for you, then review and e-sign your proxy form.</p>
+            <a class="action-link" href="#">Start a proxy &rarr;</a>
+          </div>
+        </article>
+        <article class="action-card">
+          <div class="action-num">3</div>
+          <div class="action-body">
+            <h3>Represent My Neighbors</h3>
+            <p>Sign up so neighbors in your community can choose you as their proxy delegate.</p>
+            <a class="action-link" href="#">Become a delegate &rarr;</a>
+          </div>
+        </article>
+      </div>
+      <div class="map-link">
+        Or <a href="#">browse the HOA map</a> for geographic context.
+      </div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer>
+      <p>HOAproxy is a free, open-source civic organizing platform to empower HOA residents.<br>
+      Join the effort at <a href="https://github.com/wyattclarke/hoaproxy" target="_blank" rel="noopener noreferrer">github.com/wyattclarke/hoaproxy</a></p>
+    </footer>
+
+  </body>
+</html>

@@ -1425,6 +1425,11 @@ def _render_searchable_document_html(hoa_name: str, relative_path: str, chunks: 
 </html>"""
 
 
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon_ico() -> FileResponse:
+    return FileResponse(STATIC_DIR / "favicon.ico", media_type="image/x-icon")
+
+
 @app.get("/robots.txt", include_in_schema=False)
 def robots_txt() -> FileResponse:
     return FileResponse(STATIC_DIR / "robots.txt", media_type="text/plain")
