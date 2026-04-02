@@ -1911,35 +1911,76 @@ def admin_send_cost_report(request: Request, email: Optional[str] = None):
 
 @app.post("/admin/backup")
 def admin_backup(request: Request):
-    """Snapshot the SQLite DB and upload to GCS."""
+    """Snapshot the SQLite DB and uploaded PDFs to GCS, with retention."""
     _require_admin(request)
+    import tarfile
     import tempfile
     from datetime import datetime, timezone
     from google.cloud import storage as gcs
 
     settings = load_settings()
     bucket_name = os.environ.get("BACKUP_GCS_BUCKET", "hoaproxy-backups")
+    max_backups = int(os.environ.get("BACKUP_MAX_COPIES", "7"))
 
-    # Safe, consistent copy of the DB (no reader locking)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    client = gcs.Client()
+    gcs_bucket = client.bucket(bucket_name)
+    uploaded_blobs: list[str] = []
+    errors: list[str] = []
+
+    # --- 1. SQLite DB snapshot ---
     tmp_dir = tempfile.mkdtemp()
-    tmp_path = os.path.join(tmp_dir, "backup.db")
+    tmp_db = os.path.join(tmp_dir, "backup.db")
     try:
         with db.get_connection(settings.db_path) as conn:
-            conn.execute(f"VACUUM INTO '{tmp_path}'")
-
-        stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
-        blob_name = f"db/hoa_index-{stamp}.db"
-
-        client = gcs.Client()
-        bucket = client.bucket(bucket_name)
-        blob = bucket.blob(blob_name)
-        blob.upload_from_filename(tmp_path)
-
-        return {"status": "ok", "bucket": bucket_name, "blob": blob_name}
+            conn.execute(f"VACUUM INTO '{tmp_db}'")
+        db_blob_name = f"db/hoa_index-{stamp}.db"
+        gcs_bucket.blob(db_blob_name).upload_from_filename(tmp_db)
+        uploaded_blobs.append(db_blob_name)
+    except Exception as exc:
+        errors.append(f"db: {exc}")
     finally:
-        if os.path.exists(tmp_path):
-            os.unlink(tmp_path)
-        os.rmdir(tmp_dir)
+        if os.path.exists(tmp_db):
+            os.unlink(tmp_db)
+        if os.path.isdir(tmp_dir):
+            os.rmdir(tmp_dir)
+
+    # --- 2. PDF docs tarball ---
+    docs_root = settings.docs_root
+    if docs_root.exists() and any(docs_root.iterdir()):
+        tmp_tar = None
+        try:
+            tmp_tar = tempfile.NamedTemporaryFile(suffix=".tar.gz", delete=False)
+            with tarfile.open(tmp_tar.name, "w:gz") as tar:
+                tar.add(str(docs_root), arcname=docs_root.name)
+            docs_blob_name = f"docs/hoa_docs-{stamp}.tar.gz"
+            gcs_bucket.blob(docs_blob_name).upload_from_filename(tmp_tar.name)
+            uploaded_blobs.append(docs_blob_name)
+        except Exception as exc:
+            errors.append(f"docs: {exc}")
+        finally:
+            if tmp_tar and os.path.exists(tmp_tar.name):
+                os.unlink(tmp_tar.name)
+
+    # --- 3. Retention: keep only the most recent backups ---
+    for prefix in ("db/", "docs/"):
+        try:
+            blobs = list(gcs_bucket.list_blobs(prefix=prefix))
+            blobs.sort(key=lambda b: b.name, reverse=True)
+            for old_blob in blobs[max_backups:]:
+                old_blob.delete()
+        except Exception as exc:
+            errors.append(f"retention({prefix}): {exc}")
+
+    if errors and not uploaded_blobs:
+        raise HTTPException(status_code=500, detail="; ".join(errors))
+
+    return {
+        "status": "ok" if not errors else "partial",
+        "uploaded": uploaded_blobs,
+        "errors": errors or None,
+        "retention": f"keeping last {max_backups}",
+    }
 
 
 # ---------------------------------------------------------------------------

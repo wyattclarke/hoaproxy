@@ -17,11 +17,11 @@ services:
     env_file:
       - settings.env
     volumes:
-      - ./casnc_hoa_docs:/app/casnc_hoa_docs:ro
+      - ./hoa_docs:/app/hoa_docs:ro
       - ./data:/app/data
       - ./settings.env:/app/settings.env:ro
     environment:
-      - HOA_DOCS_ROOT=/app/casnc_hoa_docs
+      - HOA_DOCS_ROOT=/app/hoa_docs
       - HOA_DB_PATH=/app/data/hoa_index.db
       - QDRANT_URL=http://qdrant:6333
 

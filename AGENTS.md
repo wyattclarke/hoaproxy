@@ -33,7 +33,7 @@ Key values:
 - `OPENAI_API_KEY` — secret, get from OpenAI dashboard
 - `JWT_SECRET` — secret, use a strong random string in production
 - `HOA_DB_PATH=data/hoa_index.db`
-- `HOA_DOCS_ROOT=casnc_hoa_docs`
+- `HOA_DOCS_ROOT=hoa_docs`
 - `QDRANT_URL=http://localhost:6333` (local; no API key needed locally)
 - `HOA_ENABLE_OCR=1`, `HOA_OCR_DPI=300`
 - `HOA_CHUNK_CHAR_LIMIT=1800`, `HOA_CHUNK_OVERLAP=200`
@@ -87,8 +87,7 @@ ETL pipeline in `scripts/legal/`:
 
 ## Data Directories (not in git)
 - `data/` — SQLite DBs, Qdrant local store
-- `casnc_hoa_docs/` — Main HOA document library
-- `scraped_hoa_docs/` — Uploaded HOA PDFs
+- `hoa_docs/` — HOA document library (uploaded PDFs)
 - `legal_corpus/` — Raw/normalized law texts
 - `settings.env` — Secrets
 

@@ -11,8 +11,7 @@ settings.env
 *.json
 
 # docs (PDFs)
-casnc_hoa_docs/
-scraped_hoa_docs/
+hoa_docs/
 legal_corpus/
 
 # Personal / business documents

@@ -18,7 +18,7 @@ This must cover:
 
 ## Repo Familiarization Snapshot (2026-02-28)
 - Current system is a document ingestion + retrieval stack using SQLite + Qdrant + OpenAI embeddings.
-- Primary inputs today are HOA community PDFs under `casnc_hoa_docs/` and uploaded HOA files.
+- Primary inputs today are HOA community PDFs under `hoa_docs/` and uploaded HOA files.
 - Existing schema tracks HOAs, documents, chunks, and HOA location metadata (`hoaware/db.py`).
 - Existing app copy already references legal basis examples in `api/static/about.html`, but there is no structured 50-state law corpus or normalized rule extraction pipeline yet.
 - Current local DB sample shows limited jurisdiction coverage (`NC` plus blanks), so jurisdictional legal intelligence is not yet first-class.

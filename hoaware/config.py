@@ -55,7 +55,7 @@ class Settings:
 
 
 def load_settings() -> Settings:
-    docs_root = Path(os.environ.get("HOA_DOCS_ROOT", "casnc_hoa_docs"))
+    docs_root = Path(os.environ.get("HOA_DOCS_ROOT", "hoa_docs"))
     db_path = Path(os.environ.get("HOA_DB_PATH", "data/hoa_index.db"))
     return Settings(
         docs_root=docs_root,

@@ -50,7 +50,7 @@ Open `http://127.0.0.1:8000`.
 |---|---|---|
 | `OPENAI_API_KEY` | OpenAI API key for embeddings and Q&A | Required for search/QA |
 | `JWT_SECRET` | Secret key for JWT auth tokens | Required |
-| `HOA_DOCS_ROOT` | Directory for HOA PDF uploads | Optional (default: `casnc_hoa_docs`) |
+| `HOA_DOCS_ROOT` | Directory for HOA PDF uploads | Optional (default: `hoa_docs`) |
 | `HOA_DB_PATH` | SQLite database path | Optional (default: `data/hoa_index.db`) |
 | `QDRANT_URL` | Qdrant vector DB endpoint | Optional (default: embedded local) |
 | `HOA_ENABLE_OCR` | Enable Tesseract OCR for scanned PDFs | Optional (default: `1`) |

@@ -12,7 +12,7 @@ settings.env
 *.json
 !hoaware-598872615131.json
 data/
-casnc_hoa_docs/
+hoa_docs/
 
 # OS/editor
 .DS_Store
