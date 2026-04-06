@@ -292,8 +292,11 @@ _STREET_RE = re.compile(
     re.IGNORECASE,
 )
 _EARTH_RADIUS_M = 6371000.0
-_NEAR_BOUNDARY_M = 250.0
-_NEAR_POINT_M = 1609.0
+_NEAR_BOUNDARY_M = 3219.0   # 2 miles — initial search radius for boundaries
+_NEAR_POINT_M = 3219.0      # 2 miles — initial search radius for point markers
+_EXPANDED_RADIUS_M = 8047.0  # 5 miles — expanded radius when fewer than 3 results
+_MIN_SUGGESTIONS = 3         # expand radius if fewer than this many results
+_MAX_SUGGESTIONS_DEFAULT = 10
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 logger = logging.getLogger(__name__)
 
@@ -374,6 +377,9 @@ class AddressSuggestion(BaseModel):
     default_selected: bool
     distance_m: float
     reason: str
+    latitude: float | None = None
+    longitude: float | None = None
+    boundary_geojson: dict | None = None
 
 
 class UniversalLookupRequest(BaseModel):
@@ -1054,12 +1060,14 @@ def _polygon_area_m2(polygon: list[list[tuple[float, float]]]) -> float:
     return max(0.0, outer - holes)
 
 
-def _suggestions_for_point(
+def _collect_nearby_candidates(
     point_lat: float,
     point_lon: float,
     rows: list[dict],
-    max_suggestions: int,
+    boundary_radius_m: float,
+    point_radius_m: float,
 ) -> list[dict]:
+    """Collect all HOA candidates within the given radii."""
     suggestions: list[dict] = []
     for row in rows:
         hoa_name = str(row.get("hoa") or "").strip()
@@ -1067,6 +1075,13 @@ def _suggestions_for_point(
             continue
         boundary = row.get("boundary_geojson")
         polygons = _extract_geojson_polygons(boundary) if boundary else []
+        row_lat = row.get("latitude")
+        row_lon = row.get("longitude")
+        geo_fields = {
+            "latitude": float(row_lat) if row_lat is not None else None,
+            "longitude": float(row_lon) if row_lon is not None else None,
+            "boundary_geojson": boundary if boundary else None,
+        }
         inside_areas: list[float] = []
         for polygon in polygons:
             if _point_in_polygon(point_lon, point_lat, polygon):
@@ -1082,13 +1097,14 @@ def _suggestions_for_point(
                     "reason": "Address point is inside HOA boundary polygon.",
                     "_rank_area": min(inside_areas),
                     "_rank_distance": 0.0,
+                    **geo_fields,
                 }
             )
             continue
 
         if polygons:
             boundary_distance = _distance_to_geojson_boundary_m(point_lon, point_lat, boundary)
-            if boundary_distance is not None and boundary_distance <= _NEAR_BOUNDARY_M:
+            if boundary_distance is not None and boundary_distance <= boundary_radius_m:
                 suggestions.append(
                     {
                         "hoa": hoa_name,
@@ -1099,6 +1115,7 @@ def _suggestions_for_point(
                         "reason": "Address point is close to HOA boundary polygon.",
                         "_rank_area": float("inf"),
                         "_rank_distance": float(boundary_distance),
+                        **geo_fields,
                     }
                 )
                 continue
@@ -1106,15 +1123,13 @@ def _suggestions_for_point(
         # Fall through to point-distance check for HOAs with or without
         # polygons — an HOA whose boundary is far away may still have a
         # point marker within a mile.
-        lat = row.get("latitude")
-        lon = row.get("longitude")
-        if lat is None or lon is None:
+        if row_lat is None or row_lon is None:
             continue
         try:
-            point_distance = _haversine_m(point_lat, point_lon, float(lat), float(lon))
+            point_distance = _haversine_m(point_lat, point_lon, float(row_lat), float(row_lon))
         except Exception:
             continue
-        if point_distance <= _NEAR_POINT_M:
+        if point_distance <= point_radius_m:
             suggestions.append(
                 {
                     "hoa": hoa_name,
@@ -1125,8 +1140,30 @@ def _suggestions_for_point(
                     "reason": "HOA has a nearby mapped point location.",
                     "_rank_area": float("inf"),
                     "_rank_distance": float(point_distance),
+                    **geo_fields,
                 }
             )
+    return suggestions
+
+
+def _suggestions_for_point(
+    point_lat: float,
+    point_lon: float,
+    rows: list[dict],
+    max_suggestions: int,
+) -> list[dict]:
+    # First pass: 2-mile radius
+    suggestions = _collect_nearby_candidates(
+        point_lat, point_lon, rows, _NEAR_BOUNDARY_M, _NEAR_POINT_M,
+    )
+
+    # If too few results, expand to 5 miles
+    if len(suggestions) < _MIN_SUGGESTIONS:
+        suggestions = _collect_nearby_candidates(
+            point_lat, point_lon, rows, _EXPANDED_RADIUS_M, _EXPANDED_RADIUS_M,
+        )
+
+    cap = min(max_suggestions, _MAX_SUGGESTIONS_DEFAULT)
 
     priority = {"inside_boundary": 0, "near_boundary": 1, "nearby_point": 2}
     suggestions.sort(
@@ -1139,17 +1176,22 @@ def _suggestions_for_point(
     )
 
     cleaned: list[dict] = []
-    for item in suggestions[:max_suggestions]:
-        cleaned.append(
-            {
-                "hoa": str(item["hoa"]),
-                "match_type": str(item["match_type"]),
-                "confidence": str(item["confidence"]),
-                "default_selected": bool(item["default_selected"]),
-                "distance_m": float(item["distance_m"]),
-                "reason": str(item["reason"]),
-            }
-        )
+    for item in suggestions[:cap]:
+        entry: dict = {
+            "hoa": str(item["hoa"]),
+            "match_type": str(item["match_type"]),
+            "confidence": str(item["confidence"]),
+            "default_selected": bool(item["default_selected"]),
+            "distance_m": float(item["distance_m"]),
+            "reason": str(item["reason"]),
+        }
+        if item.get("latitude") is not None:
+            entry["latitude"] = float(item["latitude"])
+        if item.get("longitude") is not None:
+            entry["longitude"] = float(item["longitude"])
+        if item.get("boundary_geojson"):
+            entry["boundary_geojson"] = item["boundary_geojson"]
+        cleaned.append(entry)
     return cleaned
 
 
@@ -1428,6 +1470,7 @@ def _render_searchable_document_html(hoa_name: str, relative_path: str, chunks: 
 </html>"""
 
 
+@app.head("/favicon.ico", include_in_schema=False)
 @app.get("/favicon.ico", include_in_schema=False)
 def favicon_ico() -> FileResponse:
     return FileResponse(STATIC_DIR / "favicon.ico", media_type="image/x-icon")
@@ -2922,6 +2965,13 @@ async def upload_documents(
         raise HTTPException(status_code=400, detail="OPENAI_API_KEY is required for ingestion")
     if not files:
         raise HTTPException(status_code=400, detail="At least one file is required")
+    MAX_UPLOAD_BYTES = 25 * 1024 * 1024  # 25 MB per file
+    for upload in files:
+        upload.file.seek(0, 2)
+        size = upload.file.tell()
+        upload.file.seek(0)
+        if size > MAX_UPLOAD_BYTES:
+            raise HTTPException(status_code=413, detail=f"File '{upload.filename}' exceeds 25 MB limit ({size // 1024 // 1024} MB)")
 
     settings.docs_root.mkdir(parents=True, exist_ok=True)
     hoa_dir = settings.docs_root / resolved_hoa
@@ -3018,6 +3068,13 @@ async def upload_documents_anonymous(
         raise HTTPException(status_code=400, detail="OPENAI_API_KEY is required for ingestion")
     if not files:
         raise HTTPException(status_code=400, detail="At least one file is required")
+    MAX_UPLOAD_BYTES = 25 * 1024 * 1024  # 25 MB per file
+    for upload in files:
+        upload.file.seek(0, 2)
+        size = upload.file.tell()
+        upload.file.seek(0)
+        if size > MAX_UPLOAD_BYTES:
+            raise HTTPException(status_code=413, detail=f"File '{upload.filename}' exceeds 25 MB limit ({size // 1024 // 1024} MB)")
 
     settings.docs_root.mkdir(parents=True, exist_ok=True)
     hoa_dir = settings.docs_root / resolved_hoa

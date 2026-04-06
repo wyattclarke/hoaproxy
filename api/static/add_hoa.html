@@ -5,7 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="ga-measurement-id" content="G-BV7JXG4JDE" />
     <script src="/static/js/analytics.js"></script>
-    <link rel="icon" href="/favicon.ico" sizes="32x32">
+    <link rel="icon" href="/favicon.ico" sizes="48x48">
+    <link rel="icon" href="/static/favicon-48x48.png" type="image/png" sizes="48x48">
     <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
     <title>HOAproxy | Add HOA</title>
@@ -258,6 +259,7 @@
           <div class="full">
             <label for="files" class="req">PDF Documents</label>
             <input id="files" type="file" accept=".pdf,application/pdf" multiple />
+            <div class="hint">Max 25 MB per file.</div>
           </div>
 
           <div class="full" id="emailRow" hidden>
@@ -388,6 +390,13 @@
         if (!files.files.length) {
           setStatus("Choose at least one PDF file.", "error");
           return;
+        }
+        const MAX_FILE_MB = 25;
+        for (const file of files.files) {
+          if (file.size > MAX_FILE_MB * 1024 * 1024) {
+            setStatus(`"${file.name}" exceeds the ${MAX_FILE_MB} MB limit.`, "error");
+            return;
+          }
         }
         if (!hasLocation()) {
           setStatus("Add location info (address, coordinates, and/or boundary polygon).", "error");

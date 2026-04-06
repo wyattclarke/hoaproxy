@@ -21,6 +21,8 @@ COST_OPENAI_CHAT_INPUT_PER_1M = float(os.environ.get("COST_OPENAI_CHAT_INPUT_PER
 COST_OPENAI_CHAT_OUTPUT_PER_1M = float(os.environ.get("COST_OPENAI_CHAT_OUTPUT_PER_1M", "0.60"))
 # Google Document AI OCR: $1.50 per 1000 pages
 COST_DOCAI_PER_PAGE = float(os.environ.get("COST_DOCAI_PER_PAGE", "0.0015"))
+# Serper.dev Google Search API: $1.00 per 1000 queries
+COST_SERPER_PER_QUERY = float(os.environ.get("COST_SERPER_PER_QUERY", "0.001"))
 # Resend: free tier 100/day, then $0.00 (adjust when on paid plan)
 COST_RESEND_PER_EMAIL = float(os.environ.get("COST_RESEND_PER_EMAIL", "0.0"))
 # SMTP: typically no per-email cost
@@ -91,6 +93,22 @@ def log_docai_usage(pages: int, document: str | None = None) -> None:
             )
     except Exception:
         logger.debug("Failed to log docai usage", exc_info=True)
+
+
+def log_serper_usage(queries: int = 1) -> None:
+    est_cost = queries * COST_SERPER_PER_QUERY
+    try:
+        with db.get_connection(_get_db_path()) as conn:
+            db.log_api_usage(
+                conn,
+                service="serper",
+                operation="google_search",
+                units=queries,
+                unit_type="queries",
+                est_cost_usd=round(est_cost, 8),
+            )
+    except Exception:
+        logger.debug("Failed to log serper usage", exc_info=True)
 
 
 def log_email_usage(provider: str, recipient_count: int = 1) -> None:
