@@ -266,19 +266,22 @@ def _cost_report_scheduler() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = load_settings()
-    with db.get_connection(settings.db_path) as conn:
-        conn.executescript(db.SCHEMA)
-        seeded = db.seed_legal_data(conn)
-        if seeded:
-            logger.info("Seeded %d legal rows from bundled seed files", seeded)
-        archived = db.archive_stale_proposals(conn, days=60)
-        if archived:
-            logger.info("Archived %d stale proposals on startup", archived)
-    _run_expiry_sweep()
-    _run_verification_link_backfill()
-    import threading
-    threading.Thread(target=_run_proxy_status_backfill, daemon=True).start()
-    threading.Thread(target=_cost_report_scheduler, daemon=True).start()
+    try:
+        with db.get_connection(settings.db_path) as conn:
+            conn.executescript(db.SCHEMA)
+            seeded = db.seed_legal_data(conn)
+            if seeded:
+                logger.info("Seeded %d legal rows from bundled seed files", seeded)
+            archived = db.archive_stale_proposals(conn, days=60)
+            if archived:
+                logger.info("Archived %d stale proposals on startup", archived)
+        _run_expiry_sweep()
+        _run_verification_link_backfill()
+        import threading
+        threading.Thread(target=_run_proxy_status_backfill, daemon=True).start()
+        threading.Thread(target=_cost_report_scheduler, daemon=True).start()
+    except Exception as exc:
+        logger.error("Startup migration error (non-fatal): %s", exc)
     yield
 
 
