@@ -6,9 +6,9 @@
     <meta name="ga-measurement-id" content="G-BV7JXG4JDE" />
     <meta name="description" content="HOAproxy helps homeowners search HOA documents, vote by proxy, and understand their community rules — all in one place." />
     <script src="/static/js/analytics.js"></script>
-    <link rel="icon" href="/favicon.ico" sizes="48x48">
+    <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48">
     <link rel="icon" href="/static/favicon-48x48.png" type="image/png" sizes="48x48">
-    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" sizes="any">
     <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
     <title>HOAproxy</title>
     <link
@@ -481,6 +481,8 @@
 
       .suggestion-item label { display: flex; align-items: flex-start; gap: 8px; }
       .suggestion-meta { font-size: 0.82rem; color: var(--muted); }
+      .hoa-profile-link { color: var(--ink); text-decoration: none; }
+      .hoa-profile-link:hover { color: var(--accent); text-decoration: underline; }
 
       .badge {
         display: inline-block;
@@ -842,18 +844,18 @@
         <div id="hoaIntentList" class="intent-list"></div>
         <div id="addressIntentCard" hidden></div>
         <section id="addressWorkflow" class="address-workflow" hidden>
-          <div class="suggestion-list" id="addressSuggestions"></div>
           <div class="mode-row">
             <button class="btn primary" id="multiModeQaBtn" type="button">Ask</button>
             <button class="btn" id="multiModeSearchBtn" type="button">Search</button>
           </div>
           <div class="query-row">
-            <input id="multiQueryInput" placeholder="Ask a question or enter a search query" />
+            <input id="multiQueryInput" placeholder="Ask a question across selected HOAs" />
             <button class="btn primary" id="runMultiBtn" type="button">Run</button>
           </div>
           <div id="multiStatus" class="status"></div>
-          <div id="multiOutput" class="result-box"></div>
-          <div id="multiSources" class="result-box"></div>
+          <div id="multiOutput" class="result-box" hidden></div>
+          <div id="multiSources" class="result-box" hidden></div>
+          <div class="suggestion-list" id="addressSuggestions"></div>
         </section>
       </div>
     </section>
@@ -1349,8 +1351,10 @@
       }
 
       function clearMultiResults() {
-        multiOutput.innerHTML = "Run a query after selecting one or more HOAs.";
-        multiSources.innerHTML = "Citations will appear here.";
+        multiOutput.innerHTML = "";
+        multiOutput.hidden = true;
+        multiSources.innerHTML = "";
+        multiSources.hidden = true;
       }
 
       function _addHoaCta() {
@@ -1407,7 +1411,7 @@
             return (
               `<div class="suggestion-item">` +
               `<label><input class="suggestion-checkbox" type="checkbox" data-hoa="${encodeURIComponent(item.hoa)}" ${checked} />` +
-              `<span><strong>${escapeHtml(item.hoa)}</strong><br>${matchTypeBadge(item.match_type)}<span class="suggestion-meta">${distanceLabel}</span></span></label>` +
+              `<span><a href="/hoa/${encodeURIComponent(item.hoa)}" class="hoa-profile-link"><strong>${escapeHtml(item.hoa)}</strong></a><br>${matchTypeBadge(item.match_type)}<span class="suggestion-meta">${distanceLabel}</span></span></label>` +
               `</div>`
             );
           })
@@ -1437,7 +1441,7 @@
         if (suggestions.length) {
           addressWorkflow.hidden = false;
           renderAddressSuggestions();
-          setLookupStatus("Review HOA selections, then run Ask or Search.", "ok");
+          setLookupStatus("Chat about governing documents or click into an HOA profile.", "ok");
         } else {
           addressWorkflow.hidden = true;
         }
@@ -1576,7 +1580,9 @@
 
         runMultiBtn.disabled = true;
         multiOutput.innerHTML = "";
+        multiOutput.hidden = false;
         multiSources.innerHTML = "";
+        multiSources.hidden = false;
         setMultiStatus(state.multiMode === "qa" ? "Generating answer..." : "Searching...");
         try {
           if (state.multiMode === "qa") {

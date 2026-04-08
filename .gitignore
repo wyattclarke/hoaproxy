@@ -20,6 +20,7 @@ legal_corpus/
 
 # Screenshots and design artifacts
 *.png
+!api/static/favicon-48x48.png
 
 # Internal working docs / one-off scripts
 claude-memory/
