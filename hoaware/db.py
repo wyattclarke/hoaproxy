@@ -342,7 +342,6 @@ def _ensure_table_column(
 
 def get_connection(db_path: Path) -> sqlite3.Connection:
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    print(f"[db] get_connection: opening {db_path}", flush=True)
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     try:
