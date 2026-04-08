@@ -7,6 +7,7 @@ from html import escape as html_escape
 import json
 import logging
 import math
+import os
 import re
 import shutil
 import threading
@@ -1959,13 +1960,6 @@ def admin_send_cost_report(request: Request, email: Optional[str] = None):
 def admin_backup(request: Request):
     """Snapshot the SQLite DB and uploaded PDFs to GCS, with retention."""
     _require_admin(request)
-    try:
-        return _do_backup(request)
-    except Exception as exc:
-        import traceback
-        raise HTTPException(status_code=500, detail=traceback.format_exc())
-
-def _do_backup(request: Request):
     import tarfile
     import tempfile
     from datetime import datetime, timezone
