@@ -1535,7 +1535,9 @@
           }
         }
 
-        setTimeout(function() { lookupPanel.scrollIntoView({ behavior: "smooth", block: "start" }); }, 100);
+        if (userInitiated) {
+          setTimeout(function() { lookupPanel.scrollIntoView({ behavior: "smooth", block: "start" }); }, 100);
+        }
       }
 
       function setMultiMode(mode) {
@@ -1619,7 +1621,8 @@
         }
       }
 
-      async function runUniversalLookup() {
+      async function runUniversalLookup(opts) {
+        const userInitiated = opts && opts.userInitiated;
         const q = searchInput.value.trim();
         if (!q) {
           lookupPanel.hidden = true;
@@ -1681,12 +1684,12 @@
         if (e.key === "Enter") {
           e.preventDefault();
           clearTimeout(_searchDebounceTimer);
-          runUniversalLookup();
+          runUniversalLookup({ userInitiated: true });
         }
       });
       searchSubmitBtn.addEventListener("click", () => {
         clearTimeout(_searchDebounceTimer);
-        runUniversalLookup();
+        runUniversalLookup({ userInitiated: true });
       });
       if (focusSearchBtn) {
         focusSearchBtn.addEventListener("click", (e) => {
