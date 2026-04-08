@@ -160,10 +160,11 @@ CREATE TABLE IF NOT EXISTS legal_ingest_runs (
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     email TEXT NOT NULL UNIQUE,
-    password_hash TEXT NOT NULL,
+    password_hash TEXT,
     display_name TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    verified_at TIMESTAMP
+    verified_at TIMESTAMP,
+    google_id TEXT UNIQUE
 );
 
 CREATE TABLE IF NOT EXISTS sessions (
@@ -343,8 +344,30 @@ def get_connection(db_path: Path) -> sqlite3.Connection:
     db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys=ON;")
-    conn.executescript(SCHEMA)
+    try:
+        conn.execute("PRAGMA foreign_keys=ON;")
+        conn.executescript(SCHEMA)
+    except sqlite3.DatabaseError as exc:
+        if "malformed" in str(exc):
+            import logging
+            logging.getLogger(__name__).error(
+                "DB malformed at %s — renaming to .corrupt and starting fresh", db_path)
+            conn.close()
+            corrupt = db_path.with_suffix(".db.corrupt")
+            if corrupt.exists():
+                corrupt.unlink()
+            db_path.rename(corrupt)
+            # Also remove WAL/SHM
+            for suffix in (".db-wal", ".db-shm"):
+                wal = db_path.parent / (db_path.stem + suffix)
+                if wal.exists():
+                    wal.unlink()
+            conn = sqlite3.connect(db_path)
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA foreign_keys=ON;")
+            conn.executescript(SCHEMA)
+        else:
+            raise
     _ensure_table_column(conn, "hoa_locations", "metadata_type", "TEXT")
     _ensure_table_column(conn, "hoa_locations", "website_url", "TEXT")
     _ensure_table_column(conn, "hoa_locations", "boundary_geojson", "TEXT")
@@ -359,6 +382,8 @@ def get_connection(db_path: Path) -> sqlite3.Connection:
     _ensure_table_column(conn, "hoas", "proxy_citation", "TEXT")
     _ensure_table_column(conn, "proxy_assignments", "verification_code", "TEXT")
     _ensure_table_column(conn, "proxy_assignments", "form_hash", "TEXT")
+    # Google OAuth
+    _ensure_table_column(conn, "users", "google_id", "TEXT UNIQUE")
     return conn
 
 
@@ -1645,15 +1670,17 @@ def create_user(
     conn: sqlite3.Connection,
     *,
     email: str,
-    password_hash: str,
+    password_hash: str | None = None,
     display_name: str | None = None,
+    google_id: str | None = None,
+    verified_at: str | None = None,
 ) -> int:
     cur = conn.execute(
         """
-        INSERT INTO users (email, password_hash, display_name, verified_at)
-        VALUES (?, ?, ?, NULL)
+        INSERT INTO users (email, password_hash, display_name, verified_at, google_id)
+        VALUES (?, ?, ?, ?, ?)
         """,
-        (email.strip().lower(), password_hash, (display_name or "").strip() or None),
+        (email.strip().lower(), password_hash, (display_name or "").strip() or None, verified_at, google_id),
     )
     conn.commit()
     return int(cur.lastrowid)
@@ -1747,6 +1774,18 @@ def get_user_by_id(conn: sqlite3.Connection, user_id: int) -> dict | None:
     if not row:
         return None
     return dict(row)
+
+
+def get_user_by_google_id(conn: sqlite3.Connection, google_id: str) -> dict | None:
+    row = conn.execute("SELECT * FROM users WHERE google_id = ?", (google_id,)).fetchone()
+    if not row:
+        return None
+    return dict(row)
+
+
+def link_google_id(conn: sqlite3.Connection, user_id: int, google_id: str) -> None:
+    conn.execute("UPDATE users SET google_id = ? WHERE id = ?", (google_id, user_id))
+    conn.commit()
 
 
 def update_user(conn: sqlite3.Connection, user_id: int, *, display_name: str | None = None, email: str | None = None, password_hash: str | None = None) -> dict | None:
