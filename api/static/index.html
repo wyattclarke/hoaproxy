@@ -1447,7 +1447,8 @@
         }
       }
 
-      function renderLookupResult(payload) {
+      function renderLookupResult(payload, opts) {
+        var _scrollAfter = opts && opts.scrollAfter;
         state.lookupResult = payload;
         state.mobileMapShown = false;
         state.selectedHoas = new Set(
@@ -1485,7 +1486,15 @@
           renderAddressIntent(payload.address_lookup, payload.address_suggestions || []);
         } else {
           addressResolvedLine.hidden = true;
-          addressWorkflow.hidden = true;
+          if (hasHoaMatches) {
+            // Show the query bar for HOA name matches too
+            addressWorkflow.hidden = false;
+            // Auto-select all matched HOAs
+            (payload.hoa_matches || []).forEach((item) => state.selectedHoas.add(item.hoa));
+            addressSuggestions.innerHTML = "";
+          } else {
+            addressWorkflow.hidden = true;
+          }
         }
 
         if (!hasHoaMatches && !hasAddress) {
@@ -1494,7 +1503,7 @@
           return;
         }
         if (!hasSuggestions && hasHoaMatches) {
-          setLookupStatus("Lookup complete.", "ok");
+          setLookupStatus("Chat about governing documents or click into an HOA profile.", "ok");
         }
 
         // Auto-show map when geocoded lookup has location-based results
@@ -1535,7 +1544,7 @@
           }
         }
 
-        if (userInitiated) {
+        if (_scrollAfter) {
           setTimeout(function() { lookupPanel.scrollIntoView({ behavior: "smooth", block: "start" }); }, 100);
         }
       }
@@ -1642,7 +1651,7 @@
             method: "POST",
             body: JSON.stringify({ query: q, max_suggestions: 12 }),
           });
-          renderLookupResult(payload);
+          renderLookupResult(payload, { scrollAfter: userInitiated });
         } catch (err) {
           setLookupStatus(String(err.message || err), "error");
         }
