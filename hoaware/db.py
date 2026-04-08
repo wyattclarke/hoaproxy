@@ -2075,8 +2075,8 @@ def count_proxies_for_hoa(conn: sqlite3.Connection, hoa_id: int) -> dict:
         """
         SELECT
             COUNT(*) AS total,
-            SUM(CASE WHEN status = 'signed' THEN 1 ELSE 0 END) AS signed,
-            SUM(CASE WHEN status = 'delivered' THEN 1 ELSE 0 END) AS delivered
+            COALESCE(SUM(CASE WHEN status = 'signed' THEN 1 ELSE 0 END), 0) AS signed,
+            COALESCE(SUM(CASE WHEN status = 'delivered' THEN 1 ELSE 0 END), 0) AS delivered
         FROM proxy_assignments
         WHERE hoa_id = ? AND status NOT IN ('revoked', 'expired')
         """,

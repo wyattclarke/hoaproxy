@@ -74,7 +74,7 @@
 
       .grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
       .guide-grid { display: grid; gap: 14px; grid-template-columns: 1.2fr 1fr; margin-top: 16px; }
-      .intent-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+      .intent-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
       .intent-card {
         border: 1px solid var(--line); border-radius: 16px; background: rgba(255,255,255,0.95);
         box-shadow: 0 6px 20px rgba(16,40,73,0.07); padding: 18px;
@@ -156,8 +156,8 @@
 
       <div class="guide-grid">
         <div class="card">
-          <h2 style="margin-top:0">Start Here</h2>
-          <p class="meta" style="margin:0 0 12px">Pick the path that matches what you want to do. You do not need to learn all the proxy terminology first.</p>
+          <h2 style="margin-top:0">Take Action</h2>
+          <p class="meta" style="margin:0 0 12px">Build up your HOA's profile, assign your vote, or represent your neighbors.</p>
           <div class="intent-grid" id="intentGrid"></div>
         </div>
 
@@ -327,18 +327,40 @@
         return String(name || "").trim().toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_-]/g, "").replaceAll("_", "-");
       }
 
-      function renderGuideCards(me, proxyCount, delegateCount) {
+      function renderGuideCards(me, proxyCount, delegateCount, docCount) {
         const hasHoa = me.hoas && me.hoas.length > 0;
-        intentGrid.innerHTML =
+        const hasDocs = docCount > 0;
+        const firstHoaSlug = hasHoa ? slugify(me.hoas[0].hoa_name) : '';
+
+        // Card 1: context-aware docs card
+        var docsCard;
+        if (!hasHoa) {
+          docsCard = '<div class="intent-card">' +
+            '<h3>Search your HOA\'s rules</h3>' +
+            '<p>Claim your HOA below, then upload CC&Rs, bylaws, and rules so your community can search them.</p>' +
+            '<a class="btn" href="#claim">Confirm your HOA first</a></div>';
+        } else if (!hasDocs) {
+          docsCard = '<div class="intent-card">' +
+            '<h3>Upload your HOA\'s documents</h3>' +
+            '<p>Your HOA profile is mostly empty. Upload CC&Rs, bylaws, or rules so your community can search them.</p>' +
+            '<a class="btn primary" href="/hoa/' + firstHoaSlug + '">Add documents</a></div>';
+        } else {
+          docsCard = '<div class="intent-card">' +
+            '<h3>Ask your HOA\'s rules</h3>' +
+            '<p>Your documents are searchable. Ask a question in plain English and get answers with citations.</p>' +
+            '<a class="btn" href="/hoa/' + firstHoaSlug + '">Go to HOA profile</a></div>';
+        }
+
+        intentGrid.innerHTML = docsCard +
           '<div class="intent-card">' +
-          '<h3>I want someone to vote for me</h3>' +
-          '<p>Choose one trusted person who can vote for you, then review and sign your proxy.</p>' +
-          '<a class="btn primary" href="' + (hasHoa ? '/assign-proxy' : '#claim') + '">' + (hasHoa ? 'Choose a representative' : 'Confirm your HOA first') + '</a>' +
+          '<h3>Assign your vote</h3>' +
+          '<p>E&#8209;sign a proxy form to give your vote to a trusted neighbor. They print it and bring it to the meeting.</p>' +
+          '<a class="btn' + (hasHoa ? ' primary' : '') + '" href="' + (hasHoa ? '/assign-proxy' : '#claim') + '">' + (hasHoa ? 'Start a proxy' : 'Confirm your HOA first') + '</a>' +
           '</div>' +
           '<div class="intent-card">' +
-          '<h3>I want to represent my neighbors</h3>' +
-          '<p>Make yourself available so neighbors can choose you as the person who can vote for them.</p>' +
-          '<a class="btn" href="' + (hasHoa ? '/become-delegate' : '#claim') + '">' + (delegateCount ? 'Manage representative status' : 'Serve as a representative') + '</a>' +
+          '<h3>Represent your neighbors</h3>' +
+          '<p>Make yourself available so neighbors can choose you as their proxy delegate.</p>' +
+          '<a class="btn" href="' + (hasHoa ? '/become-delegate' : '#claim') + '">' + (delegateCount ? 'Manage delegate status' : 'Become a delegate') + '</a>' +
           '</div>';
 
         const items = [
@@ -351,6 +373,11 @@
             done: hasHoa,
             title: 'Confirm your HOA',
             detail: hasHoa ? 'Your HOA membership is on file.' : 'Search and claim your community below.',
+          },
+          {
+            done: hasDocs,
+            title: 'Add documents',
+            detail: hasDocs ? (docCount + ' document' + (docCount === 1 ? '' : 's') + ' on file.') : 'Upload at least one governing document so your community can search it.',
           },
           {
             done: !!me.email_verified,
@@ -399,11 +426,18 @@
             ).join("");
           }
 
-          const [delegateCount, proxies] = await Promise.all([
+          // Fetch doc count for the user's first HOA (if any)
+          const docCountPromise = me.hoas.length
+            ? fetch("/hoas/" + encodeURIComponent(me.hoas[0].hoa_name) + "/documents")
+                .then(r => r.ok ? r.json() : []).then(docs => docs.length).catch(() => 0)
+            : Promise.resolve(0);
+
+          const [delegateCount, proxies, docCount] = await Promise.all([
             loadDelegateStatus(me),
             Auth.fetchJson("/proxies/mine"),
+            docCountPromise,
           ]);
-          renderGuideCards(me, proxies.length, delegateCount);
+          renderGuideCards(me, proxies.length, delegateCount, docCount);
           populateQaHoas(me.hoas);
           loadTopProposals(me);
 

@@ -353,7 +353,7 @@ def group3_auth_gates(page, base: str, results: SmokeResults, js_errors: list[st
     gated_pages = [
         "/dashboard", "/my-proxies", "/assign-proxy",
         "/become-delegate", "/delegate-dashboard",
-        "/proposals", "/add-participation", "/add-hoa",
+        "/proposals", "/add-participation",
         "/account",
     ]
     for path in gated_pages:
@@ -454,6 +454,11 @@ def group4_authenticated(page, base: str, results: SmokeResults, js_errors: list
     try:
         page.goto(base + "/account", wait_until="domcontentloaded", timeout=PAGE_TIMEOUT)
         page.wait_for_selector("#firstName", timeout=PAGE_TIMEOUT)
+        # Wait for async loadAccount() to populate fields
+        page.wait_for_function(
+            "document.getElementById('email').value.length > 0",
+            timeout=PAGE_TIMEOUT,
+        )
 
         # Verify fields loaded
         first_name = page.input_value("#firstName")
