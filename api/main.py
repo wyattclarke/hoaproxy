@@ -286,6 +286,11 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="HOA QA API", version="0.2.0", lifespan=lifespan)
+
+# Session middleware required by authlib for OAuth state parameter
+from starlette.middleware.sessions import SessionMiddleware
+_oauth_session_secret = os.environ.get("JWT_SECRET", "dev-secret-change-in-production")
+app.add_middleware(SessionMiddleware, secret_key=_oauth_session_secret)
 _FILENAME_RE = re.compile(r"[^A-Za-z0-9._ -]+")
 _CITY_STATE_ZIP_RE = re.compile(
     r"\b([A-Z][A-Za-z]+(?:[\s-][A-Z][A-Za-z]+)*),\s*([A-Z]{2})\s+(\d{5}(?:-\d{4})?)\b"
@@ -1709,9 +1714,11 @@ def health() -> dict:
             existing = {r["name"] for r in rows}
             missing = required_tables - existing
     except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"DB unavailable: {exc}")
+        logger.error("Health check DB error: %s", exc)
+        return {"status": "degraded", "error": str(exc)}
     if missing:
-        raise HTTPException(status_code=503, detail=f"Missing tables: {missing}")
+        logger.warning("Health check missing tables: %s", missing)
+        return {"status": "degraded", "missing": list(missing)}
     return {"status": "ok"}
 
 
@@ -2079,7 +2086,7 @@ def login(request: Request, body: LoginRequest):
     settings = load_settings()
     with db.get_connection(settings.db_path) as conn:
         user = db.get_user_by_email(conn, body.email)
-        if not user or not verify_password(body.password, user["password_hash"]):
+        if not user or not user["password_hash"] or not verify_password(body.password, user["password_hash"]):
             raise HTTPException(status_code=401, detail="Invalid email or password")
         token, jti, expires = create_access_token(user["id"], settings)
         db.create_session(conn, user_id=user["id"], token_jti=jti, expires_at=expires.isoformat())
@@ -2204,14 +2211,17 @@ def update_me(body: UserUpdateRequest, request: Request, user: dict = Depends(ge
     _check_rate_limit(request, limit=10)
     settings = load_settings()
     with db.get_connection(settings.db_path) as conn:
-        # Password change requires current_password
+        # Password change requires current_password (unless Google-only account setting initial password)
         new_hash = None
         if body.new_password:
-            if not body.current_password:
-                raise HTTPException(status_code=400, detail="Current password is required to set a new password")
             user_row = db.get_user_by_id(conn, user["id"])
-            if not user_row or not verify_password(body.current_password, user_row["password_hash"]):
-                raise HTTPException(status_code=403, detail="Current password is incorrect")
+            if user_row and user_row["password_hash"]:
+                # Existing password — require current_password to change
+                if not body.current_password:
+                    raise HTTPException(status_code=400, detail="Current password is required to set a new password")
+                if not verify_password(body.current_password, user_row["password_hash"]):
+                    raise HTTPException(status_code=403, detail="Current password is incorrect")
+            # Google-only users can set an initial password without current_password
             if len(body.new_password) < 8:
                 raise HTTPException(status_code=400, detail="New password must be at least 8 characters")
             new_hash = hash_password(body.new_password)
@@ -2237,6 +2247,101 @@ def update_me(body: UserUpdateRequest, request: Request, user: dict = Depends(ge
         hoas=[{"hoa_id": c["hoa_id"], "hoa_name": c["hoa_name"], "unit_number": c["unit_number"], "status": c["status"]} for c in claims],
         email_verified=bool(updated.get("verified_at")),
     )
+
+
+# ---------------------------------------------------------------------------
+# Google OAuth
+# ---------------------------------------------------------------------------
+
+@app.get("/auth/google/login")
+def google_login(request: Request):
+    """Redirect user to Google's OAuth consent screen."""
+    from authlib.integrations.starlette_client import OAuth as StarletteOAuth
+    settings = load_settings()
+    if not settings.google_client_id or not settings.google_client_secret:
+        raise HTTPException(status_code=501, detail="Google login is not configured")
+    oauth = StarletteOAuth()
+    oauth.register(
+        name="google",
+        client_id=settings.google_client_id,
+        client_secret=settings.google_client_secret,
+        server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
+        client_kwargs={"scope": "openid email profile"},
+    )
+    redirect_uri = settings.app_base_url.rstrip("/") + "/auth/google/callback"
+    return oauth.google.authorize_redirect(request, redirect_uri)
+
+
+@app.get("/auth/google/callback")
+async def google_callback(request: Request):
+    """Handle the OAuth callback from Google, create/login the user, and redirect to dashboard."""
+    from authlib.integrations.starlette_client import OAuth as StarletteOAuth
+    settings = load_settings()
+    if not settings.google_client_id or not settings.google_client_secret:
+        raise HTTPException(status_code=501, detail="Google login is not configured")
+    oauth = StarletteOAuth()
+    oauth.register(
+        name="google",
+        client_id=settings.google_client_id,
+        client_secret=settings.google_client_secret,
+        server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
+        client_kwargs={"scope": "openid email profile"},
+    )
+    try:
+        token_data = await oauth.google.authorize_access_token(request)
+    except Exception:
+        return HTMLResponse(
+            '<script>alert("Google sign-in failed. Please try again.");window.location.href="/login";</script>',
+            status_code=400,
+        )
+    userinfo = token_data.get("userinfo")
+    if not userinfo or not userinfo.get("email"):
+        raise HTTPException(status_code=400, detail="Could not retrieve email from Google")
+
+    google_id = userinfo["sub"]
+    email = userinfo["email"].strip().lower()
+    display_name = userinfo.get("name")
+
+    with db.get_connection(settings.db_path) as conn:
+        # Try to find user by google_id first, then by email
+        user = db.get_user_by_google_id(conn, google_id)
+        if not user:
+            user = db.get_user_by_email(conn, email)
+            if user:
+                # Link Google ID to existing account
+                db.link_google_id(conn, user["id"], google_id)
+            else:
+                # Create new user (no password, verified via Google)
+                now = datetime.now(timezone.utc).isoformat()
+                user_id = db.create_user(
+                    conn,
+                    email=email,
+                    display_name=display_name,
+                    google_id=google_id,
+                    verified_at=now,
+                )
+                user = db.get_user_by_id(conn, user_id)
+
+        # Mark email as verified if not already (Google verified it)
+        if not user.get("verified_at"):
+            db.mark_user_verified(conn, user["id"])
+
+        # Create session
+        jwt_token, jti, expires = create_access_token(user["id"], settings)
+        db.create_session(conn, user_id=user["id"], token_jti=jti, expires_at=expires.isoformat())
+
+    # Return an HTML page that stores the JWT and redirects to dashboard
+    return HTMLResponse(f"""<!doctype html>
+<html><head><title>Signing in...</title></head>
+<body>
+<script>
+localStorage.setItem("hoaware_token", {json.dumps(jwt_token)});
+fetch("/auth/me", {{headers: {{"Authorization": "Bearer " + {json.dumps(jwt_token)}}}}})
+  .then(r => r.json())
+  .then(u => {{localStorage.setItem("hoaware_user", JSON.stringify(u)); window.location.href = "/dashboard";}})
+  .catch(() => {{window.location.href = "/dashboard";}});
+</script>
+</body></html>""")
 
 
 # ---------------------------------------------------------------------------
