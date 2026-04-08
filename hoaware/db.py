@@ -342,13 +342,14 @@ def _ensure_table_column(
 
 def get_connection(db_path: Path) -> sqlite3.Connection:
     db_path.parent.mkdir(parents=True, exist_ok=True)
+    print(f"[db] get_connection: opening {db_path}", flush=True)
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     try:
         conn.execute("PRAGMA foreign_keys=ON;")
         conn.executescript(SCHEMA)
-    except sqlite3.DatabaseError as exc:
-        if "malformed" in str(exc):
+    except (sqlite3.DatabaseError, Exception) as exc:
+        if "malformed" in str(exc) or "not a database" in str(exc):
             import logging
             logging.getLogger(__name__).error(
                 "DB malformed at %s — renaming to .corrupt and starting fresh", db_path)
