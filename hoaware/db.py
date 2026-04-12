@@ -383,7 +383,10 @@ def get_connection(db_path: Path) -> sqlite3.Connection:
     _ensure_table_column(conn, "proxy_assignments", "verification_code", "TEXT")
     _ensure_table_column(conn, "proxy_assignments", "form_hash", "TEXT")
     # Google OAuth
-    _ensure_table_column(conn, "users", "google_id", "TEXT UNIQUE")
+    _ensure_table_column(conn, "users", "google_id", "TEXT")
+    # Add unique index for google_id (safe if column was created with UNIQUE in schema)
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id)")
+    conn.commit()
     return conn
 
 
