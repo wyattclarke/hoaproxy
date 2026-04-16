@@ -52,6 +52,9 @@ class Settings:
     # Cost report
     cost_report_email: str | None
     ga4_property_id: str | None
+    # Google OAuth
+    google_client_id: str | None
+    google_client_secret: str | None
 
 
 def load_settings() -> Settings:
@@ -92,6 +95,8 @@ def load_settings() -> Settings:
         app_base_url=os.environ.get("APP_BASE_URL", "https://hoaproxy.org"),
         cost_report_email=os.environ.get("COST_REPORT_EMAIL"),
         ga4_property_id=os.environ.get("GA4_PROPERTY_ID"),
+        google_client_id=os.environ.get("GOOGLE_CLIENT_ID"),
+        google_client_secret=os.environ.get("GOOGLE_CLIENT_SECRET"),
     )
 
 
