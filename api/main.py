@@ -2008,32 +2008,41 @@ def admin_backup(request: Request):
         if os.path.isdir(tmp_dir):
             os.rmdir(tmp_dir)
 
-    # --- 2. PDF docs tarball ---
+    # --- 2. PDF docs (upsert: only upload new/changed files) ---
     docs_root = settings.docs_root
     if docs_root.exists() and any(docs_root.iterdir()):
-        tmp_tar = None
         try:
-            tmp_tar = tempfile.NamedTemporaryFile(suffix=".tar.gz", delete=False)
-            with tarfile.open(tmp_tar.name, "w:gz") as tar:
-                tar.add(str(docs_root), arcname=docs_root.name)
-            docs_blob_name = f"docs/hoa_docs-{stamp}.tar.gz"
-            gcs_bucket.blob(docs_blob_name).upload_from_filename(tmp_tar.name)
-            uploaded_blobs.append(docs_blob_name)
+            # Build index of existing remote docs by relative path → size
+            remote_docs: dict[str, int] = {}
+            for b in gcs_bucket.list_blobs(prefix="docs/files/"):
+                remote_docs[b.name.removeprefix("docs/files/")] = b.size or 0
+
+            upserted = 0
+            for doc_path in sorted(docs_root.rglob("*")):
+                if not doc_path.is_file():
+                    continue
+                rel = str(doc_path.relative_to(docs_root))
+                local_size = doc_path.stat().st_size
+                if rel in remote_docs and remote_docs[rel] == local_size:
+                    continue  # unchanged
+                gcs_bucket.blob(f"docs/files/{rel}").upload_from_filename(
+                    str(doc_path)
+                )
+                upserted += 1
+            if upserted:
+                uploaded_blobs.append(f"docs/files/ ({upserted} upserted)")
         except Exception as exc:
             errors.append(f"docs: {exc}")
-        finally:
-            if tmp_tar and os.path.exists(tmp_tar.name):
-                os.unlink(tmp_tar.name)
 
-    # --- 3. Retention: keep only the most recent backups ---
-    for prefix in ("db/", "docs/"):
-        try:
-            blobs = list(gcs_bucket.list_blobs(prefix=prefix))
-            blobs.sort(key=lambda b: b.name, reverse=True)
-            for old_blob in blobs[max_backups:]:
-                old_blob.delete()
-        except Exception as exc:
-            errors.append(f"retention({prefix}): {exc}")
+    # --- 3. Retention: keep only the most recent DB snapshots ---
+    # (Docs use upsert into docs/files/ — no rotation needed)
+    try:
+        db_blobs = list(gcs_bucket.list_blobs(prefix="db/"))
+        db_blobs.sort(key=lambda b: b.name, reverse=True)
+        for old_blob in db_blobs[max_backups:]:
+            old_blob.delete()
+    except Exception as exc:
+        errors.append(f"retention(db): {exc}")
 
     if errors and not uploaded_blobs:
         raise HTTPException(status_code=500, detail="; ".join(errors))
