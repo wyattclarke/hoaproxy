@@ -7,7 +7,7 @@ from openai import OpenAI
 from rich.console import Console
 from rich.panel import Panel
 
-from .config import Settings, load_settings, normalize_hoa_name
+from .config import Settings, load_settings, normalize_hoa_name, UNIFIED_COLLECTION
 from .cost_tracker import log_chat_usage
 from .embeddings import batch_embeddings
 from .vector_store import build_client, ensure_collection, search as qdrant_search
@@ -41,7 +41,7 @@ def _search_embedding_for_hoa(
     settings: Settings,
     qdrant_client,
 ) -> List[dict]:
-    collection = f"{settings.collection_prefix}_{normalize_hoa_name(hoa_name)}"
+    collection = UNIFIED_COLLECTION
     ensure_collection(qdrant_client, collection)
     return qdrant_search(
         qdrant_client,

@@ -104,3 +104,9 @@ def normalize_hoa_name(name: str) -> str:
     """Create a consistent slug for Qdrant namespaces."""
     slug = name.strip().lower().replace(" ", "_")
     return "".join(ch for ch in slug if ch.isalnum() or ch in ("_", "-"))
+
+
+# Single unified Qdrant collection for all HOAs.
+# Using one collection instead of per-HOA collections reduces memory usage
+# from O(n_hoas) to O(1) — critical for the 512 MB Render instance.
+UNIFIED_COLLECTION = "hoa_all"

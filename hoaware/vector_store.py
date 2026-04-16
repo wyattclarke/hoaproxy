@@ -72,6 +72,15 @@ def ensure_collection(client: QdrantClient, collection_name: str) -> None:
         collection_name=collection_name,
         vectors_config=VectorParams(size=EMBEDDING_DIMENSIONS, distance=Distance.COSINE),
     )
+    # Create payload index on "hoa" for efficient filtering in the unified collection
+    try:
+        client.create_payload_index(
+            collection_name=collection_name,
+            field_name="hoa",
+            field_schema="keyword",
+        )
+    except Exception:
+        pass  # Index may already exist
 
 
 def upsert_chunks(

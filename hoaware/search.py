@@ -4,7 +4,7 @@ from openai import OpenAI
 from rich.console import Console
 from rich.table import Table
 
-from .config import Settings, load_settings, normalize_hoa_name
+from .config import Settings, load_settings, normalize_hoa_name, UNIFIED_COLLECTION
 from .embeddings import batch_embeddings
 from .vector_store import build_client, search as qdrant_search, ensure_collection
 
@@ -20,7 +20,7 @@ def search_cli(query: str, hoa_name: str, limit: int = 5, settings: Settings | N
         settings.qdrant_api_key,
         local_path=settings.qdrant_local_path,
     )
-    collection = f"{settings.collection_prefix}_{normalize_hoa_name(hoa_name)}"
+    collection = UNIFIED_COLLECTION
     ensure_collection(qdrant_client, collection)
     results = qdrant_search(
         qdrant_client,
