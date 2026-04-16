@@ -1173,7 +1173,7 @@ def vector_search(
         FROM chunks c
         JOIN documents d ON c.document_id = d.id
         JOIN hoas h ON d.hoa_id = h.id
-        WHERE h.name = ? AND c.embedding IS NOT NULL
+        WHERE h.name = ? AND c.embedding IS NOT NULL AND length(c.embedding) > 0
         """,
         (hoa_name,),
     )
