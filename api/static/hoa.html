@@ -624,6 +624,17 @@
       }
 
       async function resolveHoaName() {
+        // Use server-injected data when available (skips extra API call)
+        if (window.__SSR_DATA__) {
+          state.hoaName = window.__SSR_DATA__.hoaName;
+          state.hoaId = window.__SSR_DATA__.hoaId;
+          state.hoaCity = window.__SSR_DATA__.city || null;
+          state.hoaState = window.__SSR_DATA__.state || null;
+          state.hoaIdentifier = slugify(state.hoaName);
+          hoaTitle.textContent = state.hoaName;
+          return;
+        }
+
         state.hoaIdentifier = parseIdentifier();
         if (!state.hoaIdentifier) {
           throw new Error("Missing HOA identifier in URL.");

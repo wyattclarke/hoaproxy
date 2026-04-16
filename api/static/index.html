@@ -1007,9 +1007,15 @@
           .replace(/[^a-z0-9_-]/g, "");
       }
 
-      function profileHref(hoaName) {
-        const slug = slugify(hoaName).replaceAll("_", "-");
-        return `/hoa/${encodeURIComponent(slug)}`;
+      function profileHref(hoaOrItem) {
+        // Accept either an item object {hoa, city, state} or a plain name string
+        const item = typeof hoaOrItem === "object" ? hoaOrItem : { hoa: hoaOrItem };
+        const nameSlug = slugify(item.hoa).replaceAll("_", "-");
+        if (item.state && item.city) {
+          const citySlug = slugify(item.city).replaceAll("_", "-");
+          return `/hoa/${encodeURIComponent(item.state.toLowerCase())}/${encodeURIComponent(citySlug)}/${encodeURIComponent(nameSlug)}`;
+        }
+        return `/hoa/${encodeURIComponent(nameSlug)}`;
       }
 
       async function fetchJson(path, options = {}) {
@@ -1166,7 +1172,7 @@
             const mapped = isMapped(item);
             return (
               `<div class="hoa-card">` +
-              `<div class="hoa-head"><a class="hoa-name hoa-name-link" href="${profileHref(item.hoa)}">${escapeHtml(item.hoa)}</a><div class="meta">${mapped ? "Mapped" : "Unmapped"}</div></div>` +
+              `<div class="hoa-head"><a class="hoa-name hoa-name-link" href="${profileHref(item)}">${escapeHtml(item.hoa)}</a><div class="meta">${mapped ? "Mapped" : "Unmapped"}</div></div>` +
               `<div class="meta">${escapeHtml(locationText(item))}</div>` +
               `<span class="pill">${item.doc_count} docs</span>` +
               `<span class="pill">${item.chunk_count} sections</span>` +
@@ -1213,7 +1219,7 @@
             if (!bounds.contains([item.latitude, item.longitude])) continue;
           }
           const popupHtml =
-            `<a class="hoa-name-link" href="${profileHref(item.hoa)}"><strong>${escapeHtml(item.hoa)}</strong></a><br>` +
+            `<a class="hoa-name-link" href="${profileHref(item)}"><strong>${escapeHtml(item.hoa)}</strong></a><br>` +
             `<span class="meta">${escapeHtml(locationText(item))}</span><br>` +
             `${item.doc_count} docs`;
           const layer = buildBoundaryLayer(item);
@@ -1233,7 +1239,7 @@
         for (const item of state.mapData) {
           if (item.latitude == null || item.longitude == null) continue;
           const popupHtml =
-            `<a class="hoa-name-link" href="${profileHref(item.hoa)}"><strong>${escapeHtml(item.hoa)}</strong></a><br>` +
+            `<a class="hoa-name-link" href="${profileHref(item)}"><strong>${escapeHtml(item.hoa)}</strong></a><br>` +
             `<span class="meta">${escapeHtml(locationText(item))}</span><br>` +
             `${item.doc_count} docs`;
           const marker = L.marker([item.latitude, item.longitude]).addTo(state.markerLayer);
@@ -1356,7 +1362,7 @@
                 "name_contains": "Matched by HOA name",
               };
               const reason = reasonMap[item.match_reason] || "Matched by HOA name";
-              return `<div class="intent-item"><a class="hoa-name-link" href="${profileHref(item.hoa)}">${escapeHtml(item.hoa)}</a><div class="suggestion-meta">${reason}</div></div>`;
+              return `<div class="intent-item"><a class="hoa-name-link" href="${profileHref(item)}">${escapeHtml(item.hoa)}</a><div class="suggestion-meta">${reason}</div></div>`;
             }
           )
           .join("");

@@ -148,6 +148,7 @@
           // Fetch and cache user info
           const me = await Auth.fetchJson("/auth/me");
           Auth.setCachedUser(me);
+          if (window.gtag) gtag("event", "login", { method: "email" });
           window.location.href = "/dashboard";
         } catch (err) {
           status.className = "status error";

@@ -2,9 +2,34 @@ from __future__ import annotations
 
 import gzip
 import json
+import re
 import sqlite3
 from pathlib import Path
 from typing import Any, Sequence
+
+
+# ---------------------------------------------------------------------------
+# Slug utilities (shared between backend and used for hierarchical URLs)
+# ---------------------------------------------------------------------------
+
+def slugify_name(name: str) -> str:
+    """HOA or city name → URL slug.  'Vista Point HOA Inc' → 'vista-point-hoa-inc'"""
+    s = name.strip().lower()
+    s = re.sub(r"\s+", "-", s)
+    s = re.sub(r"[^a-z0-9-]", "", s)
+    s = re.sub(r"-{2,}", "-", s)
+    return s.strip("-")
+
+
+# Alias for readability — same logic works for city names.
+slugify_city = slugify_name
+
+
+def build_hoa_path(name: str, city: str | None, state: str | None) -> str:
+    """Build canonical URL path for an HOA page."""
+    if not state or not city:
+        return f"/hoa/{slugify_name(name)}"
+    return f"/hoa/{state.lower()}/{slugify_city(city)}/{slugify_name(name)}"
 
 
 SCHEMA = """
@@ -643,6 +668,7 @@ def list_hoa_map_points(
         SELECT
             h.name AS hoa,
             COALESCE(ds.doc_count, 0) AS doc_count,
+            l.city,
             l.state,
             l.latitude,
             l.longitude,
@@ -660,6 +686,7 @@ def list_hoa_map_points(
         {
             "hoa": str(row["hoa"]),
             "doc_count": int(row["doc_count"]),
+            "city": str(row["city"]) if row["city"] is not None else None,
             "state": str(row["state"]) if row["state"] is not None else None,
             "latitude": float(row["latitude"]) if row["latitude"] is not None else None,
             "longitude": float(row["longitude"]) if row["longitude"] is not None else None,
@@ -680,7 +707,6 @@ def resolve_hoa_by_slug(conn: sqlite3.Connection, slug: str) -> dict | None:
     rows = cur.fetchall()
 
     def slugify(name: str) -> str:
-        import re
         s = name.strip().lower()
         s = re.sub(r"\s+", "_", s)
         s = re.sub(r"[^a-z0-9_-]", "", s)
@@ -709,6 +735,116 @@ def resolve_hoa_by_slug(conn: sqlite3.Connection, slug: str) -> dict | None:
             }
 
     return None
+
+
+def resolve_hoa_by_hierarchical_slug(
+    conn: sqlite3.Connection,
+    state: str,
+    city_slug: str,
+    name_slug: str,
+) -> dict | None:
+    """Resolve an HOA by its state/city/name slug triple.
+
+    Filters by state in SQL so only a small subset is checked in Python.
+    Returns ``{hoa_id, hoa_name, city, state, doc_count}`` or *None*.
+    """
+    cur = conn.execute(
+        """
+        SELECT h.id   AS hoa_id,
+               h.name AS hoa_name,
+               l.city,
+               l.state,
+               COALESCE(ds.doc_count, 0) AS doc_count
+        FROM hoas h
+        LEFT JOIN hoa_locations l ON l.hoa_id = h.id
+        LEFT JOIN (
+            SELECT hoa_id, COUNT(*) AS doc_count FROM documents GROUP BY hoa_id
+        ) ds ON ds.hoa_id = h.id
+        WHERE LOWER(l.state) = ?
+        """,
+        (state.lower(),),
+    )
+    for row in cur:
+        if (
+            slugify_city(row["city"] or "") == city_slug
+            and slugify_name(row["hoa_name"]) == name_slug
+        ):
+            return {
+                "hoa_id": int(row["hoa_id"]),
+                "hoa_name": str(row["hoa_name"]),
+                "city": str(row["city"]) if row["city"] else None,
+                "state": str(row["state"]) if row["state"] else None,
+                "doc_count": int(row["doc_count"]),
+            }
+    return None
+
+
+def list_hoas_for_sitemap(conn: sqlite3.Connection) -> list[dict]:
+    """Return lightweight data for every HOA (sitemap + index pages)."""
+    cur = conn.execute(
+        """
+        SELECT h.id   AS hoa_id,
+               h.name AS hoa_name,
+               l.city,
+               l.state,
+               COALESCE(ds.doc_count, 0) AS doc_count
+        FROM hoas h
+        LEFT JOIN hoa_locations l ON l.hoa_id = h.id
+        LEFT JOIN (
+            SELECT hoa_id, COUNT(*) AS doc_count FROM documents GROUP BY hoa_id
+        ) ds ON ds.hoa_id = h.id
+        ORDER BY l.state, l.city, h.name
+        """
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
+def list_cities_in_state(
+    conn: sqlite3.Connection, state: str
+) -> list[dict]:
+    """Return ``[{city, hoa_count}, ...]`` for a given state."""
+    cur = conn.execute(
+        """
+        SELECT l.city, COUNT(*) AS hoa_count
+        FROM hoas h
+        JOIN hoa_locations l ON l.hoa_id = h.id
+        WHERE LOWER(l.state) = ? AND l.city IS NOT NULL AND l.city != ''
+        GROUP BY l.city
+        ORDER BY l.city COLLATE NOCASE
+        """,
+        (state.lower(),),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
+def list_hoas_in_city(
+    conn: sqlite3.Connection, state: str, city_slug: str
+) -> list[dict]:
+    """Return HOAs in a city (matched by slug).
+
+    Returns ``[{hoa_id, hoa_name, city, state, doc_count}, ...]``.
+    """
+    cur = conn.execute(
+        """
+        SELECT h.id   AS hoa_id,
+               h.name AS hoa_name,
+               l.city,
+               l.state,
+               COALESCE(ds.doc_count, 0) AS doc_count
+        FROM hoas h
+        JOIN hoa_locations l ON l.hoa_id = h.id
+        LEFT JOIN (
+            SELECT hoa_id, COUNT(*) AS doc_count FROM documents GROUP BY hoa_id
+        ) ds ON ds.hoa_id = h.id
+        WHERE LOWER(l.state) = ?
+        ORDER BY h.name COLLATE NOCASE
+        """,
+        (state.lower(),),
+    )
+    return [
+        dict(row) for row in cur.fetchall()
+        if slugify_city(row["city"] or "") == city_slug
+    ]
 
 
 def get_hoa_location(conn: sqlite3.Connection, hoa_name: str) -> dict | None:

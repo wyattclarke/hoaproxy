@@ -454,6 +454,7 @@
             throw new Error(detail);
           }
           await res.json();
+          if (window.gtag) gtag("event", "hoa_created", { hoa_name: hoa, method: isAnonymous ? "anonymous" : "authenticated" });
           if (isAnonymous) {
             setStatus("Upload received! Check your email to verify and publish this HOA.", "ok");
           } else {

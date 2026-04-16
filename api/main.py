@@ -4,6 +4,7 @@ from collections import defaultdict
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from html import escape as html_escape
+import functools
 import json
 import logging
 import math
@@ -41,7 +42,7 @@ logging.root.handlers = [_json_handler]
 
 import requests
 from fastapi import BackgroundTasks, Body, Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -1490,9 +1491,97 @@ def robots_txt() -> FileResponse:
     return FileResponse(STATIC_DIR / "robots.txt", media_type="text/plain")
 
 
+_sitemap_cache: dict[str, Any] = {"xml": "", "ts": 0.0}
+_SITEMAP_TTL = 3600  # 1 hour
+
+
 @app.get("/sitemap.xml", include_in_schema=False)
-def sitemap_xml() -> FileResponse:
-    return FileResponse(STATIC_DIR / "sitemap.xml", media_type="application/xml")
+def sitemap_xml() -> Response:
+    """Dynamically generate sitemap covering all HOA pages."""
+    now = time.time()
+    if _sitemap_cache["xml"] and now - _sitemap_cache["ts"] < _SITEMAP_TTL:
+        return Response(
+            content=_sitemap_cache["xml"],
+            media_type="application/xml",
+            headers={"Cache-Control": f"public, max-age={_SITEMAP_TTL}"},
+        )
+
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        hoas = db.list_hoas_for_sitemap(conn)
+
+    urls: list[str] = []
+
+    # Static pages
+    static_pages = [
+        ("/", "weekly", "1.0"),
+        ("/about", "monthly", "0.8"),
+        ("/login", "monthly", "0.6"),
+        ("/register", "monthly", "0.6"),
+        ("/legal", "monthly", "0.4"),
+        ("/terms", "monthly", "0.4"),
+        ("/privacy", "monthly", "0.4"),
+    ]
+    for path, freq, priority in static_pages:
+        urls.append(
+            f"  <url><loc>https://hoaproxy.org{path}</loc>"
+            f"<changefreq>{freq}</changefreq><priority>{priority}</priority></url>"
+        )
+
+    # Collect states and cities
+    states: dict[str, int] = {}
+    cities: dict[tuple[str, str, str], int] = {}  # (state, city_slug, city_display) → count
+    for h in hoas:
+        s = (h["state"] or "").strip().lower()
+        c = (h["city"] or "").strip()
+        if not s or not c:
+            continue
+        states[s] = states.get(s, 0) + 1
+        key = (s, db.slugify_city(c), c)
+        cities[key] = cities.get(key, 0) + 1
+
+    # State index pages
+    for s in sorted(states):
+        urls.append(
+            f"  <url><loc>https://hoaproxy.org/hoa/{s}/</loc>"
+            f"<changefreq>weekly</changefreq><priority>0.7</priority></url>"
+        )
+
+    # City index pages
+    for (s, cs, _cd) in sorted(cities):
+        urls.append(
+            f"  <url><loc>https://hoaproxy.org/hoa/{s}/{cs}/</loc>"
+            f"<changefreq>weekly</changefreq><priority>0.6</priority></url>"
+        )
+
+    # Individual HOA pages
+    for h in hoas:
+        s = (h["state"] or "").strip().lower()
+        c = (h["city"] or "").strip()
+        if not s or not c:
+            continue
+        cs = db.slugify_city(c)
+        ns = db.slugify_name(h["hoa_name"])
+        urls.append(
+            f"  <url><loc>https://hoaproxy.org/hoa/{s}/{cs}/{ns}</loc>"
+            f"<changefreq>weekly</changefreq><priority>0.5</priority></url>"
+        )
+
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+        + "\n".join(urls)
+        + "\n</urlset>"
+    )
+
+    _sitemap_cache["xml"] = xml
+    _sitemap_cache["ts"] = now
+
+    return Response(
+        content=xml,
+        media_type="application/xml",
+        headers={"Cache-Control": f"public, max-age={_SITEMAP_TTL}"},
+    )
 
 
 @app.get("/", include_in_schema=False)
@@ -1529,6 +1618,77 @@ def _serve_static_page(filename: str) -> FileResponse:
     if not page.exists():
         raise HTTPException(status_code=404, detail="Page not available")
     return FileResponse(page)
+
+
+@functools.lru_cache(maxsize=1)
+def _load_hoa_template() -> str:
+    return (STATIC_DIR / "hoa.html").read_text()
+
+
+def _render_hoa_page(
+    hoa_name: str,
+    hoa_id: int,
+    city: str | None,
+    state: str | None,
+    doc_count: int,
+) -> HTMLResponse:
+    """Return hoa.html with server-injected SEO metadata and SSR data."""
+    template = _load_hoa_template()
+
+    # --- <title> ---
+    title = html_escape(hoa_name)
+    if city and state:
+        title += f" | {html_escape(city)}, {html_escape(state.upper())}"
+    title += " | HOAproxy"
+
+    # --- meta description ---
+    desc = f"View governing documents, CC&Rs, bylaws and rules for {html_escape(hoa_name)}"
+    if city and state:
+        desc += f" in {html_escape(city)}, {html_escape(state.upper())}"
+    desc += f". {doc_count} document{'s' if doc_count != 1 else ''} available."
+
+    # --- canonical URL ---
+    canonical = f"https://hoaproxy.org{db.build_hoa_path(hoa_name, city, state)}"
+
+    # --- SSR data for client JS ---
+    ssr_json = json.dumps(
+        {"hoaName": hoa_name, "hoaId": hoa_id, "city": city, "state": state, "docCount": doc_count},
+        ensure_ascii=False,
+    )
+
+    # --- JSON-LD structured data ---
+    ld = {"@context": "https://schema.org", "@type": "Organization", "name": hoa_name}
+    if city and state:
+        ld["address"] = {"@type": "PostalAddress", "addressLocality": city, "addressRegion": state.upper()}
+    ld_json = json.dumps(ld, ensure_ascii=False)
+
+    html = template
+
+    # Inject title
+    html = html.replace(
+        "<title>HOAproxy | HOA Profile</title>",
+        f"<title>{title}</title>",
+    )
+
+    # Inject meta description + canonical + JSON-LD before ga-measurement-id meta
+    injected_head = (
+        f'<meta name="description" content="{desc}">\n'
+        f'    <link rel="canonical" href="{html_escape(canonical)}">\n'
+        f'    <script type="application/ld+json">{ld_json}</script>\n'
+        f'    <meta name="ga-measurement-id"'
+    )
+    html = html.replace('<meta name="ga-measurement-id"', injected_head)
+
+    # Inject SSR data script before closing </head>
+    html = html.replace("</head>", f'<script>window.__SSR_DATA__={ssr_json};</script>\n  </head>')
+
+    # Pre-populate visible title
+    html = html.replace(
+        'id="hoaTitle">Loading HOA...</h2>',
+        f'id="hoaTitle">{html_escape(hoa_name)}</h2>',
+    )
+
+    return HTMLResponse(content=html)
 
 
 @app.get("/login", include_in_schema=False)
@@ -1690,14 +1850,181 @@ def participation_page(hoa_name: str) -> FileResponse:
     return _serve_static_page("participation.html")
 
 
-@app.get("/hoa/{hoa_name:path}", include_in_schema=False)
-def hoa_profile_page(hoa_name: str) -> FileResponse:
-    if not STATIC_DIR.exists():
-        raise HTTPException(status_code=404, detail="UI not available")
-    page = STATIC_DIR / "hoa.html"
-    if not page.exists():
-        raise HTTPException(status_code=404, detail="HOA profile page not available")
-    return FileResponse(page)
+# ---------------------------------------------------------------------------
+# HOA pages — hierarchical URLs: /hoa/{state}/{city}/{slug}
+# Route order matters: specific routes first, legacy catch-all last.
+# ---------------------------------------------------------------------------
+
+@app.get("/hoa/{state}/{city}/{slug}", include_in_schema=False)
+def hoa_profile_page(state: str, city: str, slug: str) -> HTMLResponse:
+    """Serve an HOA profile page with server-rendered SEO content."""
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        result = db.resolve_hoa_by_hierarchical_slug(conn, state, city, slug)
+    if result is None:
+        raise HTTPException(status_code=404, detail="HOA not found")
+    return _render_hoa_page(
+        hoa_name=result["hoa_name"],
+        hoa_id=result["hoa_id"],
+        city=result["city"],
+        state=result["state"],
+        doc_count=result["doc_count"],
+    )
+
+
+_STATE_NAMES: dict[str, str] = {
+    "al": "Alabama", "ak": "Alaska", "az": "Arizona", "ar": "Arkansas",
+    "ca": "California", "co": "Colorado", "ct": "Connecticut", "de": "Delaware",
+    "fl": "Florida", "ga": "Georgia", "hi": "Hawaii", "id": "Idaho",
+    "il": "Illinois", "in": "Indiana", "ia": "Iowa", "ks": "Kansas",
+    "ky": "Kentucky", "la": "Louisiana", "me": "Maine", "md": "Maryland",
+    "ma": "Massachusetts", "mi": "Michigan", "mn": "Minnesota", "ms": "Mississippi",
+    "mo": "Missouri", "mt": "Montana", "ne": "Nebraska", "nv": "Nevada",
+    "nh": "New Hampshire", "nj": "New Jersey", "nm": "New Mexico", "ny": "New York",
+    "nc": "North Carolina", "nd": "North Dakota", "oh": "Ohio", "ok": "Oklahoma",
+    "or": "Oregon", "pa": "Pennsylvania", "ri": "Rhode Island", "sc": "South Carolina",
+    "sd": "South Dakota", "tn": "Tennessee", "tx": "Texas", "ut": "Utah",
+    "vt": "Vermont", "va": "Virginia", "wa": "Washington", "wv": "West Virginia",
+    "wi": "Wisconsin", "wy": "Wyoming", "dc": "District of Columbia",
+}
+
+
+@app.get("/hoa/{state}/{city}/", include_in_schema=False)
+def hoa_city_index(state: str, city: str) -> HTMLResponse:
+    """List all HOAs in a city."""
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        hoas = db.list_hoas_in_city(conn, state, city)
+    if not hoas:
+        raise HTTPException(status_code=404, detail="No HOAs found for this city")
+    city_display = hoas[0]["city"]
+    state_upper = state.upper()
+    state_full = _STATE_NAMES.get(state.lower(), state_upper)
+    title = f"HOAs in {html_escape(city_display)}, {state_upper} | HOAproxy"
+    desc = f"Browse {len(hoas)} homeowners associations in {html_escape(city_display)}, {state_upper}. View CC&Rs, bylaws, and governing documents."
+
+    rows_html = []
+    for h in hoas:
+        href = html_escape(db.build_hoa_path(h["hoa_name"], h["city"], h["state"]))
+        name = html_escape(h["hoa_name"])
+        docs = h["doc_count"]
+        rows_html.append(
+            f'<li style="margin:8px 0"><a href="{href}" style="color:var(--accent);font-weight:700;text-decoration:none">{name}</a>'
+            f' <span style="color:var(--muted);font-size:0.88rem">— {docs} doc{"s" if docs != 1 else ""}</span></li>'
+        )
+
+    html = f"""<!doctype html>
+<html lang="en"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="{html_escape(desc)}">
+<meta name="ga-measurement-id" content="G-BV7JXG4JDE">
+<script src="/static/js/analytics.js"></script>
+<title>{title}</title>
+<link rel="stylesheet" href="/static/css/mobile.css">
+<style>
+@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Space+Grotesk:wght@600;700&display=swap");
+:root {{ --bg:#eef5ff; --ink:#12233a; --muted:#587091; --line:#d3e0f4; --accent:#1662f3; }}
+* {{ box-sizing:border-box; }}
+body {{ margin:0; min-height:100vh; font-family:"Manrope","Segoe UI",sans-serif; color:var(--ink);
+  background:linear-gradient(180deg,#f8fbff 0%,var(--bg) 54%,#edf3ff 100%); }}
+.shell {{ width:min(860px,94vw); margin:40px auto 60px; }}
+.card {{ border:1px solid var(--line); border-radius:18px; background:rgba(255,255,255,0.94);
+  box-shadow:0 10px 32px rgba(16,40,73,0.09); padding:28px; }}
+h1 {{ margin:0 0 6px; font-family:"Space Grotesk","Manrope",sans-serif; font-size:clamp(1.4rem,3vw,2rem); }}
+.breadcrumb {{ margin-bottom:16px; font-size:0.9rem; color:var(--muted); }}
+.breadcrumb a {{ color:var(--accent); text-decoration:none; font-weight:600; }}
+ul {{ list-style:none; padding:0; }}
+</style></head><body>
+<main class="shell"><div class="card">
+<div class="breadcrumb"><a href="/">HOAproxy</a> › <a href="/hoa/{state.lower()}/">{html_escape(state_full)}</a> › {html_escape(city_display)}</div>
+<h1>HOAs in {html_escape(city_display)}, {state_upper}</h1>
+<p style="color:var(--muted);margin:0 0 18px">{len(hoas)} homeowners association{"s" if len(hoas) != 1 else ""}</p>
+<ul>{"".join(rows_html)}</ul>
+</div></main></body></html>"""
+    return HTMLResponse(content=html)
+
+
+@app.get("/hoa/{state}/", include_in_schema=False)
+def hoa_state_index(state: str) -> HTMLResponse:
+    """List all cities with HOAs in a state."""
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        cities = db.list_cities_in_state(conn, state)
+    if not cities:
+        raise HTTPException(status_code=404, detail="No HOAs found for this state")
+    state_upper = state.upper()
+    state_full = _STATE_NAMES.get(state.lower(), state_upper)
+    total = sum(c["hoa_count"] for c in cities)
+    title = f"HOAs in {html_escape(state_full)} | HOAproxy"
+    desc = f"Browse {total} homeowners associations across {len(cities)} cities in {html_escape(state_full)}."
+
+    rows_html = []
+    for c in cities:
+        city_slug = db.slugify_city(c["city"])
+        href = f"/hoa/{state.lower()}/{html_escape(city_slug)}/"
+        name = html_escape(c["city"])
+        count = c["hoa_count"]
+        rows_html.append(
+            f'<li style="margin:8px 0"><a href="{href}" style="color:var(--accent);font-weight:700;text-decoration:none">{name}</a>'
+            f' <span style="color:var(--muted);font-size:0.88rem">— {count} HOA{"s" if count != 1 else ""}</span></li>'
+        )
+
+    html = f"""<!doctype html>
+<html lang="en"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="{html_escape(desc)}">
+<meta name="ga-measurement-id" content="G-BV7JXG4JDE">
+<script src="/static/js/analytics.js"></script>
+<title>{title}</title>
+<link rel="stylesheet" href="/static/css/mobile.css">
+<style>
+@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Space+Grotesk:wght@600;700&display=swap");
+:root {{ --bg:#eef5ff; --ink:#12233a; --muted:#587091; --line:#d3e0f4; --accent:#1662f3; }}
+* {{ box-sizing:border-box; }}
+body {{ margin:0; min-height:100vh; font-family:"Manrope","Segoe UI",sans-serif; color:var(--ink);
+  background:linear-gradient(180deg,#f8fbff 0%,var(--bg) 54%,#edf3ff 100%); }}
+.shell {{ width:min(860px,94vw); margin:40px auto 60px; }}
+.card {{ border:1px solid var(--line); border-radius:18px; background:rgba(255,255,255,0.94);
+  box-shadow:0 10px 32px rgba(16,40,73,0.09); padding:28px; }}
+h1 {{ margin:0 0 6px; font-family:"Space Grotesk","Manrope",sans-serif; font-size:clamp(1.4rem,3vw,2rem); }}
+.breadcrumb {{ margin-bottom:16px; font-size:0.9rem; color:var(--muted); }}
+.breadcrumb a {{ color:var(--accent); text-decoration:none; font-weight:600; }}
+ul {{ list-style:none; padding:0; }}
+</style></head><body>
+<main class="shell"><div class="card">
+<div class="breadcrumb"><a href="/">HOAproxy</a> › {html_escape(state_full)}</div>
+<h1>HOAs in {html_escape(state_full)}</h1>
+<p style="color:var(--muted);margin:0 0 18px">{total} homeowners association{"s" if total != 1 else ""} across {len(cities)} cit{"ies" if len(cities) != 1 else "y"}</p>
+<ul>{"".join(rows_html)}</ul>
+</div></main></body></html>"""
+    return HTMLResponse(content=html)
+
+
+@app.get("/hoa/{old_slug}", include_in_schema=False)
+def hoa_legacy_redirect(old_slug: str):
+    """301 redirect from old flat URL to new hierarchical URL."""
+    from fastapi.responses import RedirectResponse
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        result = db.resolve_hoa_by_slug(conn, old_slug)
+    if result is None:
+        raise HTTPException(status_code=404, detail="HOA not found")
+    new_url = db.build_hoa_path(result["hoa_name"], result.get("city"), result.get("state"))
+    # If HOA has no state/city, serve the page directly instead of redirecting to itself
+    if not result.get("state") or not result.get("city"):
+        with db.get_connection(settings.db_path) as conn:
+            doc_count = conn.execute(
+                "SELECT COUNT(*) FROM documents d JOIN hoas h ON h.id = d.hoa_id WHERE h.name = ?",
+                (result["hoa_name"],),
+            ).fetchone()[0]
+        return _render_hoa_page(
+            hoa_name=result["hoa_name"],
+            hoa_id=result["hoa_id"],
+            city=result.get("city"),
+            state=result.get("state"),
+            doc_count=doc_count,
+        )
+    return RedirectResponse(url=new_url, status_code=301)
 
 
 @app.get("/healthz")
