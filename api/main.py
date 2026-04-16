@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from html import escape as html_escape
 import json
 import logging
@@ -2263,7 +2263,7 @@ def update_me(body: UserUpdateRequest, request: Request, user: dict = Depends(ge
 # ---------------------------------------------------------------------------
 
 @app.get("/auth/google/login")
-def google_login(request: Request):
+async def google_login(request: Request):
     """Redirect user to Google's OAuth consent screen."""
     from authlib.integrations.starlette_client import OAuth as StarletteOAuth
     settings = load_settings()
@@ -2278,7 +2278,7 @@ def google_login(request: Request):
         client_kwargs={"scope": "openid email profile"},
     )
     redirect_uri = settings.app_base_url.rstrip("/") + "/auth/google/callback"
-    return oauth.google.authorize_redirect(request, redirect_uri)
+    return await oauth.google.authorize_redirect(request, redirect_uri)
 
 
 @app.get("/auth/google/callback")
@@ -2339,12 +2339,20 @@ async def google_callback(request: Request):
         jwt_token, jti, expires = create_access_token(user["id"], settings)
         db.create_session(conn, user_id=user["id"], token_jti=jti, expires_at=expires.isoformat())
 
+    # Determine if this was a new registration or returning login
+    is_new_user = user.get("created_at", "") >= (datetime.now(timezone.utc).replace(second=0, microsecond=0) - timedelta(minutes=1)).isoformat()
+    ga_event = "sign_up" if is_new_user else "login"
+
     # Return an HTML page that stores the JWT and redirects to dashboard
     return HTMLResponse(f"""<!doctype html>
-<html><head><title>Signing in...</title></head>
+<html><head><title>Signing in...</title>
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-BV7JXG4JDE"></script>
+<script>window.dataLayer=window.dataLayer||[];function gtag(){{dataLayer.push(arguments)}}gtag('js',new Date());gtag('config','G-BV7JXG4JDE');</script>
+</head>
 <body>
 <script>
 localStorage.setItem("hoaware_token", {json.dumps(jwt_token)});
+gtag("event", "{ga_event}", {{method: "google"}});
 fetch("/auth/me", {{headers: {{"Authorization": "Bearer " + {json.dumps(jwt_token)}}}}})
   .then(r => r.json())
   .then(u => {{localStorage.setItem("hoaware_user", JSON.stringify(u)); window.location.href = "/dashboard";}})
