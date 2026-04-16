@@ -4,9 +4,9 @@ from openai import OpenAI
 from rich.console import Console
 from rich.table import Table
 
-from .config import Settings, load_settings, normalize_hoa_name, UNIFIED_COLLECTION
+from . import db
+from .config import Settings, load_settings
 from .embeddings import batch_embeddings
-from .vector_store import build_client, search as qdrant_search, ensure_collection
 
 console = Console()
 
@@ -15,20 +15,8 @@ def search_cli(query: str, hoa_name: str, limit: int = 5, settings: Settings | N
     settings = settings or load_settings()
     openai_client = OpenAI(api_key=settings.openai_api_key)
     embedding = batch_embeddings([query], openai_client, settings.embedding_model)[0]
-    qdrant_client = build_client(
-        settings.qdrant_url,
-        settings.qdrant_api_key,
-        local_path=settings.qdrant_local_path,
-    )
-    collection = UNIFIED_COLLECTION
-    ensure_collection(qdrant_client, collection)
-    results = qdrant_search(
-        qdrant_client,
-        collection_name=collection,
-        query_vector=embedding,
-        limit=limit,
-        hoa_name=hoa_name,
-    )
+    with db.get_connection(settings.db_path) as conn:
+        results = db.vector_search(conn, hoa_name, embedding, limit=limit)
     if not results:
         console.print("[yellow]No matches found[/yellow]")
         return

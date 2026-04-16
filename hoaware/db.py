@@ -411,6 +411,8 @@ def get_connection(db_path: Path) -> sqlite3.Connection:
     _ensure_table_column(conn, "users", "google_id", "TEXT")
     # Add unique index for google_id (safe if column was created with UNIQUE in schema)
     conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id)")
+    # Embedding column for inline vector search (replaces Qdrant)
+    _ensure_table_column(conn, "chunks", "embedding", "BLOB")
     conn.commit()
     return conn
 
@@ -507,15 +509,25 @@ def replace_chunks(
     conn: sqlite3.Connection,
     document_id: int,
     rows: Sequence[tuple[int, int | None, int | None, str, str]],
+    embeddings: Sequence[bytes] | None = None,
 ) -> None:
     conn.execute("DELETE FROM chunks WHERE document_id = ?", (document_id,))
-    conn.executemany(
-        """
-        INSERT INTO chunks (document_id, chunk_index, start_page, end_page, text, qdrant_point_id)
-        VALUES (?, ?, ?, ?, ?, ?)
-        """,
-        [(document_id, *row) for row in rows],
-    )
+    if embeddings:
+        conn.executemany(
+            """
+            INSERT INTO chunks (document_id, chunk_index, start_page, end_page, text, qdrant_point_id, embedding)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            [(document_id, *row, emb) for row, emb in zip(rows, embeddings)],
+        )
+    else:
+        conn.executemany(
+            """
+            INSERT INTO chunks (document_id, chunk_index, start_page, end_page, text, qdrant_point_id)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            [(document_id, *row) for row in rows],
+        )
     conn.commit()
 
 
@@ -1139,6 +1151,69 @@ def list_chunk_point_ids(conn: sqlite3.Connection, document_id: int) -> list[str
         (document_id,),
     )
     return [str(row["qdrant_point_id"]) for row in cur.fetchall()]
+
+
+def vector_search(
+    conn: sqlite3.Connection,
+    hoa_name: str,
+    query_vector: list[float],
+    limit: int = 5,
+) -> list[dict]:
+    """Brute-force cosine similarity search over chunk embeddings for one HOA.
+
+    Returns a list of dicts with keys: score, payload (hoa, document, chunk_index,
+    start_page, end_page, text).
+    """
+    import numpy as np
+
+    cur = conn.execute(
+        """
+        SELECT c.embedding, c.text, c.chunk_index, c.start_page, c.end_page,
+               d.relative_path
+        FROM chunks c
+        JOIN documents d ON c.document_id = d.id
+        JOIN hoas h ON d.hoa_id = h.id
+        WHERE h.name = ? AND c.embedding IS NOT NULL
+        """,
+        (hoa_name,),
+    )
+    rows = cur.fetchall()
+    if not rows:
+        return []
+
+    # Parse embeddings from BLOBs
+    embeddings = []
+    metadata = []
+    for row in rows:
+        vec = np.frombuffer(row["embedding"], dtype=np.float32)
+        embeddings.append(vec)
+        metadata.append({
+            "hoa": hoa_name,
+            "document": row["relative_path"],
+            "chunk_index": row["chunk_index"],
+            "start_page": row["start_page"],
+            "end_page": row["end_page"],
+            "text": row["text"],
+        })
+
+    # Cosine similarity
+    query = np.array(query_vector, dtype=np.float32)
+    matrix = np.stack(embeddings)
+    # Normalize
+    query_norm = query / (np.linalg.norm(query) + 1e-10)
+    norms = np.linalg.norm(matrix, axis=1, keepdims=True) + 1e-10
+    matrix_norm = matrix / norms
+    scores = matrix_norm @ query_norm
+
+    # Top-k
+    top_indices = np.argsort(scores)[::-1][:limit]
+    results = []
+    for idx in top_indices:
+        results.append({
+            "score": float(scores[idx]),
+            "payload": metadata[idx],
+        })
+    return results
 
 
 def mark_document_for_reindex(

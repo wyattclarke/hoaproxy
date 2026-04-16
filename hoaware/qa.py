@@ -7,10 +7,10 @@ from openai import OpenAI
 from rich.console import Console
 from rich.panel import Panel
 
-from .config import Settings, load_settings, normalize_hoa_name, UNIFIED_COLLECTION
+from . import db
+from .config import Settings, load_settings
 from .cost_tracker import log_chat_usage
 from .embeddings import batch_embeddings
-from .vector_store import build_client, ensure_collection, search as qdrant_search
 
 console = Console()
 
@@ -34,24 +34,6 @@ def _build_prompt(question: str, context: List[dict], scope_label: str) -> list[
     return [{"role": "system", "content": system}, {"role": "user", "content": user}]
 
 
-def _search_embedding_for_hoa(
-    embedding: list[float],
-    hoa_name: str,
-    limit: int,
-    settings: Settings,
-    qdrant_client,
-) -> List[dict]:
-    collection = UNIFIED_COLLECTION
-    ensure_collection(qdrant_client, collection)
-    return qdrant_search(
-        qdrant_client,
-        collection_name=collection,
-        query_vector=embedding,
-        limit=limit,
-        hoa_name=hoa_name,
-    )
-
-
 def retrieve_context(
     question: str,
     hoa_name: str,
@@ -60,18 +42,8 @@ def retrieve_context(
 ) -> List[dict]:
     openai_client = OpenAI(api_key=settings.openai_api_key)
     embedding = batch_embeddings([question], openai_client, settings.embedding_model)[0]
-    qdrant_client = build_client(
-        settings.qdrant_url,
-        settings.qdrant_api_key,
-        local_path=settings.qdrant_local_path,
-    )
-    return _search_embedding_for_hoa(
-        embedding=embedding,
-        hoa_name=hoa_name,
-        limit=k,
-        settings=settings,
-        qdrant_client=qdrant_client,
-    )
+    with db.get_connection(settings.db_path) as conn:
+        return db.vector_search(conn, hoa_name, embedding, limit=k)
 
 
 def retrieve_context_multi(
@@ -88,24 +60,14 @@ def retrieve_context_multi(
 
     openai_client = OpenAI(api_key=settings.openai_api_key)
     embedding = batch_embeddings([question], openai_client, settings.embedding_model)[0]
-    qdrant_client = build_client(
-        settings.qdrant_url,
-        settings.qdrant_api_key,
-        local_path=settings.qdrant_local_path,
-    )
     per_hoa_limit = max(3, math.ceil(k / len(normalized_hoas)) + 2)
     merged: List[dict] = []
-    for hoa_name in normalized_hoas:
-        for item in _search_embedding_for_hoa(
-            embedding=embedding,
-            hoa_name=hoa_name,
-            limit=per_hoa_limit,
-            settings=settings,
-            qdrant_client=qdrant_client,
-        ):
-            payload = dict(item.get("payload") or {})
-            payload.setdefault("hoa", hoa_name)
-            merged.append({"score": float(item["score"]), "payload": payload})
+    with db.get_connection(settings.db_path) as conn:
+        for hoa_name in normalized_hoas:
+            for item in db.vector_search(conn, hoa_name, embedding, limit=per_hoa_limit):
+                payload = dict(item.get("payload") or {})
+                payload.setdefault("hoa", hoa_name)
+                merged.append({"score": float(item["score"]), "payload": payload})
     merged.sort(key=lambda row: float(row.get("score") or 0.0), reverse=True)
     return merged[:k]
 
@@ -144,7 +106,6 @@ def get_answer(
         return "No context retrieved; cannot answer.", [], []
 
     messages = _build_prompt(question, results, f"the {hoa_name} HOA")
-    # GPT-5 models currently require default temperature handling.
     completion_kwargs = {
         "model": model,
         "messages": messages,

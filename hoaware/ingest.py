@@ -180,31 +180,42 @@ def _ingest_pdf(
 
     _detect_proxy_rules(chunks, openai_client, hoa_id, conn)
 
+    import numpy as np
+
     embeddings = batch_embeddings(
         [chunk.text for chunk in chunks],
         client=openai_client,
         model=settings.embedding_model,
     )
     logger.info("Embeddings complete for %s (chunks=%s)", rel_path, len(embeddings))
-    payloads = []
-    for chunk, vector in zip(chunks, embeddings, strict=True):
-        payloads.append(
-            (
-                chunk.text,
-                vector,
-                {
-                    "hoa": hoa_name,
-                    "document": rel_path,
-                    "chunk_index": chunk.index,
-                    "start_page": chunk.start_page,
-                    "end_page": chunk.end_page,
-                    "text": chunk.text,
-                },
-            )
-        )
 
-    point_ids = upsert_chunks(qdrant_client, collection, payloads)
-    delete_points(qdrant_client, collection, old_point_ids)
+    # Store embeddings as BLOBs in SQLite for inline vector search
+    embedding_blobs = [np.array(vec, dtype=np.float32).tobytes() for vec in embeddings]
+
+    # Qdrant upsert (optional, for backward compatibility during migration)
+    point_ids = [""] * len(chunks)
+    try:
+        payloads = []
+        for chunk, vector in zip(chunks, embeddings, strict=True):
+            payloads.append(
+                (
+                    chunk.text,
+                    vector,
+                    {
+                        "hoa": hoa_name,
+                        "document": rel_path,
+                        "chunk_index": chunk.index,
+                        "start_page": chunk.start_page,
+                        "end_page": chunk.end_page,
+                        "text": chunk.text,
+                    },
+                )
+            )
+        point_ids = upsert_chunks(qdrant_client, collection, payloads)
+        delete_points(qdrant_client, collection, old_point_ids)
+    except Exception:
+        logger.info("Qdrant upsert skipped (not available); embeddings stored in SQLite")
+
     db.replace_chunks(
         conn,
         doc_id,
@@ -218,6 +229,7 @@ def _ingest_pdf(
             )
             for chunk, point_id in zip(chunks, point_ids, strict=True)
         ],
+        embeddings=embedding_blobs,
     )
     logger.info(
         "Ingest end for %s (bytes=%s, chunks=%s, elapsed_s=%.2f)",
