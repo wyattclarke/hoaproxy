@@ -14,6 +14,8 @@ from qdrant_client.http.models import (
     FieldCondition,
     MatchValue,
     PointIdsList,
+    OptimizersConfigDiff,
+    HnswConfigDiff,
 )
 
 EMBEDDING_DIMENSIONS = 1536  # OpenAI text-embedding-3-small
@@ -70,7 +72,17 @@ def ensure_collection(client: QdrantClient, collection_name: str) -> None:
         return
     client.create_collection(
         collection_name=collection_name,
-        vectors_config=VectorParams(size=EMBEDDING_DIMENSIONS, distance=Distance.COSINE),
+        vectors_config=VectorParams(
+            size=EMBEDDING_DIMENSIONS,
+            distance=Distance.COSINE,
+            on_disk=True,
+        ),
+        optimizers_config=OptimizersConfigDiff(
+            memmap_threshold=0,  # Use mmap for all segments
+        ),
+        hnsw_config=HnswConfigDiff(
+            on_disk=True,  # HNSW index on disk too
+        ),
     )
     # Create payload index on "hoa" for efficient filtering in the unified collection
     try:
