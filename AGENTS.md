@@ -35,12 +35,12 @@ Key values:
 - `HOA_DB_PATH=data/hoa_index.db`
 - `HOA_DOCS_ROOT=hoa_docs`
 - `QDRANT_URL=http://localhost:6333` (local; no API key needed locally)
-- `HOA_ENABLE_OCR=1`, `HOA_OCR_DPI=300`
 - `HOA_CHUNK_CHAR_LIMIT=1800`, `HOA_CHUNK_OVERLAP=200`
 
-**Google Document AI (optional):**
-- Set `HOA_ENABLE_DOCAI=1` and configure `HOA_DOCAI_PROJECT_ID`, `HOA_DOCAI_LOCATION`, `HOA_DOCAI_PROCESSOR_ID`
+**Google Document AI (sole OCR provider):**
+- `HOA_ENABLE_DOCAI=1` (default in production) + configure `HOA_DOCAI_PROJECT_ID`, `HOA_DOCAI_LOCATION`, `HOA_DOCAI_PROCESSOR_ID`
 - `GOOGLE_APPLICATION_CREDENTIALS` — path to your GCP service account key file (gitignored)
+- Tesseract is **not** in the runtime path. See `CLAUDE.md` for the agent-driven ingestion contract.
 
 ## Running & Testing
 ```bash

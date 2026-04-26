@@ -53,8 +53,7 @@ Open `http://127.0.0.1:8000`.
 | `HOA_DOCS_ROOT` | Directory for HOA PDF uploads | Optional (default: `hoa_docs`) |
 | `HOA_DB_PATH` | SQLite database path | Optional (default: `data/hoa_index.db`) |
 | `QDRANT_URL` | Qdrant vector DB endpoint | Optional (default: embedded local) |
-| `HOA_ENABLE_OCR` | Enable Tesseract OCR for scanned PDFs | Optional (default: `1`) |
-| `HOA_ENABLE_DOCAI` | Enable Google Document AI OCR | Optional (default: `0`) |
+| `HOA_ENABLE_DOCAI` | Enable Google Document AI OCR | Optional (default: `1`) |
 | `EMAIL_PROVIDER` | Email backend: `stub`, `resend`, or `smtp` | Optional (default: `stub`) |
 
 See `settings.env.example` for the full list.

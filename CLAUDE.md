@@ -35,12 +35,12 @@ Key values:
 - `HOA_DB_PATH=data/hoa_index.db`
 - `HOA_DOCS_ROOT=hoa_docs`
 - `QDRANT_URL=http://localhost:6333` (local; no API key needed locally)
-- `HOA_ENABLE_OCR=1`, `HOA_OCR_DPI=300`
 - `HOA_CHUNK_CHAR_LIMIT=1800`, `HOA_CHUNK_OVERLAP=200`
 
-**Google Document AI (optional):**
-- Set `HOA_ENABLE_DOCAI=1` and configure `HOA_DOCAI_PROJECT_ID`, `HOA_DOCAI_LOCATION`, `HOA_DOCAI_PROCESSOR_ID`
+**Google Document AI (sole OCR provider):**
+- `HOA_ENABLE_DOCAI=1` (default in production) + configure `HOA_DOCAI_PROJECT_ID`, `HOA_DOCAI_LOCATION`, `HOA_DOCAI_PROCESSOR_ID`
 - `GOOGLE_APPLICATION_CREDENTIALS` — path to your GCP service account key file (gitignored)
+- Tesseract is **not** in the runtime path. Scanned pages with no DocAI configured come back blank.
 
 ## Running & Testing
 ```bash
@@ -59,6 +59,32 @@ Vanilla HTML/CSS/JS — no build step, no framework. Match existing style:
 - Fonts: Manrope (body), Space Grotesk (headings)
 - Colors: `--accent: #1662f3`, `--bg: #eef5ff`, `--ink: #12233a`
 - Auth: always load `/static/js/auth.js`, use `Auth.renderNav()`, `Auth.requireAuth()`, `Auth.fetchJson()`
+
+## Document Ingestion (agent-driven)
+
+The canonical ingestion path is **an LLM agent that finds an HOA, fetches a polygon, fetches its public docs, classifies each one locally, and uploads with full metadata**. The server is a trusted-but-verifying executor — it routes on the agent's hints, doesn't re-derive judgments.
+
+**Agent loop:**
+1. Discover HOA name + polygon (OSM `place=neighbourhood` via Nominatim, or Town/County GIS)
+2. Fetch candidate PDFs (HOA website, management portal, county Register of Deeds)
+3. For each PDF, run `python scripts/hoa_precheck.py` — JSON output with `suggested_category`, `text_extractable`, `recommendation` (`upload`/`reject`/`review`), and est DocAI cost
+4. Skip PDFs flagged `reject` (junk or PII risk)
+5. POST to `/upload` (authenticated) or `/upload/anonymous` with parallel form arrays:
+   - `files`, `categories`, `text_extractable`, `source_urls` (one per file)
+6. The server uses the agent's `text_extractable` hint to route extraction:
+   - `True`  → PyPDF only, no OCR
+   - `False` → DocAI directly
+   - omitted → PyPDF first, DocAI for blank pages only
+
+**Key files:**
+- `hoaware/doc_classifier.py` — VALID_CATEGORIES (ccr, bylaws, articles, rules, amendment, resolution, minutes, financial, insurance), REJECT_PII (membership_list, ballot, violation), REJECT_JUNK (court, tax, government, real_estate, unrelated)
+- `hoaware/pdf_utils.py:extract_pages` — three-mode router on the agent's hint
+- `hoaware/ingest.py:_ingest_pdf` — accepts `category`, `text_extractable`, `source_url`
+- `api/main.py /agent/precheck` — server-side equivalent of the precheck CLI
+
+**Categories the agent should prefer for upload:** ccr, bylaws, articles, amendment, rules. Optionally minutes/financial/resolution/insurance. **Never** upload `membership_list`, `ballot`, `violation` (PII).
+
+**Don't reach for:** there is no batch-import script, no per-corpus uploader, no queue runner. If you find yourself wanting to write one, you're working against the design — agents discover and upload one HOA at a time.
 
 ## Proxy Voting System
 See `docs/proxy-voting-plan.md` for full details.
