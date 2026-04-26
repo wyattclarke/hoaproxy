@@ -3052,6 +3052,25 @@ def get_usage_summary(
     return [dict(r) for r in rows]
 
 
+def get_recent_service_cost_usd(
+    conn: sqlite3.Connection,
+    service: str,
+    *,
+    hours: int = 24,
+) -> float:
+    """Sum est_cost_usd for one service over the last N hours."""
+    row = conn.execute(
+        """
+        SELECT COALESCE(SUM(est_cost_usd), 0.0) AS total
+        FROM api_usage_log
+        WHERE service = ?
+          AND timestamp >= datetime('now', ?)
+        """,
+        (service, f"-{int(hours)} hours"),
+    ).fetchone()
+    return float(row["total"] or 0.0)
+
+
 def get_usage_daily(
     conn: sqlite3.Connection,
     *,

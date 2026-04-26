@@ -830,6 +830,54 @@ _ingest_semaphore = threading.Semaphore(1)  # only one ingestion at a time
 _TEXT_EXTRACTABLE_TRUE = {"true", "1", "yes", "y"}
 _TEXT_EXTRACTABLE_FALSE = {"false", "0", "no", "n"}
 
+# Daily DocAI spend ceiling across the whole app. Hits trigger 429 on
+# /upload until the rolling-24h spend drops below the cap. Default $20/day.
+DAILY_DOCAI_BUDGET_USD = float(os.environ.get("DAILY_DOCAI_BUDGET_USD", "20.0"))
+
+
+def _projected_docai_pages(
+    paths: list[Path], metadata_by_path: dict[Path, dict]
+) -> int:
+    """Sum page counts for files the agent flagged text_extractable=False."""
+    import pypdf as _pypdf
+    total = 0
+    for p in paths:
+        meta = metadata_by_path.get(p) or {}
+        if meta.get("text_extractable") is False:
+            try:
+                total += len(_pypdf.PdfReader(str(p)).pages)
+            except Exception:
+                pass
+    return total
+
+
+def _check_daily_docai_budget(projected_pages: int) -> None:
+    """Refuse the upload if last-24h DocAI cost + projected exceeds the cap.
+
+    `projected_pages` is the agent's worst-case page count for this upload
+    (sum of pages where text_extractable=False). We don't know the true
+    figure for hint-omitted PDFs, so we don't count them here.
+    """
+    if projected_pages <= 0:
+        return
+    from hoaware.cost_tracker import COST_DOCAI_PER_PAGE
+
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        recent = db.get_recent_service_cost_usd(conn, "docai", hours=24)
+    projected_cost = projected_pages * COST_DOCAI_PER_PAGE
+    if recent + projected_cost > DAILY_DOCAI_BUDGET_USD:
+        raise HTTPException(
+            status_code=429,
+            detail=(
+                f"Daily DocAI budget would be exceeded: "
+                f"${recent:.2f} spent in last 24h + ${projected_cost:.2f} "
+                f"projected > ${DAILY_DOCAI_BUDGET_USD:.2f} cap. "
+                f"Either set text_extractable=true for digital PDFs, "
+                f"raise DAILY_DOCAI_BUDGET_USD, or wait for the rolling window."
+            ),
+        )
+
 
 def _parse_per_file_metadata(
     file_count: int,
@@ -2247,6 +2295,63 @@ def admin_costs_daily(request: Request, month: Optional[str] = None):
     return {"period": month or "all-time", "daily": rows}
 
 
+@app.get("/admin/costs/docai-alert")
+def admin_docai_alert(
+    request: Request,
+    threshold_usd: float = 10.0,
+    hours: int = 24,
+    notify: bool = False,
+):
+    """Cost-alert endpoint for cron (cron-job.org).
+
+    Returns last-N-hours DocAI spend and whether it exceeds the threshold.
+    If notify=true and over threshold, sends an email via the existing
+    email service to settings.cost_report_email.
+
+    Example cron:
+      curl -fsS -H "Authorization: Bearer $JWT_SECRET" \\
+        "https://hoaproxy.org/admin/costs/docai-alert?threshold_usd=10&notify=true"
+    """
+    _require_admin(request)
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        spend = db.get_recent_service_cost_usd(conn, "docai", hours=hours)
+    over = spend > threshold_usd
+
+    notified = False
+    if over and notify and settings.cost_report_email:
+        try:
+            from hoaware import email_service
+
+            subject = f"[hoaproxy] DocAI spend ${spend:.2f} over ${threshold_usd:.2f} in {hours}h"
+            html = (
+                f"<p>Document AI spend for the last {hours}h reached "
+                f"<b>${spend:.2f}</b>, above the configured threshold of "
+                f"<b>${threshold_usd:.2f}</b>.</p>"
+                f"<p>Check <code>/admin/costs</code> to investigate.</p>"
+                f"<p><code>DAILY_DOCAI_BUDGET_USD</code> currently caps "
+                f"<code>/upload</code> at ${DAILY_DOCAI_BUDGET_USD:.2f}/day.</p>"
+            )
+            email_service._send_email(
+                to=[settings.cost_report_email],
+                subject=subject,
+                html=html,
+            )
+            notified = True
+        except Exception:
+            logger.exception("DocAI alert email failed")
+
+    return {
+        "service": "docai",
+        "hours": hours,
+        "spend_usd": round(spend, 4),
+        "threshold_usd": threshold_usd,
+        "over_threshold": over,
+        "daily_upload_cap_usd": DAILY_DOCAI_BUDGET_USD,
+        "notified": notified,
+    }
+
+
 @app.get("/admin/costs/fixed")
 def admin_list_fixed_costs(request: Request, all: bool = False):
     _require_admin(request)
@@ -3600,6 +3705,11 @@ async def upload_documents(
             )
         location_saved = True
 
+    # Daily DocAI budget guard: count pages from files the agent flagged as
+    # text_extractable=False — those will hit DocAI in full.
+    projected_ocr_pages = _projected_docai_pages(saved_paths, metadata_by_path)
+    _check_daily_docai_budget(projected_ocr_pages)
+
     background_tasks.add_task(
         _ingest_uploaded_files, resolved_hoa, saved_paths, metadata_by_path
     )
@@ -3717,6 +3827,10 @@ async def upload_documents_anonymous(
     logger.info("anonymous_upload hoa=%s email=%s files=%d ip=%s",
                 resolved_hoa, email, len(saved_files),
                 request.client.host if request.client else "unknown")
+
+    projected_ocr_pages = _projected_docai_pages(saved_paths, metadata_by_path)
+    _check_daily_docai_budget(projected_ocr_pages)
+
     background_tasks.add_task(
         _ingest_uploaded_files, resolved_hoa, saved_paths, metadata_by_path
     )

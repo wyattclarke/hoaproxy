@@ -197,3 +197,65 @@ def test_precheck_pii_filename_flagged():
     assert body["suggested_category"] == "membership_list"
     assert body["is_pii_risk"] is True
     assert body["is_valid_governing_doc"] is False
+
+
+# ---------- daily DocAI budget guard (PR-6) ----------
+
+def test_daily_docai_budget_blocks_when_exhausted(monkeypatch):
+    """If 24h DocAI spend has already burned the cap, /upload returns 429."""
+    from api import main as api_main
+
+    # Force a tiny budget so any projection trips the limit
+    monkeypatch.setattr(api_main, "DAILY_DOCAI_BUDGET_USD", 0.01)
+
+    # Pretend recent spend is already $5
+    def fake_recent(conn, service, *, hours=24):
+        return 5.0 if service == "docai" else 0.0
+    monkeypatch.setattr(db, "get_recent_service_cost_usd", fake_recent)
+
+    token = _register_user(email="agent-budget@example.com")
+    pdf_bytes = _make_text_pdf("scanned doc fake")
+    r = client.post(
+        "/upload",
+        headers={"Authorization": f"Bearer {token}"},
+        data={
+            "hoa": "Budget Test HOA",
+            "categories": ["ccr"],
+            "text_extractable": ["false"],  # forces DocAI projection > 0
+        },
+        files=[("files", ("decl.pdf", pdf_bytes, "application/pdf"))],
+    )
+    assert r.status_code == 429
+    assert "budget" in r.text.lower()
+
+
+def test_docai_alert_endpoint_under_threshold(monkeypatch):
+    """The cost-alert endpoint reports under-threshold when spend is low."""
+    def fake_recent(conn, service, *, hours=24):
+        return 0.42
+    monkeypatch.setattr(db, "get_recent_service_cost_usd", fake_recent)
+
+    r = client.get(
+        "/admin/costs/docai-alert?threshold_usd=10",
+        headers={"Authorization": "Bearer test-secret-for-ci"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["over_threshold"] is False
+    assert body["spend_usd"] == 0.42
+    assert body["threshold_usd"] == 10.0
+
+
+def test_docai_alert_endpoint_over_threshold(monkeypatch):
+    def fake_recent(conn, service, *, hours=24):
+        return 99.0
+    monkeypatch.setattr(db, "get_recent_service_cost_usd", fake_recent)
+
+    r = client.get(
+        "/admin/costs/docai-alert?threshold_usd=10",
+        headers={"Authorization": "Bearer test-secret-for-ci"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["over_threshold"] is True
+    assert body["spend_usd"] == 99.0
