@@ -55,6 +55,12 @@ class Settings:
     # Google OAuth
     google_client_id: str | None
     google_client_secret: str | None
+    # Q&A LLM (chat completions). Defaults to Groq + Llama-3.3-70B for fast,
+    # cheap, OpenAI-compatible inference. Override via env to use any
+    # OpenAI-compatible endpoint (Cerebras, Fireworks, DeepInfra, OpenAI, etc.).
+    qa_api_base_url: str
+    qa_api_key: str | None
+    qa_model: str
 
 
 def load_settings() -> Settings:
@@ -97,6 +103,9 @@ def load_settings() -> Settings:
         ga4_property_id=os.environ.get("GA4_PROPERTY_ID"),
         google_client_id=os.environ.get("GOOGLE_CLIENT_ID"),
         google_client_secret=os.environ.get("GOOGLE_CLIENT_SECRET"),
+        qa_api_base_url=os.environ.get("QA_API_BASE_URL", "https://api.groq.com/openai/v1"),
+        qa_api_key=os.environ.get("QA_API_KEY"),
+        qa_model=os.environ.get("QA_MODEL", "llama-3.3-70b-versatile"),
     )
 
 

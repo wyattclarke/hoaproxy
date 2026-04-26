@@ -318,7 +318,7 @@ class QARequest(BaseModel):
     hoa: str
     question: str
     k: int = Field(default=6, ge=1, le=20)
-    model: str = "gpt-5-mini"
+    model: str = ""
 
 
 class QAResponse(BaseModel):
@@ -365,7 +365,7 @@ class MultiQARequest(BaseModel):
     hoas: list[str]
     question: str
     k: int = Field(default=8, ge=1, le=20)
-    model: str = "gpt-5-mini"
+    model: str = ""
 
 
 class HoaMatch(BaseModel):

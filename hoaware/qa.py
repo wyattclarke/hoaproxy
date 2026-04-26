@@ -86,6 +86,22 @@ def build_citations(results: List[dict]) -> List[dict]:
     return citations
 
 
+def _qa_chat_client(settings: Settings) -> OpenAI:
+    """Build an OpenAI-compatible client for the configured QA endpoint.
+
+    Falls back to OpenAI's API if QA_API_KEY isn't set but OPENAI_API_KEY is.
+    """
+    api_key = settings.qa_api_key or settings.openai_api_key
+    return OpenAI(api_key=api_key, base_url=settings.qa_api_base_url)
+
+
+def _resolve_qa_model(requested: str, settings: Settings) -> str:
+    """Use the configured QA model unless caller passed an explicit override."""
+    if requested and not requested.startswith("gpt-"):
+        return requested
+    return settings.qa_model
+
+
 def get_answer(
     question: str,
     hoa_name: str,
@@ -100,21 +116,20 @@ def get_answer(
     if not hoa_name.strip():
         raise ValueError("hoa_name is required")
 
-    openai_client = OpenAI(api_key=settings.openai_api_key)
+    chat_client = _qa_chat_client(settings)
+    chat_model = _resolve_qa_model(model, settings)
     results = retrieve_context(question, hoa_name, k, settings)
     if not results:
         return "No context retrieved; cannot answer.", [], []
 
     messages = _build_prompt(question, results, f"the {hoa_name} HOA")
-    completion_kwargs = {
-        "model": model,
-        "messages": messages,
-    }
-    if not model.startswith("gpt-5"):
-        completion_kwargs["temperature"] = 0.2
-    completion = openai_client.chat.completions.create(**completion_kwargs)
+    completion = chat_client.chat.completions.create(
+        model=chat_model,
+        messages=messages,
+        temperature=0.2,
+    )
     if hasattr(completion, "usage") and completion.usage:
-        log_chat_usage(completion.usage.prompt_tokens, completion.usage.completion_tokens, model=model)
+        log_chat_usage(completion.usage.prompt_tokens, completion.usage.completion_tokens, model=chat_model)
     answer = completion.choices[0].message.content or ""
     citations = build_citations(results)
     return answer.strip(), citations, results
@@ -135,22 +150,21 @@ def get_answer_multi(
     if not normalized_hoas:
         raise ValueError("hoas is required")
 
-    openai_client = OpenAI(api_key=settings.openai_api_key)
+    chat_client = _qa_chat_client(settings)
+    chat_model = _resolve_qa_model(model, settings)
     results = retrieve_context_multi(question, normalized_hoas, k, settings)
     if not results:
         return "No context retrieved; cannot answer.", [], []
 
     scope_label = f"the selected HOAs ({', '.join(normalized_hoas)})"
     messages = _build_prompt(question, results, scope_label)
-    completion_kwargs = {
-        "model": model,
-        "messages": messages,
-    }
-    if not model.startswith("gpt-5"):
-        completion_kwargs["temperature"] = 0.2
-    completion = openai_client.chat.completions.create(**completion_kwargs)
+    completion = chat_client.chat.completions.create(
+        model=chat_model,
+        messages=messages,
+        temperature=0.2,
+    )
     if hasattr(completion, "usage") and completion.usage:
-        log_chat_usage(completion.usage.prompt_tokens, completion.usage.completion_tokens, model=model)
+        log_chat_usage(completion.usage.prompt_tokens, completion.usage.completion_tokens, model=chat_model)
     answer = completion.choices[0].message.content or ""
     citations = build_citations(results)
     return answer.strip(), citations, results
