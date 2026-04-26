@@ -807,9 +807,16 @@ def list_hoa_map_points(
     q: str | None = None,
     state: str | None = None,
 ) -> list[dict]:
-    """Lightweight query returning only fields needed for map markers."""
+    """Lightweight query returning only fields needed for map markers.
+
+    Excludes HOAs without a polygon: their lat/lon (when present) is almost
+    always a city-center geocode from a record uploaded with only "city, state"
+    as location signal — those would stack hundreds of pins on a single point
+    and aren't useful as map data. Polygon-less HOAs remain searchable by
+    name through the regular /hoas listing.
+    """
     params: list[Any] = []
-    where_clauses: list[str] = []
+    where_clauses: list[str] = ["l.boundary_geojson IS NOT NULL"]
     if q:
         like = f"%{q}%"
         where_clauses.append("(h.name LIKE ? OR l.city LIKE ? OR l.state LIKE ?)")
@@ -817,7 +824,7 @@ def list_hoa_map_points(
     if state:
         where_clauses.append("l.state = ?")
         params.append(state)
-    where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+    where_sql = "WHERE " + " AND ".join(where_clauses)
     cur = conn.execute(
         f"""
         SELECT
