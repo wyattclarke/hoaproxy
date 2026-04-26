@@ -279,6 +279,18 @@ async def lifespan(app: FastAPI):
         _run_expiry_sweep()
         _run_verification_link_backfill()
         import threading
+        # Backfill the sqlite-vec index from existing embeddings (one-time
+        # after upgrade; idempotent thereafter). Run in a thread so a slow
+        # backfill doesn't block app startup.
+        def _vec_backfill():
+            try:
+                with db.get_connection(settings.db_path) as conn:
+                    n = db.backfill_vec_index(conn)
+                    if n:
+                        logger.info("sqlite-vec backfill: indexed %d chunks", n)
+            except Exception:
+                logger.exception("sqlite-vec backfill failed")
+        threading.Thread(target=_vec_backfill, daemon=True).start()
         threading.Thread(target=_run_proxy_status_backfill, daemon=True).start()
         threading.Thread(target=_cost_report_scheduler, daemon=True).start()
     except Exception as exc:

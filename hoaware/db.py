@@ -365,6 +365,115 @@ def _ensure_table_column(
     conn.commit()
 
 
+_VEC_DIM = 1536  # text-embedding-3-small
+_vec_load_failed = False
+
+
+def _load_sqlite_vec(conn: sqlite3.Connection) -> bool:
+    """Load the sqlite-vec extension. Returns True on success.
+
+    Logs once if loading fails so brute-force fallback path is observable.
+    """
+    global _vec_load_failed
+    try:
+        import sqlite_vec  # type: ignore
+        conn.enable_load_extension(True)
+        sqlite_vec.load(conn)
+        conn.enable_load_extension(False)
+        return True
+    except Exception as exc:  # noqa: BLE001
+        if not _vec_load_failed:
+            import logging
+            logging.getLogger(__name__).warning(
+                "sqlite-vec extension unavailable (%s) — falling back to brute-force vector search",
+                exc,
+            )
+            _vec_load_failed = True
+        return False
+
+
+def _setup_vec_index(conn: sqlite3.Connection) -> None:
+    """Create the vec0 virtual table + triggers that mirror chunks.embedding.
+
+    Idempotent. Safe to call on every connection.
+    """
+    conn.execute(
+        f"""
+        CREATE VIRTUAL TABLE IF NOT EXISTS chunk_vec USING vec0(
+            hoa_id INTEGER PARTITION KEY,
+            embedding FLOAT[{_VEC_DIM}]
+        )
+        """
+    )
+    conn.executescript(
+        """
+        CREATE TRIGGER IF NOT EXISTS chunks_vec_insert
+        AFTER INSERT ON chunks
+        WHEN NEW.embedding IS NOT NULL AND length(NEW.embedding) > 0
+        BEGIN
+            INSERT INTO chunk_vec(rowid, hoa_id, embedding)
+            SELECT NEW.id, d.hoa_id, NEW.embedding
+            FROM documents d WHERE d.id = NEW.document_id;
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS chunks_vec_update
+        AFTER UPDATE OF embedding ON chunks
+        WHEN NEW.embedding IS NOT NULL AND length(NEW.embedding) > 0
+        BEGIN
+            DELETE FROM chunk_vec WHERE rowid = NEW.id;
+            INSERT INTO chunk_vec(rowid, hoa_id, embedding)
+            SELECT NEW.id, d.hoa_id, NEW.embedding
+            FROM documents d WHERE d.id = NEW.document_id;
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS chunks_vec_delete
+        AFTER DELETE ON chunks
+        BEGIN
+            DELETE FROM chunk_vec WHERE rowid = OLD.id;
+        END;
+        """
+    )
+    conn.commit()
+
+
+def backfill_vec_index(conn: sqlite3.Connection, batch_size: int = 1000) -> int:
+    """One-time backfill: copy existing chunks.embedding rows into chunk_vec.
+
+    Returns count of rows inserted. Safe to call repeatedly — only inserts
+    rows missing from the index. Skips silently if vec extension isn't loaded.
+    """
+    try:
+        conn.execute("SELECT count(*) FROM chunk_vec").fetchone()
+    except sqlite3.OperationalError:
+        return 0
+    inserted = 0
+    while True:
+        rows = conn.execute(
+            """
+            SELECT c.id, d.hoa_id, c.embedding
+            FROM chunks c
+            JOIN documents d ON d.id = c.document_id
+            LEFT JOIN chunk_vec v ON v.rowid = c.id
+            WHERE c.embedding IS NOT NULL
+              AND length(c.embedding) > 0
+              AND v.rowid IS NULL
+            LIMIT ?
+            """,
+            (batch_size,),
+        ).fetchall()
+        if not rows:
+            break
+        conn.executemany(
+            "INSERT INTO chunk_vec(rowid, hoa_id, embedding) VALUES (?, ?, ?)",
+            [(r["id"], r["hoa_id"], r["embedding"]) for r in rows],
+        )
+        conn.commit()
+        inserted += len(rows)
+        if len(rows) < batch_size:
+            break
+    return inserted
+
+
 def get_connection(db_path: Path) -> sqlite3.Connection:
     db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(db_path)
@@ -414,6 +523,9 @@ def get_connection(db_path: Path) -> sqlite3.Connection:
     # Embedding column for inline vector search (replaces Qdrant)
     _ensure_table_column(conn, "chunks", "embedding", "BLOB")
     conn.commit()
+    # sqlite-vec index for fast ANN search (replaces brute-force NumPy path)
+    if _load_sqlite_vec(conn):
+        _setup_vec_index(conn)
     return conn
 
 
@@ -1159,12 +1271,64 @@ def vector_search(
     query_vector: list[float],
     limit: int = 5,
 ) -> list[dict]:
-    """Brute-force cosine similarity search over chunk embeddings for one HOA.
+    """Vector similarity search over chunk embeddings for one HOA.
 
-    Returns a list of dicts with keys: score, payload (hoa, document, chunk_index,
-    start_page, end_page, text).
+    Uses the sqlite-vec index when available (partition-keyed by hoa_id, runs
+    in C). Falls back to brute-force NumPy if the extension didn't load.
+
+    Returns a list of dicts with keys: score, payload (hoa, document,
+    chunk_index, start_page, end_page, text). `score` is cosine similarity in
+    the brute-force path and (1 - L2 distance / 2) in the vec0 path; both are
+    monotonic with relevance, so they're interchangeable for ranking.
     """
     import numpy as np
+
+    query = np.asarray(query_vector, dtype=np.float32)
+
+    # Resolve hoa_id once — both paths need it (vec path for partition filter,
+    # brute path for the join).
+    hoa_row = conn.execute("SELECT id FROM hoas WHERE name = ?", (hoa_name,)).fetchone()
+    if not hoa_row:
+        return []
+    hoa_id = int(hoa_row["id"])
+
+    if not _vec_load_failed:
+        try:
+            cur = conn.execute(
+                """
+                SELECT cv.rowid AS chunk_id, cv.distance,
+                       c.text, c.chunk_index, c.start_page, c.end_page,
+                       d.relative_path
+                FROM chunk_vec cv
+                JOIN chunks c ON c.id = cv.rowid
+                JOIN documents d ON d.id = c.document_id
+                WHERE cv.embedding MATCH ?
+                  AND cv.hoa_id = ?
+                  AND cv.k = ?
+                ORDER BY cv.distance
+                """,
+                (query.tobytes(), hoa_id, int(limit)),
+            )
+            results = []
+            for row in cur.fetchall():
+                # vec_distance_l2 on normalized OpenAI vectors: distance ∈ [0, 2].
+                # Convert to a 1.0-best score for parity with brute-force path.
+                dist = float(row["distance"])
+                results.append({
+                    "score": 1.0 - dist / 2.0,
+                    "payload": {
+                        "hoa": hoa_name,
+                        "document": row["relative_path"],
+                        "chunk_index": row["chunk_index"],
+                        "start_page": row["start_page"],
+                        "end_page": row["end_page"],
+                        "text": row["text"],
+                    },
+                })
+            return results
+        except sqlite3.OperationalError:
+            # Index missing or query unsupported — fall through to brute force.
+            pass
 
     cur = conn.execute(
         """
@@ -1172,21 +1336,18 @@ def vector_search(
                d.relative_path
         FROM chunks c
         JOIN documents d ON c.document_id = d.id
-        JOIN hoas h ON d.hoa_id = h.id
-        WHERE h.name = ? AND c.embedding IS NOT NULL AND length(c.embedding) > 0
+        WHERE d.hoa_id = ? AND c.embedding IS NOT NULL AND length(c.embedding) > 0
         """,
-        (hoa_name,),
+        (hoa_id,),
     )
     rows = cur.fetchall()
     if not rows:
         return []
 
-    # Parse embeddings from BLOBs
     embeddings = []
     metadata = []
     for row in rows:
-        vec = np.frombuffer(row["embedding"], dtype=np.float32)
-        embeddings.append(vec)
+        embeddings.append(np.frombuffer(row["embedding"], dtype=np.float32))
         metadata.append({
             "hoa": hoa_name,
             "document": row["relative_path"],
@@ -1196,24 +1357,16 @@ def vector_search(
             "text": row["text"],
         })
 
-    # Cosine similarity
-    query = np.array(query_vector, dtype=np.float32)
     matrix = np.stack(embeddings)
-    # Normalize
     query_norm = query / (np.linalg.norm(query) + 1e-10)
     norms = np.linalg.norm(matrix, axis=1, keepdims=True) + 1e-10
     matrix_norm = matrix / norms
     scores = matrix_norm @ query_norm
-
-    # Top-k
     top_indices = np.argsort(scores)[::-1][:limit]
-    results = []
-    for idx in top_indices:
-        results.append({
-            "score": float(scores[idx]),
-            "payload": metadata[idx],
-        })
-    return results
+    return [
+        {"score": float(scores[idx]), "payload": metadata[idx]}
+        for idx in top_indices
+    ]
 
 
 def mark_document_for_reindex(
