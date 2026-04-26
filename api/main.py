@@ -274,6 +274,57 @@ def _cost_report_scheduler() -> None:
             logger.exception("Failed to send weekly cost report")
 
 
+def _refit_polygon_centers_on_boot() -> None:
+    """Idempotent boot-time fix: when an HOA has a polygon AND a lat/lon far
+    from the polygon centroid, the lat/lon is almost certainly a stale
+    city-center geocode from the pre-fix /upload code path. Replace it with
+    the polygon centroid. Runs every boot; a no-op once data is consistent.
+    """
+    try:
+        import math
+        settings = load_settings()
+        threshold_km = float(os.environ.get("REFIT_POLYGON_THRESHOLD_KM", "1.5"))
+
+        def _km(lat1, lon1, lat2, lon2):
+            dx = (lon2 - lon1) * 111.32 * math.cos(math.radians((lat1 + lat2) / 2))
+            dy = (lat2 - lat1) * 111.32
+            return math.sqrt(dx * dx + dy * dy)
+
+        with db.get_connection(settings.db_path) as conn:
+            rows = conn.execute(
+                """
+                SELECT h.name, l.latitude, l.longitude, l.boundary_geojson
+                FROM hoa_locations l JOIN hoas h ON h.id = l.hoa_id
+                WHERE l.boundary_geojson IS NOT NULL
+                """
+            ).fetchall()
+            updates: list[tuple[str, float, float]] = []
+            for r in rows:
+                center = _center_from_boundary_geojson(r["boundary_geojson"])
+                if not center:
+                    continue
+                new_lat, new_lon = center
+                if r["latitude"] is None or r["longitude"] is None:
+                    updates.append((r["name"], new_lat, new_lon))
+                    continue
+                if _km(r["latitude"], r["longitude"], new_lat, new_lon) > threshold_km:
+                    updates.append((r["name"], new_lat, new_lon))
+            for name, new_lat, new_lon in updates:
+                conn.execute(
+                    """
+                    UPDATE hoa_locations
+                    SET latitude = ?, longitude = ?
+                    WHERE hoa_id = (SELECT id FROM hoas WHERE name = ?)
+                    """,
+                    (new_lat, new_lon, name),
+                )
+            conn.commit()
+            if updates:
+                logger.info("refit_polygon_centers: corrected %d HOA pin(s)", len(updates))
+    except Exception:
+        logger.exception("refit_polygon_centers boot migration failed")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = load_settings()
@@ -303,6 +354,7 @@ async def lifespan(app: FastAPI):
         threading.Thread(target=_vec_backfill, daemon=True).start()
         threading.Thread(target=_run_proxy_status_backfill, daemon=True).start()
         threading.Thread(target=_cost_report_scheduler, daemon=True).start()
+        threading.Thread(target=_refit_polygon_centers_on_boot, daemon=True).start()
     except Exception as exc:
         logger.error("Startup migration error (non-fatal): %s", exc)
     yield
