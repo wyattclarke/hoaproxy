@@ -2420,6 +2420,71 @@ def admin_send_cost_report(request: Request, email: Optional[str] = None):
     return {"status": "sent", "to": to_email}
 
 
+@app.post("/admin/refit-polygon-centers")
+def admin_refit_polygon_centers(request: Request, distance_threshold_km: float = 1.5):
+    """When an HOA has a polygon AND a lat/lon farther than threshold from the
+    polygon centroid, the lat/lon is almost certainly stale city-center
+    geocoding from the pre-fix /upload code path. Replace it with the polygon
+    centroid.
+    """
+    _require_admin(request)
+    import math
+
+    settings = load_settings()
+    fixed = 0
+    filled = 0
+    examined = 0
+
+    def _polygon_center(s: str):
+        center = _center_from_boundary_geojson(s)
+        return center  # already (lat, lon)
+
+    def _km(lat1, lon1, lat2, lon2):
+        dx = (lon2 - lon1) * 111.32 * math.cos(math.radians((lat1 + lat2) / 2))
+        dy = (lat2 - lat1) * 111.32
+        return math.sqrt(dx * dx + dy * dy)
+
+    with db.get_connection(settings.db_path) as conn:
+        rows = conn.execute(
+            """
+            SELECT h.name, l.latitude, l.longitude, l.boundary_geojson
+            FROM hoa_locations l JOIN hoas h ON h.id = l.hoa_id
+            WHERE l.boundary_geojson IS NOT NULL
+            """
+        ).fetchall()
+        examined = len(rows)
+        updates: list[tuple[str, float, float]] = []
+        for r in rows:
+            center = _polygon_center(r["boundary_geojson"])
+            if not center:
+                continue
+            new_lat, new_lon = center
+            if r["latitude"] is None or r["longitude"] is None:
+                updates.append((r["name"], new_lat, new_lon))
+                filled += 1
+                continue
+            d = _km(r["latitude"], r["longitude"], new_lat, new_lon)
+            if d > distance_threshold_km:
+                updates.append((r["name"], new_lat, new_lon))
+                fixed += 1
+        for name, new_lat, new_lon in updates:
+            conn.execute(
+                """
+                UPDATE hoa_locations
+                SET latitude = ?, longitude = ?
+                WHERE hoa_id = (SELECT id FROM hoas WHERE name = ?)
+                """,
+                (new_lat, new_lon, name),
+            )
+        conn.commit()
+    return {
+        "examined_with_polygon": examined,
+        "fixed_moved_to_centroid": fixed,
+        "filled_was_missing": filled,
+        "distance_threshold_km": distance_threshold_km,
+    }
+
+
 @app.post("/admin/backfill-categories")
 def admin_backfill_categories(request: Request, body: dict, apply_hidden_reason: bool = False):
     """Backfill documents.category from a posted audit-report JSON body.
@@ -3524,6 +3589,13 @@ def upsert_hoa_location(
         raise HTTPException(status_code=400, detail="latitude must be between -90 and 90")
     if longitude is not None and not (-180 <= longitude <= 180):
         raise HTTPException(status_code=400, detail="longitude must be between -180 and 180")
+    # Polygon centroid wins over address-based geocoding — a polygon describes
+    # the actual neighborhood, while "city, state" geocoding lands on the city
+    # center.
+    if (latitude is None or longitude is None) and normalized_boundary:
+        center = _center_from_boundary_geojson(normalized_boundary)
+        if center:
+            latitude, longitude = center
     if (latitude is None or longitude is None) and any([street, city, state, postal_code]):
         coords = _geocode_from_parts(
             street=(street.strip() if street else None),
@@ -3533,10 +3605,6 @@ def upsert_hoa_location(
         )
         if coords:
             latitude, longitude = coords
-    if (latitude is None or longitude is None) and normalized_boundary:
-        center = _center_from_boundary_geojson(normalized_boundary)
-        if center:
-            latitude, longitude = center
     with db.get_connection(settings.db_path) as conn:
         db.upsert_hoa_location(
             conn,
@@ -3674,6 +3742,13 @@ async def upload_documents(
             raise HTTPException(status_code=400, detail="latitude must be between -90 and 90")
         if longitude is not None and not (-180 <= longitude <= 180):
             raise HTTPException(status_code=400, detail="longitude must be between -180 and 180")
+        # Polygon centroid wins over address-based geocoding (the polygon
+        # describes the actual neighborhood; "city, state" geocoding lands on
+        # the city center).
+        if (latitude is None or longitude is None) and normalized_boundary:
+            center = _center_from_boundary_geojson(normalized_boundary)
+            if center:
+                latitude, longitude = center
         if (latitude is None or longitude is None) and any([street, city, state, postal_code]):
             coords = _geocode_from_parts(
                 street=(street.strip() if street else None),
@@ -3683,10 +3758,6 @@ async def upload_documents(
             )
             if coords:
                 latitude, longitude = coords
-        if (latitude is None or longitude is None) and normalized_boundary:
-            center = _center_from_boundary_geojson(normalized_boundary)
-            if center:
-                latitude, longitude = center
         with db.get_connection(settings.db_path) as conn:
             db.upsert_hoa_location(
                 conn,
@@ -3795,6 +3866,13 @@ async def upload_documents_anonymous(
             raise HTTPException(status_code=400, detail="latitude must be between -90 and 90")
         if longitude is not None and not (-180 <= longitude <= 180):
             raise HTTPException(status_code=400, detail="longitude must be between -180 and 180")
+        # Polygon centroid wins over address-based geocoding (the polygon
+        # describes the actual neighborhood; "city, state" geocoding lands on
+        # the city center).
+        if (latitude is None or longitude is None) and normalized_boundary:
+            center = _center_from_boundary_geojson(normalized_boundary)
+            if center:
+                latitude, longitude = center
         if (latitude is None or longitude is None) and any([street, city, state, postal_code]):
             coords = _geocode_from_parts(
                 street=(street.strip() if street else None),
@@ -3804,10 +3882,6 @@ async def upload_documents_anonymous(
             )
             if coords:
                 latitude, longitude = coords
-        if (latitude is None or longitude is None) and normalized_boundary:
-            center = _center_from_boundary_geojson(normalized_boundary)
-            if center:
-                latitude, longitude = center
         with db.get_connection(settings.db_path) as conn:
             db.upsert_hoa_location(
                 conn,
