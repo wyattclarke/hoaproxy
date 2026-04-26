@@ -107,6 +107,9 @@ def _ingest_pdf(
     openai_client: OpenAI,
     qdrant_client,
     collection: str,
+    category: str | None = None,
+    text_extractable: bool | None = None,
+    source_url: str | None = None,
 ) -> bool:
     ingest_start = perf_counter()
     rel_path = pdf_path.relative_to(settings.docs_root).as_posix()
@@ -131,8 +134,7 @@ def _ingest_pdf(
     extract_start = perf_counter()
     pages = extract_pages(
         pdf_path,
-        enable_ocr=settings.enable_ocr,
-        ocr_dpi=settings.ocr_dpi,
+        text_extractable=text_extractable,
         enable_docai=settings.enable_docai,
         docai_project_id=settings.docai_project_id,
         docai_location=settings.docai_location,
@@ -154,6 +156,9 @@ def _ingest_pdf(
         checksum,
         byte_size,
         page_count,
+        category=category,
+        text_extractable=text_extractable,
+        source_url=source_url,
     )
     if not changed and not force_reindex:
         logger.info("Ingest skip for %s (document metadata unchanged)", rel_path)
@@ -247,7 +252,11 @@ def ingest_pdf_paths(
     settings: Settings | None = None,
     *,
     show_progress: bool = False,
+    metadata_by_path: dict[Path, dict] | None = None,
 ) -> IngestStats:
+    """Ingest PDFs. `metadata_by_path` may carry per-file agent hints:
+    {path: {"category": str, "text_extractable": bool, "source_url": str}}
+    """
     settings = settings or load_settings()
     paths = list(pdf_paths)
     stats = IngestStats()
@@ -255,6 +264,8 @@ def ingest_pdf_paths(
         return stats
     if not settings.openai_api_key:
         raise ValueError("OPENAI_API_KEY is required for ingestion.")
+
+    metadata_by_path = metadata_by_path or {}
 
     with db.get_connection(settings.db_path) as conn:
         hoa_id = db.get_or_create_hoa(conn, hoa_name)
@@ -278,6 +289,7 @@ def ingest_pdf_paths(
                 stats.processed += 1
                 if show_progress and progress is not None and task_id is not None:
                     progress.update(task_id, description=f"Processing {pdf_path.name}")
+                meta = metadata_by_path.get(pdf_path) or {}
                 try:
                     changed = _ingest_pdf(
                         pdf_path=pdf_path,
@@ -288,6 +300,9 @@ def ingest_pdf_paths(
                         openai_client=openai_client,
                         qdrant_client=qdrant_client,
                         collection=collection,
+                        category=meta.get("category"),
+                        text_extractable=meta.get("text_extractable"),
+                        source_url=meta.get("source_url"),
                     )
                     if changed:
                         stats.indexed += 1

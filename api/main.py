@@ -40,6 +40,8 @@ _json_handler.setFormatter(_JsonFormatter())
 logging.root.setLevel(logging.INFO)
 logging.root.handlers = [_json_handler]
 
+import hashlib
+import io
 import requests
 from fastapi import BackgroundTasks, Body, Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, Response
@@ -49,7 +51,15 @@ from pydantic import BaseModel, Field
 from hoaware import db
 from hoaware.auth import get_current_user, hash_password, verify_password, create_access_token, optional_current_user
 from hoaware.config import load_settings
+from hoaware.cost_tracker import COST_DOCAI_PER_PAGE
+from hoaware.doc_classifier import (
+    VALID_CATEGORIES,
+    REJECT_PII,
+    classify_from_filename,
+    classify_from_text,
+)
 from hoaware.ingest import ingest_pdf_paths
+from hoaware.pdf_utils import detect_text_extractable
 from hoaware import participation as participation_mod
 from hoaware.qa import get_answer, get_answer_multi, retrieve_context, retrieve_context_multi
 
@@ -419,6 +429,32 @@ class UniversalLookupResponse(BaseModel):
 class UploadResponse(BaseModel):
     hoa: str
     saved_files: List[str]
+    indexed: int = 0
+    skipped: int = 0
+    failed: int = 0
+    queued: bool = False
+    location_saved: bool = False
+
+
+class AgentPrecheckRequest(BaseModel):
+    url: str | None = None
+    sha256: str | None = None
+    filename: str | None = None
+    hoa: str | None = None
+
+
+class AgentPrecheckResponse(BaseModel):
+    page_count: int | None
+    file_size_bytes: int | None
+    sha256: str | None
+    text_extractable: bool | None
+    suggested_category: str | None
+    is_valid_governing_doc: bool
+    is_pii_risk: bool
+    duplicate_of: str | None
+    est_docai_pages: int
+    est_docai_cost_usd: float
+    notes: List[str]
 
 
 def _is_full_name(value: str | None) -> bool:
@@ -428,11 +464,6 @@ def _is_full_name(value: str | None) -> bool:
     if len(parts) < 2:
         return False
     return all(any(ch.isalpha() for ch in part) for part in parts[:2])
-    indexed: int
-    skipped: int
-    failed: int
-    queued: bool = False
-    location_saved: bool = False
 
 
 class LawJurisdictionSummary(BaseModel):
@@ -796,11 +827,85 @@ def _normalize_metadata_type(raw_value: str | None) -> str | None:
 _ingest_semaphore = threading.Semaphore(1)  # only one ingestion at a time
 
 
-def _ingest_uploaded_files(hoa_name: str, saved_paths: list[Path]) -> None:
+_TEXT_EXTRACTABLE_TRUE = {"true", "1", "yes", "y"}
+_TEXT_EXTRACTABLE_FALSE = {"false", "0", "no", "n"}
+
+
+def _parse_per_file_metadata(
+    file_count: int,
+    *,
+    categories: list[str] | None,
+    text_extractable: list[str] | None,
+    source_urls: list[str] | None,
+) -> list[dict]:
+    """Validate and normalize per-file agent metadata. Returns one dict per file.
+
+    Each dict has keys: category (str|None), text_extractable (bool|None), source_url (str|None).
+    Raises HTTPException on invalid category or PII-flagged category.
+    """
+    def _normalize_array(arr: list[str] | None, name: str) -> list[str | None]:
+        if arr is None or len(arr) == 0:
+            return [None] * file_count
+        if len(arr) != file_count:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{name} length ({len(arr)}) must equal number of files ({file_count})",
+            )
+        return [(v if v not in (None, "") else None) for v in arr]
+
+    cats = _normalize_array(categories, "categories")
+    tex = _normalize_array(text_extractable, "text_extractable")
+    urls = _normalize_array(source_urls, "source_urls")
+
+    out: list[dict] = []
+    for i, (c, t, u) in enumerate(zip(cats, tex, urls)):
+        if c is not None:
+            cat = c.strip().lower()
+            if cat in REJECT_PII:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"file {i}: category '{cat}' is rejected (PII risk)",
+                )
+            if cat not in VALID_CATEGORIES and cat != "unknown":
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"file {i}: category '{cat}' is not a valid governing-doc category",
+                )
+        else:
+            cat = None
+
+        te: bool | None = None
+        if t is not None:
+            tv = t.strip().lower()
+            if tv in _TEXT_EXTRACTABLE_TRUE:
+                te = True
+            elif tv in _TEXT_EXTRACTABLE_FALSE:
+                te = False
+            else:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"file {i}: text_extractable must be true/false, got '{t}'",
+                )
+
+        out.append({"category": cat, "text_extractable": te, "source_url": u})
+    return out
+
+
+def _ingest_uploaded_files(
+    hoa_name: str,
+    saved_paths: list[Path],
+    metadata_by_path: dict[Path, dict] | None = None,
+) -> None:
     with _ingest_semaphore:
         settings = load_settings()
         try:
-            stats = ingest_pdf_paths(hoa_name, saved_paths, settings=settings, show_progress=False)
+            stats = ingest_pdf_paths(
+                hoa_name,
+                saved_paths,
+                settings=settings,
+                show_progress=False,
+                metadata_by_path=metadata_by_path,
+            )
             logger.info(
                 "Background ingest complete for %s: indexed=%s skipped=%s failed=%s",
                 hoa_name,
@@ -3422,6 +3527,9 @@ async def upload_documents(
     latitude: float | None = Form(default=None),
     longitude: float | None = Form(default=None),
     boundary_geojson: str | None = Form(default=None),
+    categories: List[str] | None = Form(default=None),
+    text_extractable: List[str] | None = Form(default=None),
+    source_urls: List[str] | None = Form(default=None),
     user: dict = Depends(get_current_user),
 ) -> UploadResponse:
     settings = load_settings()
@@ -3438,19 +3546,28 @@ async def upload_documents(
         if size > MAX_UPLOAD_BYTES:
             raise HTTPException(status_code=413, detail=f"File '{upload.filename}' exceeds 25 MB limit ({size // 1024 // 1024} MB)")
 
+    per_file_meta = _parse_per_file_metadata(
+        len(files),
+        categories=categories,
+        text_extractable=text_extractable,
+        source_urls=source_urls,
+    )
+
     settings.docs_root.mkdir(parents=True, exist_ok=True)
     hoa_dir = settings.docs_root / resolved_hoa
     hoa_dir.mkdir(parents=True, exist_ok=True)
 
     saved_paths: list[Path] = []
     saved_files: list[str] = []
-    for upload in files:
+    metadata_by_path: dict[Path, dict] = {}
+    for upload, meta in zip(files, per_file_meta):
         filename = _safe_pdf_filename(upload.filename)
         target = hoa_dir / filename
         with target.open("wb") as f:
             shutil.copyfileobj(upload.file, f)
         saved_paths.append(target)
         saved_files.append(filename)
+        metadata_by_path[target] = meta
         await upload.close()
 
     normalized_website = _normalize_website_url(website_url)
@@ -3495,7 +3612,9 @@ async def upload_documents(
             )
         location_saved = True
 
-    background_tasks.add_task(_ingest_uploaded_files, resolved_hoa, saved_paths)
+    background_tasks.add_task(
+        _ingest_uploaded_files, resolved_hoa, saved_paths, metadata_by_path
+    )
     return UploadResponse(
         hoa=resolved_hoa,
         saved_files=saved_files,
@@ -3522,6 +3641,9 @@ async def upload_documents_anonymous(
     latitude: float | None = Form(default=None),
     longitude: float | None = Form(default=None),
     boundary_geojson: str | None = Form(default=None),
+    categories: List[str] | None = Form(default=None),
+    text_extractable: List[str] | None = Form(default=None),
+    source_urls: List[str] | None = Form(default=None),
 ) -> UploadResponse:
     """Accept HOA uploads without authentication. Rate-limited to 3/hour per IP."""
     _check_rate_limit(request, limit=3)
@@ -3541,19 +3663,28 @@ async def upload_documents_anonymous(
         if size > MAX_UPLOAD_BYTES:
             raise HTTPException(status_code=413, detail=f"File '{upload.filename}' exceeds 25 MB limit ({size // 1024 // 1024} MB)")
 
+    per_file_meta = _parse_per_file_metadata(
+        len(files),
+        categories=categories,
+        text_extractable=text_extractable,
+        source_urls=source_urls,
+    )
+
     settings.docs_root.mkdir(parents=True, exist_ok=True)
     hoa_dir = settings.docs_root / resolved_hoa
     hoa_dir.mkdir(parents=True, exist_ok=True)
 
     saved_paths: list[Path] = []
     saved_files: list[str] = []
-    for upload in files:
+    metadata_by_path: dict[Path, dict] = {}
+    for upload, meta in zip(files, per_file_meta):
         filename = _safe_pdf_filename(upload.filename)
         target = hoa_dir / filename
         with target.open("wb") as f:
             shutil.copyfileobj(upload.file, f)
         saved_paths.append(target)
         saved_files.append(filename)
+        metadata_by_path[target] = meta
         await upload.close()
 
     normalized_website = _normalize_website_url(website_url)
@@ -3598,7 +3729,9 @@ async def upload_documents_anonymous(
     logger.info("anonymous_upload hoa=%s email=%s files=%d ip=%s",
                 resolved_hoa, email, len(saved_files),
                 request.client.host if request.client else "unknown")
-    background_tasks.add_task(_ingest_uploaded_files, resolved_hoa, saved_paths)
+    background_tasks.add_task(
+        _ingest_uploaded_files, resolved_hoa, saved_paths, metadata_by_path
+    )
     return UploadResponse(
         hoa=resolved_hoa,
         saved_files=saved_files,
@@ -3607,6 +3740,117 @@ async def upload_documents_anonymous(
         failed=0,
         queued=True,
         location_saved=location_saved,
+    )
+
+
+@app.post("/agent/precheck", response_model=AgentPrecheckResponse)
+def agent_precheck(body: AgentPrecheckRequest) -> AgentPrecheckResponse:
+    """Inspect a candidate PDF before uploading.
+
+    Agent provides one of: a public URL to download, or a sha256 + filename to
+    check duplicates against the existing corpus. Returns category suggestion,
+    page count, text-extractability, duplicate detection, and est DocAI cost.
+    """
+    notes: list[str] = []
+    pdf_bytes: bytes | None = None
+    page_count: int | None = None
+    file_size_bytes: int | None = None
+    sha256: str | None = body.sha256
+    text_extractable: bool | None = None
+    suggested_category: str | None = None
+
+    if body.url:
+        # Bounded download — refuse anything larger than 25 MB
+        try:
+            with requests.get(body.url, stream=True, timeout=60) as resp:
+                resp.raise_for_status()
+                limit = 25 * 1024 * 1024
+                buf = io.BytesIO()
+                total = 0
+                for chunk in resp.iter_content(chunk_size=64 * 1024):
+                    if not chunk:
+                        continue
+                    total += len(chunk)
+                    if total > limit:
+                        raise HTTPException(status_code=413, detail="PDF exceeds 25 MB limit")
+                    buf.write(chunk)
+                pdf_bytes = buf.getvalue()
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"Failed to fetch URL: {exc}")
+
+        file_size_bytes = len(pdf_bytes)
+        sha256 = hashlib.sha256(pdf_bytes).hexdigest()
+
+        # Inspect with PyPDF
+        try:
+            import pypdf
+            reader = pypdf.PdfReader(io.BytesIO(pdf_bytes))
+            page_count = len(reader.pages)
+            first_text = (reader.pages[0].extract_text() or "") if page_count else ""
+            text_extractable = len(first_text.strip()) >= 50
+            if text_extractable:
+                # Try classifier on first 5 pages of text
+                full_text_parts: list[str] = []
+                for i in range(min(5, page_count)):
+                    try:
+                        full_text_parts.append(reader.pages[i].extract_text() or "")
+                    except Exception:
+                        pass
+                full_text = "\n".join(full_text_parts)
+                clf = classify_from_text(full_text, body.hoa or "")
+                if clf:
+                    suggested_category = clf["category"]
+                    notes.append(f"category via {clf['method']} (conf={clf['confidence']:.2f})")
+        except Exception as exc:
+            notes.append(f"PyPDF inspection failed: {exc}")
+
+    # Filename fallback for category
+    if not suggested_category and body.filename:
+        clf = classify_from_filename(body.filename)
+        if clf:
+            suggested_category = clf["category"]
+            notes.append(f"category via filename (conf={clf['confidence']:.2f})")
+
+    # Duplicate check
+    duplicate_of: str | None = None
+    if sha256:
+        settings = load_settings()
+        try:
+            with db.get_connection(settings.db_path) as conn:
+                row = conn.execute(
+                    """
+                    SELECT h.name, d.relative_path
+                    FROM documents d JOIN hoas h ON h.id = d.hoa_id
+                    WHERE d.checksum = ?
+                    LIMIT 1
+                    """,
+                    (sha256,),
+                ).fetchone()
+                if row:
+                    duplicate_of = f"{row['name']}/{row['relative_path']}"
+                    notes.append(f"duplicate of existing doc")
+        except Exception as exc:
+            notes.append(f"dup check failed: {exc}")
+
+    is_valid = (suggested_category in VALID_CATEGORIES) if suggested_category else False
+    is_pii = (suggested_category in REJECT_PII) if suggested_category else False
+    est_pages = (page_count or 0) if (text_extractable is False) else 0
+    est_cost = round(est_pages * COST_DOCAI_PER_PAGE, 6)
+
+    return AgentPrecheckResponse(
+        page_count=page_count,
+        file_size_bytes=file_size_bytes,
+        sha256=sha256,
+        text_extractable=text_extractable,
+        suggested_category=suggested_category,
+        is_valid_governing_doc=is_valid,
+        is_pii_risk=is_pii,
+        duplicate_of=duplicate_of,
+        est_docai_pages=est_pages,
+        est_docai_cost_usd=est_cost,
+        notes=notes,
     )
 
 

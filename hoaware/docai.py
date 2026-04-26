@@ -47,6 +47,17 @@ def _build_pdf_chunk(reader: PdfReader, start_page: int, end_page: int) -> bytes
     return buffer.read()
 
 
+def _build_pdf_subset(reader: PdfReader, page_numbers: list[int]) -> bytes:
+    """Build a PDF containing only the specified 1-indexed pages, in order."""
+    writer = PdfWriter()
+    for page_number in page_numbers:
+        writer.add_page(reader.pages[page_number - 1])
+    buffer = io.BytesIO()
+    writer.write(buffer)
+    buffer.seek(0)
+    return buffer.read()
+
+
 def extract_with_document_ai(
     path: Path,
     project_id: str,
@@ -54,11 +65,24 @@ def extract_with_document_ai(
     processor_id: str,
     endpoint: str | None = None,
     max_pages_per_call: int = 10,
+    page_numbers: list[int] | None = None,
 ) -> List[PageContent]:
+    """OCR a PDF (or specific pages) via Google Document AI.
+
+    If `page_numbers` is provided, only those 1-indexed pages are sent.
+    Returned PageContent.number reflects the original page number in the source PDF.
+    """
     overall_start = perf_counter()
     reader = PdfReader(str(path))
     total_pages = len(reader.pages)
     if total_pages == 0:
+        return []
+
+    if page_numbers is None:
+        target_pages = list(range(1, total_pages + 1))
+    else:
+        target_pages = sorted({n for n in page_numbers if 1 <= n <= total_pages})
+    if not target_pages:
         return []
 
     client_options = ClientOptions(api_endpoint=endpoint or f"{location}-documentai.googleapis.com")
@@ -67,40 +91,50 @@ def extract_with_document_ai(
 
     all_pages: list[PageContent] = []
     logger.info(
-        "Document AI OCR start for %s (total_pages=%s, chunk_pages=%s, location=%s)",
+        "Document AI OCR start for %s (target_pages=%d/%d, chunk_pages=%s, location=%s)",
         path,
+        len(target_pages),
         total_pages,
         max_pages_per_call,
         location,
     )
 
-    for start in range(1, total_pages + 1, max_pages_per_call):
-        end = min(start + max_pages_per_call - 1, total_pages)
+    for chunk_start_idx in range(0, len(target_pages), max_pages_per_call):
+        chunk_pages = target_pages[chunk_start_idx : chunk_start_idx + max_pages_per_call]
         chunk_start = perf_counter()
-        pdf_bytes = _build_pdf_chunk(reader, start, end)
+        pdf_bytes = _build_pdf_subset(reader, chunk_pages)
         raw_document = documentai.RawDocument(content=pdf_bytes, mime_type="application/pdf")
         request = documentai.ProcessRequest(name=processor_name, raw_document=raw_document)
         try:
             result = client.process_document(request=request)
         except Exception:
-            logger.exception("Document AI OCR failed for %s pages %s-%s", path, start, end)
+            logger.exception(
+                "Document AI OCR failed for %s pages %s..%s",
+                path,
+                chunk_pages[0],
+                chunk_pages[-1],
+            )
             continue
 
         document = result.document
-        pages_in_chunk = end - start + 1
-        log_docai_usage(pages_in_chunk, document=str(path.name))
-        chunk_pages_count = 0
+        log_docai_usage(len(chunk_pages), document=str(path.name))
+        returned = 0
         for page in document.pages:
-            number = start + (page.page_number - 1)
+            # page.page_number is 1-indexed within the submitted sub-PDF
+            sub_idx = int(page.page_number) - 1
+            if 0 <= sub_idx < len(chunk_pages):
+                original_page_number = chunk_pages[sub_idx]
+            else:
+                continue
             text = _page_text(document, page)
-            all_pages.append(PageContent(number=number, text=text))
-            chunk_pages_count += 1
+            all_pages.append(PageContent(number=original_page_number, text=text))
+            returned += 1
         logger.info(
-            "Document AI chunk complete for %s (pages=%s-%s, returned_pages=%s, elapsed_s=%.2f)",
+            "Document AI chunk complete for %s (pages=%s..%s, returned=%s, elapsed_s=%.2f)",
             path,
-            start,
-            end,
-            chunk_pages_count,
+            chunk_pages[0],
+            chunk_pages[-1],
+            returned,
             perf_counter() - chunk_start,
         )
 

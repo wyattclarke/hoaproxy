@@ -522,6 +522,11 @@ def get_connection(db_path: Path) -> sqlite3.Connection:
     conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id)")
     # Embedding column for inline vector search (replaces Qdrant)
     _ensure_table_column(conn, "chunks", "embedding", "BLOB")
+    # Per-document agent metadata (Phase 1)
+    _ensure_table_column(conn, "documents", "category", "TEXT")
+    _ensure_table_column(conn, "documents", "text_extractable", "INTEGER")
+    _ensure_table_column(conn, "documents", "source_url", "TEXT")
+    _ensure_table_column(conn, "documents", "hidden_reason", "TEXT")
     conn.commit()
     # sqlite-vec index for fast ANN search (replaces brute-force NumPy path)
     if _load_sqlite_vec(conn):
@@ -588,30 +593,56 @@ def upsert_document(
     checksum: str,
     byte_size: int,
     page_count: int | None,
+    *,
+    category: str | None = None,
+    text_extractable: bool | None = None,
+    source_url: str | None = None,
 ) -> tuple[int, bool]:
     """Returns document_id and whether content changed."""
     record = get_document_record(conn, hoa_id, relative_path)
+    te_int = None if text_extractable is None else (1 if text_extractable else 0)
     if record is None:
         cur = conn.execute(
             """
-            INSERT INTO documents (hoa_id, relative_path, checksum, bytes, page_count)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO documents (hoa_id, relative_path, checksum, bytes, page_count,
+                                   category, text_extractable, source_url)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (hoa_id, relative_path, checksum, byte_size, page_count),
+            (hoa_id, relative_path, checksum, byte_size, page_count,
+             category, te_int, source_url),
         )
         conn.commit()
         return int(cur.lastrowid), True
 
     if record["checksum"] == checksum:
+        # Backfill metadata if missing, even when content unchanged
+        updates = []
+        params: list = []
+        if category and not record["category"]:
+            updates.append("category = ?")
+            params.append(category)
+        if te_int is not None and record["text_extractable"] is None:
+            updates.append("text_extractable = ?")
+            params.append(te_int)
+        if source_url and not record["source_url"]:
+            updates.append("source_url = ?")
+            params.append(source_url)
+        if updates:
+            params.append(record["id"])
+            conn.execute(f"UPDATE documents SET {', '.join(updates)} WHERE id = ?", params)
+            conn.commit()
         return int(record["id"]), False
 
     conn.execute(
         """
         UPDATE documents
-        SET checksum = ?, bytes = ?, page_count = ?, last_ingested = CURRENT_TIMESTAMP
+        SET checksum = ?, bytes = ?, page_count = ?, last_ingested = CURRENT_TIMESTAMP,
+            category = COALESCE(?, category),
+            text_extractable = COALESCE(?, text_extractable),
+            source_url = COALESCE(?, source_url)
         WHERE id = ?
         """,
-        (checksum, byte_size, page_count, record["id"]),
+        (checksum, byte_size, page_count, category, te_int, source_url, record["id"]),
     )
     conn.commit()
     return int(record["id"]), True
@@ -1190,19 +1221,29 @@ def get_chunk_text_for_hoa(conn: sqlite3.Connection, hoa_name: str, limit: int =
     return [str(row["text"]) for row in cur.fetchall() if row["text"]]
 
 
-def list_documents_for_hoa(conn: sqlite3.Connection, hoa_name: str) -> list[dict]:
+def list_documents_for_hoa(
+    conn: sqlite3.Connection,
+    hoa_name: str,
+    *,
+    include_hidden: bool = False,
+) -> list[dict]:
+    where_extra = "" if include_hidden else " AND d.hidden_reason IS NULL"
     cur = conn.execute(
-        """
+        f"""
         SELECT
             d.relative_path,
             d.bytes,
             d.page_count,
             d.last_ingested,
+            d.category,
+            d.text_extractable,
+            d.source_url,
+            d.hidden_reason,
             COUNT(c.id) AS chunk_count
         FROM documents d
         JOIN hoas h ON h.id = d.hoa_id
         LEFT JOIN chunks c ON c.document_id = d.id
-        WHERE h.name = ?
+        WHERE h.name = ?{where_extra}
         GROUP BY d.id
         ORDER BY d.relative_path COLLATE NOCASE
         """,
@@ -1216,6 +1257,11 @@ def list_documents_for_hoa(conn: sqlite3.Connection, hoa_name: str) -> list[dict
             "page_count": int(row["page_count"]) if row["page_count"] is not None else None,
             "chunk_count": int(row["chunk_count"]),
             "last_ingested": str(row["last_ingested"]),
+            "category": str(row["category"]) if row["category"] is not None else None,
+            "text_extractable": (bool(row["text_extractable"])
+                                  if row["text_extractable"] is not None else None),
+            "source_url": str(row["source_url"]) if row["source_url"] is not None else None,
+            "hidden_reason": str(row["hidden_reason"]) if row["hidden_reason"] is not None else None,
         }
         for row in rows
     ]
@@ -1236,7 +1282,7 @@ def list_document_chunks_for_hoa(
         FROM chunks c
         JOIN documents d ON d.id = c.document_id
         JOIN hoas h ON h.id = d.hoa_id
-        WHERE h.name = ? AND d.relative_path = ?
+        WHERE h.name = ? AND d.relative_path = ? AND d.hidden_reason IS NULL
         ORDER BY c.chunk_index ASC
         """,
         (hoa_name, relative_path),
@@ -1305,6 +1351,7 @@ def vector_search(
                 WHERE cv.embedding MATCH ?
                   AND cv.hoa_id = ?
                   AND cv.k = ?
+                  AND d.hidden_reason IS NULL
                 ORDER BY cv.distance
                 """,
                 (query.tobytes(), hoa_id, int(limit)),
@@ -1339,7 +1386,9 @@ def vector_search(
                d.relative_path
         FROM chunks c
         JOIN documents d ON c.document_id = d.id
-        WHERE d.hoa_id = ? AND c.embedding IS NOT NULL AND length(c.embedding) > 0
+        WHERE d.hoa_id = ?
+          AND d.hidden_reason IS NULL
+          AND c.embedding IS NOT NULL AND length(c.embedding) > 0
         """,
         (hoa_id,),
     )

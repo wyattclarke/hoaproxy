@@ -24,8 +24,6 @@ class Settings:
     chunk_char_limit: int
     chunk_overlap: int
     collection_prefix: str
-    enable_ocr: bool
-    ocr_dpi: int
     enable_docai: bool
     docai_project_id: str | None
     docai_location: str
@@ -77,9 +75,7 @@ def load_settings() -> Settings:
         chunk_char_limit=int(os.environ.get("HOA_CHUNK_CHAR_LIMIT", "1800")),
         chunk_overlap=int(os.environ.get("HOA_CHUNK_OVERLAP", "200")),
         collection_prefix=os.environ.get("HOA_QDRANT_PREFIX", "hoa"),
-        enable_ocr=os.environ.get("HOA_ENABLE_OCR", "1") not in {"0", "false", "False"},
-        ocr_dpi=int(os.environ.get("HOA_OCR_DPI", "300")),
-        enable_docai=os.environ.get("HOA_ENABLE_DOCAI", "0") not in {"0", "false", "False"},
+        enable_docai=os.environ.get("HOA_ENABLE_DOCAI", "1") not in {"0", "false", "False"},
         docai_project_id=os.environ.get("HOA_DOCAI_PROJECT_ID"),
         docai_location=os.environ.get("HOA_DOCAI_LOCATION", "us"),
         docai_processor_id=os.environ.get("HOA_DOCAI_PROCESSOR_ID"),
