@@ -2731,6 +2731,83 @@ def admin_backfill_locations(request: Request, body: dict):
     }
 
 
+@app.post("/admin/extract-doc-zips")
+def admin_extract_doc_zips(request: Request, state: str | None = None, limit: int = 5000):
+    """Scan each HOA's chunked text for postal-code mentions and return the
+    top 3 most-frequent ZIPs per HOA, filtered to ZIPs whose first digit is
+    plausible for the HOA's recorded state. CC&Rs reliably mention the
+    subdivision's actual ZIP many times (common-area address, recorded plat,
+    metes-and-bounds endpoint); the property-manager's ZIP appears only once
+    or twice. Caller geocodes the top ZIP locally via a ZCTA gazetteer.
+
+    Response: [{hoa, recorded_city, recorded_state, top_zips: [{zip, count}]}, ...]
+    """
+    _require_admin(request)
+    import re
+    from collections import Counter
+
+    # First digit by state — used as a sanity filter to drop ZIPs from other
+    # states (e.g. an attorney's office in NY appearing in a CA HOA's CC&R).
+    state_zip_prefix = {
+        "CA": ("9",), "OR": ("9",), "WA": ("9",), "NV": ("8", "9"),
+        "TX": ("7",), "OK": ("7",), "AR": ("7",), "LA": ("7",),
+        "CO": ("8",), "NM": ("8", "7"), "UT": ("8",), "WY": ("8",), "MT": ("5", "8"), "ID": ("8",),
+        "AZ": ("8",), "AK": ("9",), "HI": ("9",),
+        "FL": ("3",), "GA": ("3",), "AL": ("3",), "TN": ("3", "4"),
+        "NC": ("2",), "SC": ("2",), "VA": ("2",), "WV": ("2",), "MD": ("2",), "DC": ("2",),
+        "DE": ("1",), "PA": ("1",), "NJ": ("0",), "NY": ("0", "1"), "CT": ("0",), "MA": ("0",), "RI": ("0",), "VT": ("0",), "NH": ("0",), "ME": ("0",),
+        "OH": ("4",), "MI": ("4",), "IN": ("4",), "KY": ("4",),
+        "IL": ("6",), "MO": ("6",), "KS": ("6",), "WI": ("5",), "MN": ("5",), "ND": ("5",), "SD": ("5",), "IA": ("5",), "NE": ("6",), "MS": ("3",),
+    }
+
+    zip_re = re.compile(r"\b(\d{5})(?:-\d{4})?\b")
+    settings = load_settings()
+    out = []
+    with db.get_connection(settings.db_path) as conn:
+        # HOAs in the requested state with at least one document
+        params: list = []
+        where = "WHERE EXISTS (SELECT 1 FROM documents d WHERE d.hoa_id = h.id)"
+        if state:
+            where += " AND l.state = ?"
+            params.append(state.upper())
+        rows = conn.execute(
+            f"""
+            SELECT h.name AS hoa, l.city AS city, l.state AS state
+            FROM hoas h
+            LEFT JOIN hoa_locations l ON l.hoa_id = h.id
+            {where}
+            ORDER BY h.name COLLATE NOCASE
+            LIMIT ?
+            """,
+            (*params, int(limit)),
+        ).fetchall()
+
+        for r in rows:
+            hoa = str(r["hoa"])
+            recorded_state = (r["state"] or state or "").upper() if (r["state"] or state) else None
+            chunks = db.get_chunk_text_for_hoa(conn, hoa, limit=300)
+            if not chunks:
+                continue
+            text = "\n".join(chunks)
+            zips_found = zip_re.findall(text)
+            if not zips_found:
+                continue
+            # Filter to ZIPs plausible for the state
+            allowed = state_zip_prefix.get(recorded_state) if recorded_state else None
+            if allowed:
+                zips_found = [z for z in zips_found if z[0] in allowed]
+            if not zips_found:
+                continue
+            counts = Counter(zips_found).most_common(3)
+            out.append({
+                "hoa": hoa,
+                "recorded_city": r["city"],
+                "recorded_state": recorded_state,
+                "top_zips": [{"zip": z, "count": c} for z, c in counts],
+            })
+    return {"hoas": out, "total": len(out)}
+
+
 @app.post("/admin/backup")
 def admin_backup(request: Request):
     """Snapshot the SQLite DB and uploaded PDFs to GCS, with retention."""
