@@ -1325,7 +1325,10 @@ def vector_search(
                         "text": row["text"],
                     },
                 })
-            return results
+            if results:
+                return results
+            # vec0 returned no rows — backfill may not have indexed this HOA yet.
+            # Fall through to brute-force over chunks.embedding.
         except sqlite3.OperationalError:
             # Index missing or query unsupported — fall through to brute force.
             pass
