@@ -31,6 +31,10 @@ docs/ux-fix-list.md
 scripts/render_resume_upload.py
 scripts/render_upload_supervisor.py
 scripts/backfill_proxy_status.py
+scripts/import_breckenridge_timeshares.py
+scripts/upload_alexandria_to_site.py
+scripts/upload_trec_to_site.py
+scripts/gcp_billing_cap/
 
 # Claude Code / Playwright working dirs
 .claude/
