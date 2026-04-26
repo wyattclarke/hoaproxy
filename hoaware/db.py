@@ -505,6 +505,9 @@ def get_connection(db_path: Path) -> sqlite3.Connection:
     _ensure_table_column(conn, "hoa_locations", "metadata_type", "TEXT")
     _ensure_table_column(conn, "hoa_locations", "website_url", "TEXT")
     _ensure_table_column(conn, "hoa_locations", "boundary_geojson", "TEXT")
+    # Quality of the lat/lon: polygon | address | zip_centroid | city_only | unknown
+    # Map filter shows polygon/address/zip_centroid; hides city_only and NULL.
+    _ensure_table_column(conn, "hoa_locations", "location_quality", "TEXT")
     # M6 migrations
     _ensure_table_column(conn, "hoas", "board_email", "TEXT")
     # Proposal location fields
@@ -809,14 +812,20 @@ def list_hoa_map_points(
 ) -> list[dict]:
     """Lightweight query returning only fields needed for map markers.
 
-    Excludes HOAs without a polygon: their lat/lon (when present) is almost
-    always a city-center geocode from a record uploaded with only "city, state"
-    as location signal — those would stack hundreds of pins on a single point
-    and aren't useful as map data. Polygon-less HOAs remain searchable by
-    name through the regular /hoas listing.
+    Includes HOAs with either a polygon OR a vicinity-grade point. Vicinity-grade
+    means location_quality is set to 'address' (street-level geocode) or
+    'zip_centroid' (ZIP code centroid, ~1-3mi accuracy). Excludes the bulk-import
+    legacy state where location_quality is NULL or 'city_only' — those are
+    city-center geocodes that would stack hundreds of pins on a single point.
+    Polygon-less HOAs without a quality flag remain searchable by name through
+    the regular /hoas listing.
     """
     params: list[Any] = []
-    where_clauses: list[str] = ["l.boundary_geojson IS NOT NULL"]
+    where_clauses: list[str] = [
+        "(l.boundary_geojson IS NOT NULL OR l.location_quality IN ('polygon', 'address', 'zip_centroid'))",
+        "l.latitude IS NOT NULL",
+        "l.longitude IS NOT NULL",
+    ]
     if q:
         like = f"%{q}%"
         where_clauses.append("(h.name LIKE ? OR l.city LIKE ? OR l.state LIKE ?)")
@@ -834,7 +843,8 @@ def list_hoa_map_points(
             l.state,
             l.latitude,
             l.longitude,
-            l.boundary_geojson
+            l.boundary_geojson,
+            l.location_quality
         FROM hoas h
         LEFT JOIN (
             SELECT hoa_id, COUNT(*) AS doc_count FROM documents GROUP BY hoa_id
@@ -853,6 +863,7 @@ def list_hoa_map_points(
             "latitude": float(row["latitude"]) if row["latitude"] is not None else None,
             "longitude": float(row["longitude"]) if row["longitude"] is not None else None,
             "boundary_geojson": _load_geojson(row["boundary_geojson"]),
+            "location_quality": str(row["location_quality"]) if row["location_quality"] is not None else None,
         }
         for row in cur.fetchall()
     ]
@@ -1026,6 +1037,7 @@ def get_hoa_location(conn: sqlite3.Connection, hoa_name: str) -> dict | None:
             l.longitude,
             l.boundary_geojson,
             l.source,
+            l.location_quality,
             l.updated_at
         FROM hoas h
         LEFT JOIN hoa_locations l ON l.hoa_id = h.id
@@ -1058,6 +1070,7 @@ def get_hoa_location(conn: sqlite3.Connection, hoa_name: str) -> dict | None:
             "longitude": None,
             "boundary_geojson": None,
             "source": None,
+            "location_quality": None,
             "updated_at": None,
         }
     return {
@@ -1074,6 +1087,7 @@ def get_hoa_location(conn: sqlite3.Connection, hoa_name: str) -> dict | None:
         "longitude": float(row["longitude"]) if row["longitude"] is not None else None,
         "boundary_geojson": _load_geojson(row["boundary_geojson"]),
         "source": str(row["source"]) if row["source"] is not None else None,
+        "location_quality": str(row["location_quality"]) if row["location_quality"] is not None else None,
         "updated_at": str(row["updated_at"]) if row["updated_at"] is not None else None,
     }
 
@@ -1094,6 +1108,7 @@ def upsert_hoa_location(
     longitude: float | None = None,
     boundary_geojson: str | None = None,
     source: str | None = None,
+    location_quality: str | None = None,
 ) -> None:
     hoa_id = get_or_create_hoa(conn, hoa_name)
     existing = conn.execute(
@@ -1105,8 +1120,8 @@ def upsert_hoa_location(
         conn.execute(
             """
             INSERT INTO hoa_locations
-                (hoa_id, metadata_type, display_name, website_url, street, city, state, postal_code, country, latitude, longitude, boundary_geojson, source)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (hoa_id, metadata_type, display_name, website_url, street, city, state, postal_code, country, latitude, longitude, boundary_geojson, source, location_quality)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 hoa_id,
@@ -1122,6 +1137,7 @@ def upsert_hoa_location(
                 longitude,
                 boundary_geojson,
                 source or "manual",
+                location_quality,
             ),
         )
         conn.commit()
@@ -1143,6 +1159,7 @@ def upsert_hoa_location(
             longitude = COALESCE(?, longitude),
             boundary_geojson = COALESCE(?, boundary_geojson),
             source = COALESCE(?, source),
+            location_quality = COALESCE(?, location_quality),
             updated_at = CURRENT_TIMESTAMP
         WHERE hoa_id = ?
         """,
@@ -1159,6 +1176,7 @@ def upsert_hoa_location(
             longitude,
             boundary_geojson,
             source,
+            location_quality,
             hoa_id,
         ),
     )
@@ -1182,6 +1200,7 @@ def list_hoa_locations(conn: sqlite3.Connection) -> list[dict]:
             l.longitude,
             l.boundary_geojson,
             l.source,
+            l.location_quality,
             l.updated_at
         FROM hoas h
         LEFT JOIN documents d ON d.hoa_id = h.id
@@ -1206,6 +1225,7 @@ def list_hoa_locations(conn: sqlite3.Connection) -> list[dict]:
             "longitude": float(row["longitude"]) if row["longitude"] is not None else None,
             "boundary_geojson": _load_geojson(row["boundary_geojson"]),
             "source": str(row["source"]) if row["source"] is not None else None,
+            "location_quality": str(row["location_quality"]) if row["location_quality"] is not None else None,
             "updated_at": str(row["updated_at"]) if row["updated_at"] is not None else None,
         }
         for row in rows

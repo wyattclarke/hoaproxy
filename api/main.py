@@ -325,6 +325,30 @@ def _refit_polygon_centers_on_boot() -> None:
         logger.exception("refit_polygon_centers boot migration failed")
 
 
+def _seed_location_quality_on_boot() -> None:
+    """Idempotent boot-time fix: any HOA with a polygon but a NULL
+    location_quality is set to 'polygon'. This makes the new map filter
+    (which gates on location_quality) include legacy polygon rows that were
+    created before the column existed.
+    """
+    try:
+        settings = load_settings()
+        with db.get_connection(settings.db_path) as conn:
+            cur = conn.execute(
+                """
+                UPDATE hoa_locations
+                SET location_quality = 'polygon'
+                WHERE boundary_geojson IS NOT NULL
+                  AND (location_quality IS NULL OR location_quality = '')
+                """
+            )
+            conn.commit()
+            if cur.rowcount:
+                logger.info("seed_location_quality: tagged %d polygon row(s)", cur.rowcount)
+    except Exception:
+        logger.exception("seed_location_quality boot migration failed")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = load_settings()
@@ -355,6 +379,7 @@ async def lifespan(app: FastAPI):
         threading.Thread(target=_run_proxy_status_backfill, daemon=True).start()
         threading.Thread(target=_cost_report_scheduler, daemon=True).start()
         threading.Thread(target=_refit_polygon_centers_on_boot, daemon=True).start()
+        threading.Thread(target=_seed_location_quality_on_boot, daemon=True).start()
     except Exception as exc:
         logger.error("Startup migration error (non-fatal): %s", exc)
     yield
@@ -606,6 +631,7 @@ class HoaLocation(BaseModel):
     longitude: float | None = None
     boundary_geojson: dict | None = None
     source: str | None = None
+    location_quality: str | None = None
     updated_at: str | None = None
 
 
@@ -637,6 +663,7 @@ class HoaMapPoint(BaseModel):
     state: str | None = None
     doc_count: int
     boundary_geojson: dict | None = None
+    location_quality: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -2620,6 +2647,90 @@ def admin_backfill_categories(request: Request, body: dict, apply_hidden_reason:
     }
 
 
+@app.post("/admin/backfill-locations")
+def admin_backfill_locations(request: Request, body: dict):
+    """Bulk upsert hoa_locations from a posted JSON body. Each entry sets
+    location fields and optionally a location_quality flag that gates the map
+    filter. Lookup is by exact HOA name (case-insensitive), no creation.
+
+    Body shape:
+      {"records": [
+        {"hoa": "Park Village",
+         "latitude": 35.77, "longitude": -78.85,
+         "street": "100 Weston Estates Way", "postal_code": "27513",
+         "city": "Cary", "state": "NC",
+         "location_quality": "address"},
+        ...
+      ]}
+
+    Allowed location_quality values: polygon, address, zip_centroid,
+    city_only, unknown. Pass "city_only" to demote a stale lat/lon (so the
+    map filter excludes it) without nulling it.
+    """
+    _require_admin(request)
+    settings = load_settings()
+    records = body.get("records") or []
+    valid_quality = {"polygon", "address", "zip_centroid", "city_only", "unknown"}
+    matched = 0
+    not_found = 0
+    bad_quality = 0
+    by_quality: dict[str, int] = {}
+
+    with db.get_connection(settings.db_path) as conn:
+        rows = conn.execute("SELECT id, name FROM hoas").fetchall()
+        hoa_id_by_lower = {row["name"].lower(): str(row["name"]) for row in rows}
+
+        for entry in records:
+            hoa_in = (entry.get("hoa") or "").strip()
+            if not hoa_in:
+                not_found += 1
+                continue
+            resolved = hoa_id_by_lower.get(hoa_in.lower())
+            if not resolved:
+                not_found += 1
+                continue
+            quality = entry.get("location_quality")
+            if quality is not None:
+                quality = str(quality).strip()
+                if quality not in valid_quality:
+                    bad_quality += 1
+                    continue
+            lat = entry.get("latitude")
+            lon = entry.get("longitude")
+            if lat is not None:
+                lat = float(lat)
+                if not (-90 <= lat <= 90):
+                    continue
+            if lon is not None:
+                lon = float(lon)
+                if not (-180 <= lon <= 180):
+                    continue
+            db.upsert_hoa_location(
+                conn,
+                resolved,
+                street=(entry.get("street") or None),
+                city=(entry.get("city") or None),
+                state=(entry.get("state").upper() if entry.get("state") else None),
+                postal_code=(entry.get("postal_code") or None),
+                country=(entry.get("country").upper() if entry.get("country") else None),
+                latitude=lat,
+                longitude=lon,
+                source=(entry.get("source") or None),
+                location_quality=quality,
+            )
+            matched += 1
+            if quality:
+                by_quality[quality] = by_quality.get(quality, 0) + 1
+        conn.commit()
+
+    return {
+        "matched": matched,
+        "not_found": not_found,
+        "bad_quality": bad_quality,
+        "by_quality": by_quality,
+    }
+
+
 @app.post("/admin/backup")
 def admin_backup(request: Request):
     """Snapshot the SQLite DB and uploaded PDFs to GCS, with retention."""
@@ -3631,6 +3742,7 @@ def upsert_hoa_location(
     latitude: float | None = Form(default=None),
     longitude: float | None = Form(default=None),
     boundary_geojson: str | None = Form(default=None),
+    location_quality: str | None = Form(default=None),
 ) -> HoaLocation:
     settings = load_settings()
     resolved_hoa = _resolve_hoa_name(hoa_name)
@@ -3644,10 +3756,13 @@ def upsert_hoa_location(
     # Polygon centroid wins over address-based geocoding — a polygon describes
     # the actual neighborhood, while "city, state" geocoding lands on the city
     # center.
+    derived_quality: str | None = None
     if (latitude is None or longitude is None) and normalized_boundary:
         center = _center_from_boundary_geojson(normalized_boundary)
         if center:
             latitude, longitude = center
+    if normalized_boundary:
+        derived_quality = "polygon"
     if (latitude is None or longitude is None) and any([street, city, state, postal_code]):
         coords = _geocode_from_parts(
             street=(street.strip() if street else None),
@@ -3657,6 +3772,14 @@ def upsert_hoa_location(
         )
         if coords:
             latitude, longitude = coords
+            if not derived_quality:
+                if street:
+                    derived_quality = "address"
+                elif postal_code:
+                    derived_quality = "zip_centroid"
+                else:
+                    derived_quality = "city_only"
+    final_quality = (location_quality.strip() if location_quality else None) or derived_quality
     with db.get_connection(settings.db_path) as conn:
         db.upsert_hoa_location(
             conn,
@@ -3672,6 +3795,7 @@ def upsert_hoa_location(
             longitude=longitude,
             boundary_geojson=normalized_boundary,
             source="manual",
+            location_quality=final_quality,
         )
         row = db.get_hoa_location(conn, resolved_hoa)
     if row is None:
