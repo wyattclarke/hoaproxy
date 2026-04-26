@@ -2410,6 +2410,89 @@ def admin_send_cost_report(request: Request, email: Optional[str] = None):
     return {"status": "sent", "to": to_email}
 
 
+@app.post("/admin/backfill-categories")
+def admin_backfill_categories(request: Request, body: dict, apply_hidden_reason: bool = False):
+    """Backfill documents.category from a posted audit-report JSON body.
+
+    Body shape: same as data/doc_audit_report.json — {results: [{name, documents: [...]}]}.
+    Operator runs:
+      curl -X POST -H "Authorization: Bearer $JWT_SECRET" \
+        -H "Content-Type: application/json" \
+        --data-binary @data/doc_audit_report.json \
+        "$URL/admin/backfill-categories?apply_hidden_reason=true"
+    """
+    _require_admin(request)
+    from collections import Counter
+    from hoaware.doc_classifier import REJECT_JUNK, REJECT_PII
+
+    settings = load_settings()
+    results = body.get("results") or []
+    matched = 0
+    not_found_hoa = 0
+    not_found_doc = 0
+    by_category: Counter = Counter()
+    hidden_count = 0
+
+    with db.get_connection(settings.db_path) as conn:
+        hoa_rows = conn.execute("SELECT id, name FROM hoas").fetchall()
+        hoa_id_by_lower = {row["name"].lower(): int(row["id"]) for row in hoa_rows}
+
+        for entry in results:
+            hoa_name = (entry.get("name") or "").lower()
+            hoa_id = hoa_id_by_lower.get(hoa_name)
+            if not hoa_id:
+                not_found_hoa += 1
+                continue
+
+            doc_rows = conn.execute(
+                "SELECT id, relative_path FROM documents WHERE hoa_id = ?",
+                (hoa_id,),
+            ).fetchall()
+            by_basename = {
+                str(row["relative_path"]).rsplit("/", 1)[-1].lower(): int(row["id"])
+                for row in doc_rows
+            }
+
+            for doc in entry.get("documents", []):
+                fname = (doc.get("filename") or "").lower()
+                doc_id = by_basename.get(fname)
+                if not doc_id:
+                    not_found_doc += 1
+                    continue
+                category = doc.get("category") or "unknown"
+                te_val = 1 if doc.get("is_digital") else 0
+                hidden = None
+                if apply_hidden_reason:
+                    if category in REJECT_PII:
+                        hidden = f"pii:{category}"
+                        hidden_count += 1
+                    elif category in REJECT_JUNK:
+                        hidden = f"junk:{category}"
+                        hidden_count += 1
+                if hidden:
+                    conn.execute(
+                        """UPDATE documents SET category = ?, text_extractable = ?, hidden_reason = ?
+                           WHERE id = ?""",
+                        (category, te_val, hidden, doc_id),
+                    )
+                else:
+                    conn.execute(
+                        "UPDATE documents SET category = ?, text_extractable = ? WHERE id = ?",
+                        (category, te_val, doc_id),
+                    )
+                matched += 1
+                by_category[category] += 1
+        conn.commit()
+
+    return {
+        "matched": matched,
+        "not_found_hoa": not_found_hoa,
+        "not_found_doc": not_found_doc,
+        "marked_hidden": hidden_count,
+        "by_category": dict(by_category.most_common()),
+    }
+
+
 @app.post("/admin/backup")
 def admin_backup(request: Request):
     """Snapshot the SQLite DB and uploaded PDFs to GCS, with retention."""
