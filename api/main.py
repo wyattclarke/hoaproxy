@@ -326,10 +326,15 @@ def _refit_polygon_centers_on_boot() -> None:
 
 
 def _seed_location_quality_on_boot() -> None:
-    """Idempotent boot-time fix: any HOA with a polygon but a NULL
-    location_quality is set to 'polygon'. This makes the new map filter
-    (which gates on location_quality) include legacy polygon rows that were
-    created before the column existed.
+    """Idempotent boot-time sweep that closes two leaks:
+
+    1. Any HOA with a polygon but a NULL location_quality gets tagged 'polygon'
+       so the map filter includes legacy rows created before the column existed.
+    2. Any cluster of 5+ HOAs in the same city sharing the same lat/lon
+       (rounded to 3 decimals, ~110m) where every row in the cluster has a
+       NULL location_quality is tagged 'city_only'. Bulk imports that don't
+       go through /upload's quality derivation can sneak in city-center
+       geocodes; this catches them before they pollute the map.
     """
     try:
         settings = load_settings()
@@ -345,6 +350,32 @@ def _seed_location_quality_on_boot() -> None:
             conn.commit()
             if cur.rowcount:
                 logger.info("seed_location_quality: tagged %d polygon row(s)", cur.rowcount)
+
+            stack_rows = conn.execute(
+                """
+                SELECT id, LOWER(city) AS city_lc,
+                       ROUND(latitude, 3) AS lat3,
+                       ROUND(longitude, 3) AS lon3
+                FROM hoa_locations
+                WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+                  AND boundary_geojson IS NULL
+                  AND (location_quality IS NULL OR location_quality = '')
+                  AND city IS NOT NULL
+                """
+            ).fetchall()
+            from collections import defaultdict
+            buckets: dict[tuple, list[int]] = defaultdict(list)
+            for r in stack_rows:
+                buckets[(r["city_lc"], r["lat3"], r["lon3"])].append(int(r["id"]))
+            stack_ids = [i for ids in buckets.values() if len(ids) >= 5 for i in ids]
+            if stack_ids:
+                placeholders = ",".join("?" * len(stack_ids))
+                conn.execute(
+                    f"UPDATE hoa_locations SET location_quality = 'city_only' WHERE id IN ({placeholders})",
+                    stack_ids,
+                )
+                conn.commit()
+                logger.info("seed_location_quality: demoted %d city-stack row(s) to city_only", len(stack_ids))
     except Exception:
         logger.exception("seed_location_quality boot migration failed")
 
@@ -1542,6 +1573,26 @@ def _center_from_boundary_geojson(boundary_geojson: str | None) -> tuple[float, 
     return ((min_lat + max_lat) / 2, (min_lon + max_lon) / 2)
 
 
+def _derive_location_quality(
+    *,
+    has_boundary: bool,
+    street: str | None,
+    postal_code: str | None,
+) -> str:
+    """Tag a location row based on the strongest field provided. Used by every
+    write path that sets lat/lon so map-points filter (which gates on quality)
+    excludes rows with only city-level signal — those land on a city center
+    and stack hundreds of pins. Higher-quality fields win over lower ones.
+    """
+    if has_boundary:
+        return "polygon"
+    if street and street.strip():
+        return "address"
+    if postal_code and str(postal_code).strip():
+        return "zip_centroid"
+    return "city_only"
+
+
 def _infer_and_store_location(hoa_name: str) -> dict | None:
     settings = load_settings()
     with db.get_connection(settings.db_path) as conn:
@@ -1553,6 +1604,11 @@ def _infer_and_store_location(hoa_name: str) -> dict | None:
             return None
         coords = _geocode_from_parts(**parts)
         latitude, longitude = (coords if coords else (None, None))
+        quality = _derive_location_quality(
+            has_boundary=False,
+            street=parts["street"],
+            postal_code=parts["postal_code"],
+        ) if (latitude is not None and longitude is not None) else None
         db.upsert_hoa_location(
             conn,
             hoa_name,
@@ -1563,6 +1619,7 @@ def _infer_and_store_location(hoa_name: str) -> dict | None:
             latitude=latitude,
             longitude=longitude,
             source="inferred",
+            location_quality=quality,
         )
         return db.get_hoa_location(conn, hoa_name)
 
@@ -3833,13 +3890,10 @@ def upsert_hoa_location(
     # Polygon centroid wins over address-based geocoding — a polygon describes
     # the actual neighborhood, while "city, state" geocoding lands on the city
     # center.
-    derived_quality: str | None = None
     if (latitude is None or longitude is None) and normalized_boundary:
         center = _center_from_boundary_geojson(normalized_boundary)
         if center:
             latitude, longitude = center
-    if normalized_boundary:
-        derived_quality = "polygon"
     if (latitude is None or longitude is None) and any([street, city, state, postal_code]):
         coords = _geocode_from_parts(
             street=(street.strip() if street else None),
@@ -3849,13 +3903,11 @@ def upsert_hoa_location(
         )
         if coords:
             latitude, longitude = coords
-            if not derived_quality:
-                if street:
-                    derived_quality = "address"
-                elif postal_code:
-                    derived_quality = "zip_centroid"
-                else:
-                    derived_quality = "city_only"
+    derived_quality = _derive_location_quality(
+        has_boundary=bool(normalized_boundary),
+        street=street,
+        postal_code=postal_code,
+    ) if (latitude is not None and longitude is not None) else None
     final_quality = (location_quality.strip() if location_quality else None) or derived_quality
     with db.get_connection(settings.db_path) as conn:
         db.upsert_hoa_location(
@@ -4011,6 +4063,11 @@ async def upload_documents(
             )
             if coords:
                 latitude, longitude = coords
+        upload_quality = _derive_location_quality(
+            has_boundary=bool(normalized_boundary),
+            street=street,
+            postal_code=postal_code,
+        ) if (latitude is not None and longitude is not None) else None
         with db.get_connection(settings.db_path) as conn:
             db.upsert_hoa_location(
                 conn,
@@ -4026,6 +4083,7 @@ async def upload_documents(
                 longitude=longitude,
                 boundary_geojson=normalized_boundary,
                 source="manual",
+                location_quality=upload_quality,
             )
         location_saved = True
 
@@ -4135,6 +4193,11 @@ async def upload_documents_anonymous(
             )
             if coords:
                 latitude, longitude = coords
+        anon_quality = _derive_location_quality(
+            has_boundary=bool(normalized_boundary),
+            street=street,
+            postal_code=postal_code,
+        ) if (latitude is not None and longitude is not None) else None
         with db.get_connection(settings.db_path) as conn:
             db.upsert_hoa_location(
                 conn,
@@ -4148,6 +4211,7 @@ async def upload_documents_anonymous(
                 longitude=longitude,
                 boundary_geojson=normalized_boundary,
                 source="anonymous_upload",
+                location_quality=anon_quality,
             )
         location_saved = True
 
