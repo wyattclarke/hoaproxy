@@ -2727,10 +2727,11 @@ def admin_backfill_locations(request: Request, body: dict):
     _require_admin(request)
     settings = load_settings()
     records = body.get("records") or []
-    valid_quality = {"polygon", "address", "zip_centroid", "city_only", "unknown"}
+    valid_quality = {"polygon", "address", "zip_centroid", "city_only", "neighborhood_box", "unknown"}
     matched = 0
     not_found = 0
     bad_quality = 0
+    bad_boundary = 0
     by_quality: dict[str, int] = {}
 
     with db.get_connection(settings.db_path) as conn:
@@ -2762,6 +2763,19 @@ def admin_backfill_locations(request: Request, body: dict):
                 lon = float(lon)
                 if not (-180 <= lon <= 180):
                     continue
+            boundary = entry.get("boundary_geojson")
+            normalized_boundary = None
+            if boundary:
+                try:
+                    normalized_boundary = _parse_boundary_geojson(boundary)
+                except HTTPException:
+                    bad_boundary += 1
+                    continue
+                # Derive lat/lon from polygon centroid when not explicitly given.
+                if normalized_boundary and (lat is None or lon is None):
+                    center = _center_from_boundary_geojson(normalized_boundary)
+                    if center:
+                        lat, lon = center
             db.upsert_hoa_location(
                 conn,
                 resolved,
@@ -2772,6 +2786,7 @@ def admin_backfill_locations(request: Request, body: dict):
                 country=(entry.get("country").upper() if entry.get("country") else None),
                 latitude=lat,
                 longitude=lon,
+                boundary_geojson=normalized_boundary,
                 source=(entry.get("source") or None),
                 location_quality=quality,
             )
@@ -2784,6 +2799,7 @@ def admin_backfill_locations(request: Request, body: dict):
         "matched": matched,
         "not_found": not_found,
         "bad_quality": bad_quality,
+        "bad_boundary": bad_boundary,
         "by_quality": by_quality,
     }
 
