@@ -822,7 +822,7 @@ def list_hoa_map_points(
     """
     params: list[Any] = []
     where_clauses: list[str] = [
-        "(l.boundary_geojson IS NOT NULL OR l.location_quality IN ('polygon', 'address', 'zip_centroid', 'neighborhood_box'))",
+        "(l.boundary_geojson IS NOT NULL OR l.location_quality IN ('polygon', 'address', 'zip_centroid'))",
         "l.latitude IS NOT NULL",
         "l.longitude IS NOT NULL",
     ]
