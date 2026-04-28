@@ -1338,6 +1338,20 @@ def list_chunk_point_ids(conn: sqlite3.Connection, document_id: int) -> list[str
     return [str(row["qdrant_point_id"]) for row in cur.fetchall()]
 
 
+def count_chunks_with_embeddings(conn: sqlite3.Connection, document_id: int) -> int:
+    row = conn.execute(
+        """
+        SELECT COUNT(*) AS n
+        FROM chunks
+        WHERE document_id = ?
+          AND embedding IS NOT NULL
+          AND length(embedding) > 0
+        """,
+        (document_id,),
+    ).fetchone()
+    return int(row["n"]) if row else 0
+
+
 def vector_search(
     conn: sqlite3.Connection,
     hoa_name: str,

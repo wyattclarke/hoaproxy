@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 import uuid
 from typing import List, Sequence
@@ -25,11 +26,22 @@ _cached_client: QdrantClient | None = None
 _cached_client_key: tuple | None = None
 
 
+def _qdrant_disabled() -> bool:
+    return os.environ.get("HOA_DISABLE_QDRANT", "").strip().lower() in {"1", "true", "yes"}
+
+
 def build_client(
     url: str,
     api_key: str | None,
     local_path: Path | str | None = None,
-) -> QdrantClient:
+) -> QdrantClient | None:
+    # Read path is sqlite-vec (db.vector_search). Qdrant is only the legacy
+    # write mirror. Set HOA_DISABLE_QDRANT=1 on memory-constrained hosts to
+    # skip the embedded Qdrant entirely (mmap'd local segments otherwise
+    # accumulate against the cgroup memory cap).
+    if _qdrant_disabled():
+        return None
+
     global _cached_client, _cached_client_key
     cache_key = (url, api_key, str(local_path) if local_path is not None else None)
     if _cached_client is not None and _cached_client_key == cache_key:
@@ -67,7 +79,9 @@ def build_client(
     return client
 
 
-def ensure_collection(client: QdrantClient, collection_name: str) -> None:
+def ensure_collection(client: QdrantClient | None, collection_name: str) -> None:
+    if client is None:
+        return
     if client.collection_exists(collection_name=collection_name):
         return
     client.create_collection(
@@ -96,10 +110,14 @@ def ensure_collection(client: QdrantClient, collection_name: str) -> None:
 
 
 def upsert_chunks(
-    client: QdrantClient,
+    client: QdrantClient | None,
     collection_name: str,
     chunks: Sequence[tuple[str, list[float], dict]],
 ) -> List[str]:
+    if client is None:
+        # Qdrant disabled: still return placeholder ids so callers can record
+        # one row per chunk in the chunks table.
+        return [uuid.uuid4().hex for _ in chunks]
     points: List[PointStruct] = []
     point_ids: List[str] = []
     for chunk_text, vector, payload in chunks:
@@ -111,11 +129,11 @@ def upsert_chunks(
 
 
 def delete_points(
-    client: QdrantClient,
+    client: QdrantClient | None,
     collection_name: str,
     point_ids: Sequence[str],
 ) -> None:
-    if not point_ids:
+    if client is None or not point_ids:
         return
     client.delete(
         collection_name=collection_name,
@@ -160,12 +178,12 @@ def search(
 
 
 def points_exist(
-    client: QdrantClient,
+    client: QdrantClient | None,
     collection_name: str,
     point_ids: Sequence[str],
 ) -> bool:
     """Check whether all given point ids exist in the target collection."""
-    if not point_ids:
+    if client is None or not point_ids:
         return False
     try:
         points = client.retrieve(

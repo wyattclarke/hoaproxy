@@ -120,14 +120,24 @@ def _ingest_pdf(
     force_reindex = False
     if existing is not None and str(existing["checksum"]) == checksum:
         existing_doc_id = int(existing["id"])
-        existing_point_ids = db.list_chunk_point_ids(conn, existing_doc_id)
-        if existing_point_ids and points_exist(qdrant_client, collection, existing_point_ids):
-            logger.info("Ingest skip for %s (checksum unchanged and points present)", rel_path)
+        # Skip if the SQLite vector store already has embeddings for this
+        # document (the read path uses sqlite-vec; Qdrant is optional). When
+        # Qdrant is enabled, also confirm its points are present.
+        sqlite_chunk_count = db.count_chunks_with_embeddings(conn, existing_doc_id)
+        qdrant_ok = True
+        if qdrant_client is not None:
+            existing_point_ids = db.list_chunk_point_ids(conn, existing_doc_id)
+            qdrant_ok = bool(existing_point_ids) and points_exist(
+                qdrant_client, collection, existing_point_ids
+            )
+        if sqlite_chunk_count > 0 and qdrant_ok:
+            logger.info("Ingest skip for %s (checksum unchanged, embeddings present)", rel_path)
             return False
         logger.info(
-            "Reindexing unchanged document %s because vector points are missing in %s",
+            "Reindexing unchanged document %s (sqlite_chunks=%d, qdrant_ok=%s)",
             rel_path,
-            collection,
+            sqlite_chunk_count,
+            qdrant_ok,
         )
         force_reindex = True
 
