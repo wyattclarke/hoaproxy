@@ -3,7 +3,7 @@ services:
     name: hoaproxy-app
     runtime: docker
     dockerfilePath: ./Dockerfile
-    plan: starter
+    plan: standard
     autoDeploy: true
     healthCheckPath: /healthz
     envVars:
