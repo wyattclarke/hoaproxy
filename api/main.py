@@ -2762,6 +2762,17 @@ def admin_backfill_locations(request: Request, body: dict):
                 lon = float(lon)
                 if not (-180 <= lon <= 180):
                     continue
+            boundary = entry.get("boundary_geojson")
+            normalized_boundary = None
+            if boundary:
+                try:
+                    normalized_boundary = _parse_boundary_geojson(boundary)
+                except HTTPException:
+                    continue
+                if normalized_boundary and (lat is None or lon is None):
+                    center = _center_from_boundary_geojson(normalized_boundary)
+                    if center:
+                        lat, lon = center
             db.upsert_hoa_location(
                 conn,
                 resolved,
@@ -2772,6 +2783,7 @@ def admin_backfill_locations(request: Request, body: dict):
                 country=(entry.get("country").upper() if entry.get("country") else None),
                 latitude=lat,
                 longitude=lon,
+                boundary_geojson=normalized_boundary,
                 source=(entry.get("source") or None),
                 location_quality=quality,
             )
