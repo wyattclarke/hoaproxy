@@ -50,8 +50,9 @@ from pydantic import BaseModel, Field
 
 from hoaware import db
 from hoaware.auth import get_current_user, hash_password, verify_password, create_access_token, optional_current_user
+from hoaware.chunker import PageContent
 from hoaware.config import load_settings
-from hoaware.cost_tracker import COST_DOCAI_PER_PAGE
+from hoaware.cost_tracker import COST_DOCAI_PER_PAGE, log_docai_usage
 from hoaware.doc_classifier import (
     VALID_CATEGORIES,
     REJECT_PII,
@@ -948,11 +949,18 @@ DAILY_DOCAI_BUDGET_USD = float(os.environ.get("DAILY_DOCAI_BUDGET_USD", "20.0"))
 def _projected_docai_pages(
     paths: list[Path], metadata_by_path: dict[Path, dict]
 ) -> int:
-    """Sum page counts for files the agent flagged text_extractable=False."""
+    """Sum page counts the SERVER will OCR on this upload.
+
+    Counts files the agent flagged text_extractable=False, EXCLUDING any file
+    that came with a sidecar of pre-extracted text — those have already been
+    OCR'd locally and the server will skip extract_pages entirely.
+    """
     import pypdf as _pypdf
     total = 0
     for p in paths:
         meta = metadata_by_path.get(p) or {}
+        if meta.get("pre_extracted_pages") is not None:
+            continue
         if meta.get("text_extractable") is False:
             try:
                 total += len(_pypdf.PdfReader(str(p)).pages)
@@ -1046,6 +1054,91 @@ def _parse_per_file_metadata(
                 )
 
         out.append({"category": cat, "text_extractable": te, "source_url": u})
+    return out
+
+
+_MAX_SIDECAR_BYTES = 10 * 1024 * 1024  # 10 MB JSON sidecar cap
+
+
+def _parse_extracted_text_sidecars(
+    file_count: int,
+    extracted_texts: list[str] | None,
+) -> list[dict | None]:
+    """Parse parallel array of JSON sidecars carrying agent-extracted page text.
+
+    Each entry is either an empty string (server extracts the file as usual)
+    or a JSON object: {"pages":[{"number":N,"text":"..."}], "docai_pages":N}.
+    Returns one entry per file: dict with keys {pages, docai_pages} or None.
+    Raises HTTPException on shape errors.
+    """
+    if not extracted_texts:
+        return [None] * file_count
+    if len(extracted_texts) != file_count:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"extracted_texts length ({len(extracted_texts)}) must equal "
+                f"number of files ({file_count})"
+            ),
+        )
+
+    out: list[dict | None] = []
+    for i, raw in enumerate(extracted_texts):
+        if raw is None or raw == "":
+            out.append(None)
+            continue
+        if len(raw.encode("utf-8")) > _MAX_SIDECAR_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail=f"file {i}: extracted_texts sidecar exceeds 10 MB",
+            )
+        try:
+            payload = json.loads(raw)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=400,
+                detail=f"file {i}: extracted_texts is not valid JSON ({exc})",
+            )
+        if not isinstance(payload, dict):
+            raise HTTPException(
+                status_code=400,
+                detail=f"file {i}: extracted_texts must be a JSON object",
+            )
+        raw_pages = payload.get("pages")
+        if not isinstance(raw_pages, list) or not raw_pages:
+            raise HTTPException(
+                status_code=400,
+                detail=f"file {i}: extracted_texts.pages must be a non-empty list",
+            )
+        pages: list[PageContent] = []
+        for j, page in enumerate(raw_pages):
+            if not isinstance(page, dict):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"file {i}: pages[{j}] must be an object",
+                )
+            number = page.get("number")
+            text = page.get("text", "")
+            if not isinstance(number, int) or number < 1:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"file {i}: pages[{j}].number must be a positive integer",
+                )
+            if not isinstance(text, str):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"file {i}: pages[{j}].text must be a string",
+                )
+            pages.append(PageContent(number=number, text=text))
+
+        docai_pages_raw = payload.get("docai_pages", 0)
+        if not isinstance(docai_pages_raw, int) or docai_pages_raw < 0:
+            raise HTTPException(
+                status_code=400,
+                detail=f"file {i}: docai_pages must be a non-negative integer",
+            )
+
+        out.append({"pages": pages, "docai_pages": docai_pages_raw})
     return out
 
 
@@ -4008,6 +4101,7 @@ async def upload_documents(
     categories: List[str] | None = Form(default=None),
     text_extractable: List[str] | None = Form(default=None),
     source_urls: List[str] | None = Form(default=None),
+    extracted_texts: List[str] | None = Form(default=None),
     user: dict = Depends(get_current_user),
 ) -> UploadResponse:
     settings = load_settings()
@@ -4030,6 +4124,7 @@ async def upload_documents(
         text_extractable=text_extractable,
         source_urls=source_urls,
     )
+    sidecars = _parse_extracted_text_sidecars(len(files), extracted_texts)
 
     settings.docs_root.mkdir(parents=True, exist_ok=True)
     hoa_dir = settings.docs_root / resolved_hoa
@@ -4038,13 +4133,15 @@ async def upload_documents(
     saved_paths: list[Path] = []
     saved_files: list[str] = []
     metadata_by_path: dict[Path, dict] = {}
-    for upload, meta in zip(files, per_file_meta):
+    for upload, meta, sidecar in zip(files, per_file_meta, sidecars):
         filename = _safe_pdf_filename(upload.filename)
         target = hoa_dir / filename
         with target.open("wb") as f:
             shutil.copyfileobj(upload.file, f)
         saved_paths.append(target)
         saved_files.append(filename)
+        if sidecar is not None:
+            meta = {**meta, "pre_extracted_pages": sidecar["pages"]}
         metadata_by_path[target] = meta
         await upload.close()
 
@@ -4099,8 +4196,18 @@ async def upload_documents(
             )
         location_saved = True
 
-    # Daily DocAI budget guard: count pages from files the agent flagged as
-    # text_extractable=False — those will hit DocAI in full.
+    # Log DocAI pages the agent OCR'd locally so the rolling 24h tracker
+    # reflects total spend (local + server). Done before the cap check so
+    # the projection includes them.
+    for path, sidecar in zip(saved_paths, sidecars):
+        if sidecar and sidecar.get("docai_pages"):
+            log_docai_usage(
+                int(sidecar["docai_pages"]),
+                document=path.relative_to(settings.docs_root).as_posix(),
+            )
+
+    # Daily DocAI budget guard: count pages the SERVER will OCR (files the
+    # agent flagged text_extractable=False that did NOT come with a sidecar).
     projected_ocr_pages = _projected_docai_pages(saved_paths, metadata_by_path)
     _check_daily_docai_budget(projected_ocr_pages)
 
@@ -4136,6 +4243,7 @@ async def upload_documents_anonymous(
     categories: List[str] | None = Form(default=None),
     text_extractable: List[str] | None = Form(default=None),
     source_urls: List[str] | None = Form(default=None),
+    extracted_texts: List[str] | None = Form(default=None),
 ) -> UploadResponse:
     """Accept HOA uploads without authentication. Rate-limited to 3/hour per IP."""
     _check_rate_limit(request, limit=3)
@@ -4161,6 +4269,7 @@ async def upload_documents_anonymous(
         text_extractable=text_extractable,
         source_urls=source_urls,
     )
+    sidecars = _parse_extracted_text_sidecars(len(files), extracted_texts)
 
     settings.docs_root.mkdir(parents=True, exist_ok=True)
     hoa_dir = settings.docs_root / resolved_hoa
@@ -4169,13 +4278,15 @@ async def upload_documents_anonymous(
     saved_paths: list[Path] = []
     saved_files: list[str] = []
     metadata_by_path: dict[Path, dict] = {}
-    for upload, meta in zip(files, per_file_meta):
+    for upload, meta, sidecar in zip(files, per_file_meta, sidecars):
         filename = _safe_pdf_filename(upload.filename)
         target = hoa_dir / filename
         with target.open("wb") as f:
             shutil.copyfileobj(upload.file, f)
         saved_paths.append(target)
         saved_files.append(filename)
+        if sidecar is not None:
+            meta = {**meta, "pre_extracted_pages": sidecar["pages"]}
         metadata_by_path[target] = meta
         await upload.close()
 
@@ -4230,6 +4341,13 @@ async def upload_documents_anonymous(
     logger.info("anonymous_upload hoa=%s email=%s files=%d ip=%s",
                 resolved_hoa, email, len(saved_files),
                 request.client.host if request.client else "unknown")
+
+    for path, sidecar in zip(saved_paths, sidecars):
+        if sidecar and sidecar.get("docai_pages"):
+            log_docai_usage(
+                int(sidecar["docai_pages"]),
+                document=path.relative_to(settings.docs_root).as_posix(),
+            )
 
     projected_ocr_pages = _projected_docai_pages(saved_paths, metadata_by_path)
     _check_daily_docai_budget(projected_ocr_pages)

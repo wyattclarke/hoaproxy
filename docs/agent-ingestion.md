@@ -115,6 +115,7 @@ Form fields:
 | `categories` | str[] | optional | One per file; must be in [VALID_CATEGORIES](#categories) or `unknown` |
 | `text_extractable` | str[] | optional | One per file; `"true"`/`"false"` (or `"yes"`/`"no"`/`"1"`/`"0"`) |
 | `source_urls` | str[] | optional | One per file; provenance, stored on the document row |
+| `extracted_texts` | str[] | optional | One per file; JSON sidecar of pre-extracted page text (see [Offloading OCR](#offloading-ocr-to-the-agent)). Empty string `""` for files where the server should extract. |
 | `boundary_geojson` | str (JSON) | optional | GeoJSON Polygon or MultiPolygon |
 | `website_url` | str | optional | HOA's public site |
 | `street`, `city`, `state`, `postal_code`, `country` | str | optional | Address — geocoded to lat/lon if missing and possible |
@@ -207,6 +208,27 @@ If DocAI is not configured and the agent says `text_extractable=false`, those pa
 The DocAI request batches pages in chunks of `HOA_DOCAI_CHUNK_PAGES` (default 10) to fit Document AI's per-call page limit. When `text_extractable=null` (legacy), DocAI is invoked only on the specific page numbers PyPDF couldn't read — not the whole document. That's a key change from pre-PR-1 behavior.
 
 There's a hard guard: documents with > 200 pages skip OCR entirely (`MAX_PAGES_FOR_OCR` in `pdf_utils.py`). Real governing docs don't exceed this; if a 1000-page archive sneaks through, it stays unembedded rather than burning $1.50.
+
+### Offloading OCR to the agent
+
+Server-side DocAI rendering is the dominant memory load on the API host (Render's 512 MB instance OOMs cycle as 502s during background ingestion). To skip it, run extraction locally and pass the result via `extracted_texts` — a parallel form-array, one entry per file:
+
+- `""` — server extracts as usual (via `extract_pages` routing on `text_extractable`).
+- A JSON object — server skips `extract_pages` for that file and uses the supplied pages directly:
+
+```json
+{
+  "pages": [
+    {"number": 1, "text": "..."},
+    {"number": 2, "text": "..."}
+  ],
+  "docai_pages": 12
+}
+```
+
+`docai_pages` is the page count the agent ran through DocAI locally. The server logs it to `api_usage_log` *before* the per-upload budget check, so the rolling 24h DocAI cap covers local + server spend uniformly. Set it to `0` (or omit) when extraction was PyPDF-only.
+
+The agent can use `hoaware.pdf_utils.extract_pages` directly — same routing logic, same DocAI client, same `text_extractable` semantics — just from the local machine. Cap is 10 MB per sidecar JSON.
 
 ## Cost guards
 

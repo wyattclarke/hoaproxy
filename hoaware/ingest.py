@@ -12,7 +12,7 @@ from rich.console import Console
 from rich.progress import Progress
 
 from . import db
-from .chunker import chunk_pages
+from .chunker import PageContent, chunk_pages
 from .config import Settings, load_settings, normalize_hoa_name, UNIFIED_COLLECTION
 from .embeddings import batch_embeddings
 from .pdf_utils import compute_checksum, extract_pages
@@ -110,6 +110,7 @@ def _ingest_pdf(
     category: str | None = None,
     text_extractable: bool | None = None,
     source_url: str | None = None,
+    pre_extracted_pages: list[PageContent] | None = None,
 ) -> bool:
     ingest_start = perf_counter()
     rel_path = pdf_path.relative_to(settings.docs_root).as_posix()
@@ -131,23 +132,31 @@ def _ingest_pdf(
         force_reindex = True
 
     byte_size = pdf_path.stat().st_size
-    extract_start = perf_counter()
-    pages = extract_pages(
-        pdf_path,
-        text_extractable=text_extractable,
-        enable_docai=settings.enable_docai,
-        docai_project_id=settings.docai_project_id,
-        docai_location=settings.docai_location,
-        docai_processor_id=settings.docai_processor_id,
-        docai_endpoint=settings.docai_endpoint,
-        docai_chunk_pages=settings.docai_chunk_pages,
-    )
-    logger.info(
-        "Text extraction complete for %s (pages=%s, elapsed_s=%.2f)",
-        rel_path,
-        len(pages),
-        perf_counter() - extract_start,
-    )
+    if pre_extracted_pages is not None:
+        pages = pre_extracted_pages
+        logger.info(
+            "Using agent-supplied extracted text for %s (pages=%s, server skipped extract_pages)",
+            rel_path,
+            len(pages),
+        )
+    else:
+        extract_start = perf_counter()
+        pages = extract_pages(
+            pdf_path,
+            text_extractable=text_extractable,
+            enable_docai=settings.enable_docai,
+            docai_project_id=settings.docai_project_id,
+            docai_location=settings.docai_location,
+            docai_processor_id=settings.docai_processor_id,
+            docai_endpoint=settings.docai_endpoint,
+            docai_chunk_pages=settings.docai_chunk_pages,
+        )
+        logger.info(
+            "Text extraction complete for %s (pages=%s, elapsed_s=%.2f)",
+            rel_path,
+            len(pages),
+            perf_counter() - extract_start,
+        )
     page_count = len(pages)
     doc_id, changed = db.upsert_document(
         conn,
@@ -255,7 +264,12 @@ def ingest_pdf_paths(
     metadata_by_path: dict[Path, dict] | None = None,
 ) -> IngestStats:
     """Ingest PDFs. `metadata_by_path` may carry per-file agent hints:
-    {path: {"category": str, "text_extractable": bool, "source_url": str}}
+    {path: {"category": str, "text_extractable": bool, "source_url": str,
+            "pre_extracted_pages": list[PageContent]}}
+
+    When `pre_extracted_pages` is supplied, the server skips its own text
+    extraction (PyPDF/DocAI) and trusts the agent's pages directly. Used to
+    move the OCR memory load off the API host.
     """
     settings = settings or load_settings()
     paths = list(pdf_paths)
@@ -303,6 +317,7 @@ def ingest_pdf_paths(
                         category=meta.get("category"),
                         text_extractable=meta.get("text_extractable"),
                         source_url=meta.get("source_url"),
+                        pre_extracted_pages=meta.get("pre_extracted_pages"),
                     )
                     if changed:
                         stats.indexed += 1

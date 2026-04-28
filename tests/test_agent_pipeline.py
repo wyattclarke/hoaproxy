@@ -53,6 +53,7 @@ def _reset_db():
             "proxy_audit", "proxy_assignments", "delegates", "membership_claims",
             "sessions", "users",
             "chunks", "documents", "hoa_locations", "hoas",
+            "api_usage_log",
         ]:
             try:
                 conn.execute(f"DELETE FROM {table}")
@@ -228,6 +229,181 @@ def test_daily_docai_budget_blocks_when_exhausted(monkeypatch):
     assert r.status_code == 429
     assert "budget" in r.text.lower()
 
+
+# ---------- pre-extracted-text sidecar (offload OCR to local agent) ----------
+
+def test_upload_sidecar_skips_server_extraction(monkeypatch):
+    """Sidecar of pre-extracted pages bypasses server extract_pages entirely."""
+    import json as _json
+    from hoaware import ingest as ingest_mod
+    from hoaware import pdf_utils
+
+    # If anything calls extract_pages on the server, fail loudly.
+    def _boom(*args, **kwargs):
+        raise AssertionError("extract_pages must not run when sidecar is present")
+    monkeypatch.setattr(pdf_utils, "extract_pages", _boom)
+    monkeypatch.setattr(ingest_mod, "extract_pages", _boom)
+
+    # Stub embeddings + Qdrant so the test doesn't hit the network.
+    captured: dict = {}
+    def _fake_embeddings(texts, *, client, model):
+        captured["chunk_count"] = len(texts)
+        return [[0.0] * 1536 for _ in texts]
+    monkeypatch.setattr(ingest_mod, "batch_embeddings", _fake_embeddings)
+
+    class _StubQdrant:
+        pass
+    monkeypatch.setattr(ingest_mod, "build_client", lambda *a, **kw: _StubQdrant())
+    monkeypatch.setattr(ingest_mod, "ensure_collection", lambda *a, **kw: None)
+    monkeypatch.setattr(ingest_mod, "upsert_chunks", lambda *a, **kw: ["pid"] * len(a[2]))
+    monkeypatch.setattr(ingest_mod, "delete_points", lambda *a, **kw: None)
+    monkeypatch.setattr(ingest_mod, "points_exist", lambda *a, **kw: False)
+
+    token = _register_user(email="agent-sidecar@example.com")
+    pdf_bytes = _make_text_pdf("ignored - sidecar wins")
+    sidecar = _json.dumps({
+        "pages": [
+            {"number": 1, "text": "Article I. The agent ran OCR locally and shipped this text."},
+            {"number": 2, "text": "Section 1. Assessments."},
+        ],
+        "docai_pages": 2,
+    })
+    r = client.post(
+        "/upload",
+        headers={"Authorization": f"Bearer {token}"},
+        data={
+            "hoa": "Sidecar Estates",
+            "categories": ["ccr"],
+            "text_extractable": ["false"],  # would normally trigger DocAI
+            "extracted_texts": [sidecar],
+        },
+        files=[("files", ("decl.pdf", pdf_bytes, "application/pdf"))],
+    )
+    assert r.status_code == 200, r.text
+
+    # Background task runs synchronously in TestClient — chunks should exist.
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        rows = conn.execute(
+            "SELECT chunks.text FROM chunks "
+            "JOIN documents ON documents.id = chunks.document_id "
+            "JOIN hoas ON hoas.id = documents.hoa_id "
+            "WHERE hoas.name = ?",
+            ("Sidecar Estates",),
+        ).fetchall()
+    assert rows, "expected chunks from sidecar pages"
+    joined = "\n".join(row["text"] for row in rows)
+    assert "agent ran OCR locally" in joined
+    assert captured.get("chunk_count", 0) > 0
+
+
+def test_upload_sidecar_logs_docai_pages_to_cost_tracker(monkeypatch):
+    """docai_pages from a sidecar should be logged so the rolling 24h cap stays honest."""
+    import json as _json
+    from hoaware import ingest as ingest_mod
+    from hoaware import pdf_utils
+
+    monkeypatch.setattr(pdf_utils, "extract_pages", lambda *a, **kw: [])
+    monkeypatch.setattr(ingest_mod, "extract_pages", lambda *a, **kw: [])
+    monkeypatch.setattr(ingest_mod, "batch_embeddings",
+                        lambda texts, *, client, model: [[0.0] * 1536 for _ in texts])
+    monkeypatch.setattr(ingest_mod, "build_client", lambda *a, **kw: object())
+    monkeypatch.setattr(ingest_mod, "ensure_collection", lambda *a, **kw: None)
+    monkeypatch.setattr(ingest_mod, "upsert_chunks", lambda *a, **kw: ["pid"] * len(a[2]))
+    monkeypatch.setattr(ingest_mod, "delete_points", lambda *a, **kw: None)
+    monkeypatch.setattr(ingest_mod, "points_exist", lambda *a, **kw: False)
+
+    token = _register_user(email="agent-sidecar-log@example.com")
+    pdf_bytes = _make_text_pdf("doesn't matter")
+    sidecar = _json.dumps({
+        "pages": [{"number": 1, "text": "x" * 200}],
+        "docai_pages": 7,
+    })
+    r = client.post(
+        "/upload",
+        headers={"Authorization": f"Bearer {token}"},
+        data={
+            "hoa": "Sidecar Logged HOA",
+            "categories": ["ccr"],
+            "text_extractable": ["false"],
+            "extracted_texts": [sidecar],
+        },
+        files=[("files", ("d.pdf", pdf_bytes, "application/pdf"))],
+    )
+    assert r.status_code == 200, r.text
+
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        row = conn.execute(
+            "SELECT SUM(units) AS pages FROM api_usage_log WHERE service = 'docai'"
+        ).fetchone()
+    assert row["pages"] == 7
+
+
+def test_upload_sidecar_respects_budget_cap(monkeypatch):
+    """Even via sidecar, exceeding the 24h DocAI cap blocks the upload."""
+    import json as _json
+    from api import main as api_main
+
+    monkeypatch.setattr(api_main, "DAILY_DOCAI_BUDGET_USD", 0.005)  # ~3 pages worth
+
+    # Pretend the local agent already burned $4 of DocAI in the last 24h.
+    def fake_recent(conn, service, *, hours=24):
+        return 4.0 if service == "docai" else 0.0
+    monkeypatch.setattr(db, "get_recent_service_cost_usd", fake_recent)
+
+    token = _register_user(email="agent-sidecar-cap@example.com")
+    pdf_bytes = _make_text_pdf("scanned-fake")
+    # No sidecar — server projects DocAI for this file. Cap should trip.
+    r = client.post(
+        "/upload",
+        headers={"Authorization": f"Bearer {token}"},
+        data={
+            "hoa": "Sidecar Cap HOA",
+            "categories": ["ccr"],
+            "text_extractable": ["false"],
+        },
+        files=[("files", ("d.pdf", pdf_bytes, "application/pdf"))],
+    )
+    assert r.status_code == 429
+    assert "budget" in r.text.lower()
+
+
+def test_upload_sidecar_length_mismatch_400():
+    token = _register_user(email="agent-sidecar-len@example.com")
+    pdf_bytes = _make_text_pdf("x")
+    r = client.post(
+        "/upload",
+        headers={"Authorization": f"Bearer {token}"},
+        data={
+            "hoa": "Mismatch HOA",
+            "categories": ["ccr"],
+            "extracted_texts": ['{"pages":[{"number":1,"text":"a"}]}', '{"pages":[{"number":1,"text":"b"}]}'],
+        },
+        files=[("files", ("d.pdf", pdf_bytes, "application/pdf"))],
+    )
+    assert r.status_code == 400
+    assert "length" in r.text.lower()
+
+
+def test_upload_sidecar_invalid_json_400():
+    token = _register_user(email="agent-sidecar-json@example.com")
+    pdf_bytes = _make_text_pdf("x")
+    r = client.post(
+        "/upload",
+        headers={"Authorization": f"Bearer {token}"},
+        data={
+            "hoa": "Bad JSON HOA",
+            "categories": ["ccr"],
+            "extracted_texts": ["not-json{{"],
+        },
+        files=[("files", ("d.pdf", pdf_bytes, "application/pdf"))],
+    )
+    assert r.status_code == 400
+    assert "json" in r.text.lower()
+
+
+# ---------- daily DocAI alert endpoint ----------
 
 def test_docai_alert_endpoint_under_threshold(monkeypatch):
     """The cost-alert endpoint reports under-threshold when spend is low."""
