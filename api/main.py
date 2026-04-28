@@ -2797,6 +2797,61 @@ def admin_backfill_categories(request: Request, body: dict, apply_hidden_reason:
     }
 
 
+@app.post("/admin/wal-checkpoint")
+def admin_wal_checkpoint(request: Request):
+    """Force a SQLite WAL checkpoint (TRUNCATE mode) to drain pending writes
+    back into the main DB and shrink the .wal file to zero. Safe — no data
+    loss; just collapses the WAL into the DB.
+    """
+    _require_admin(request)
+    settings = load_settings()
+    db_path = Path(settings.db_path)
+    wal_path = db_path.with_suffix(db_path.suffix + "-wal")
+    before_wal = wal_path.stat().st_size if wal_path.exists() else 0
+
+    import sqlite3
+    conn = sqlite3.connect(str(db_path))
+    try:
+        result = conn.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
+    finally:
+        conn.close()
+
+    after_wal = wal_path.stat().st_size if wal_path.exists() else 0
+    return {
+        "checkpoint_result": list(result) if result else None,
+        "wal_bytes_before": before_wal,
+        "wal_bytes_after": after_wal,
+        "wal_freed_bytes": before_wal - after_wal,
+    }
+
+
+@app.post("/admin/cleanup-qdrant-local")
+def admin_cleanup_qdrant_local(request: Request):
+    """Delete the orphaned /var/data/qdrant_local directory. Safe once
+    HOA_DISABLE_QDRANT=1 has been in place — search uses sqlite-vec only.
+    """
+    _require_admin(request)
+    import shutil
+
+    target = Path("/var/data/qdrant_local")
+    if not target.exists():
+        return {"deleted": False, "reason": "path does not exist", "path": str(target)}
+
+    def _du(path: Path) -> int:
+        total = 0
+        for entry in path.rglob("*"):
+            try:
+                if entry.is_file() and not entry.is_symlink():
+                    total += entry.stat().st_size
+            except OSError:
+                continue
+        return total
+
+    size_before = _du(target)
+    shutil.rmtree(target)
+    return {"deleted": True, "path": str(target), "bytes_freed": size_before}
+
+
 @app.get("/admin/disk-usage")
 def admin_disk_usage(request: Request):
     """Temporary diagnostic: report on-disk sizes under /var/data so we can

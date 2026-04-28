@@ -21,6 +21,8 @@ services:
         value: ""
       - key: QDRANT_API_KEY
         value: ""
+      - key: HOA_DISABLE_QDRANT
+        value: "1"
       - key: HOA_ENABLE_DOCAI
         value: "1"
       - key: HOA_DOCAI_PROJECT_ID
@@ -58,4 +60,4 @@ services:
     disk:
       name: hoaproxy-data
       mountPath: /var/data
-      sizeGB: 20
+      sizeGB: 100
