@@ -2817,7 +2817,7 @@ def admin_disk_usage(request: Request):
                 return 0
         for entry in path.rglob("*"):
             try:
-                if entry.is_file(follow_symlinks=False):
+                if entry.is_file() and not entry.is_symlink():
                     total += entry.stat().st_size
             except OSError:
                 continue
