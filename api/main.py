@@ -2797,6 +2797,82 @@ def admin_backfill_categories(request: Request, body: dict, apply_hidden_reason:
     }
 
 
+@app.get("/admin/disk-usage")
+def admin_disk_usage(request: Request):
+    """Temporary diagnostic: report on-disk sizes under /var/data so we can
+    see how much the orphaned qdrant_local store is using before deleting it.
+    Remove this endpoint once the cleanup decision is made.
+    """
+    _require_admin(request)
+    import shutil
+
+    def _du_bytes(path: Path) -> int:
+        total = 0
+        if not path.exists():
+            return 0
+        if path.is_file():
+            try:
+                return path.stat().st_size
+            except OSError:
+                return 0
+        for entry in path.rglob("*"):
+            try:
+                if entry.is_file(follow_symlinks=False):
+                    total += entry.stat().st_size
+            except OSError:
+                continue
+        return total
+
+    def _humanize(n: int) -> str:
+        for unit in ("B", "KiB", "MiB", "GiB", "TiB"):
+            if n < 1024:
+                return f"{n:.1f} {unit}"
+            n /= 1024
+        return f"{n:.1f} PiB"
+
+    root = Path("/var/data")
+    out: dict = {"root": str(root), "exists": root.exists()}
+    if not root.exists():
+        return out
+
+    top_entries = []
+    try:
+        for child in sorted(root.iterdir()):
+            size = _du_bytes(child)
+            top_entries.append({"path": str(child), "bytes": size, "size": _humanize(size)})
+    except OSError as exc:
+        out["error"] = str(exc)
+        return out
+    out["entries"] = top_entries
+
+    qdrant_dir = root / "qdrant_local"
+    if qdrant_dir.exists():
+        segments_dir = qdrant_dir / "collection" / "hoa_all" / "segments"
+        seg_breakdown = []
+        if segments_dir.exists():
+            for seg in sorted(segments_dir.iterdir()):
+                if seg.is_dir():
+                    size = _du_bytes(seg)
+                    seg_breakdown.append({"segment": seg.name, "bytes": size, "size": _humanize(size)})
+        out["qdrant_local"] = {
+            "total_bytes": _du_bytes(qdrant_dir),
+            "total_size": _humanize(_du_bytes(qdrant_dir)),
+            "segments": seg_breakdown,
+        }
+
+    try:
+        usage = shutil.disk_usage(str(root))
+        out["disk"] = {
+            "total": _humanize(usage.total),
+            "used": _humanize(usage.used),
+            "free": _humanize(usage.free),
+        }
+    except OSError:
+        pass
+
+    return out
+
+
 @app.post("/admin/backfill-locations")
 def admin_backfill_locations(request: Request, body: dict):
     """Bulk upsert hoa_locations from a posted JSON body. Each entry sets
