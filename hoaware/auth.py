@@ -75,6 +75,11 @@ def get_current_user(request: Request) -> dict:
     session = db.get_session_by_jti(conn, jti)
     if not session:
         raise HTTPException(status_code=401, detail="Session has been revoked")
+    # Bind jti to sub: a forged token cannot reuse another user's live jti
+    # to impersonate them. Without this, a leaked JWT_SECRET would allow
+    # signing tokens with sub=<victim> + jti=<attacker's own session>.
+    if int(session["user_id"]) != int(user_id):
+        raise HTTPException(status_code=401, detail="Token session mismatch")
 
     user = db.get_user_by_id(conn, int(user_id))
     if not user:

@@ -329,3 +329,43 @@ def test_update_noop():
     _, headers = _register("noop@example.com")
     resp = client.put("/auth/me", json={}, headers=headers)
     assert resp.status_code == 200
+
+
+def test_forged_token_with_other_users_jti_rejected():
+    """A token whose `sub` does not match the session's user_id must be
+    rejected. Guards against impersonation if JWT_SECRET ever leaks: an
+    attacker with their own valid jti cannot mint a token claiming sub=victim.
+    """
+    from jose import jwt as _jwt
+    from datetime import datetime, timedelta, timezone
+
+    # Two real users, each with a real session.
+    victim_data = client.post("/auth/register", json={
+        "email": "victim@example.com", "password": "password1234",
+    }).json()
+    attacker_data = client.post("/auth/register", json={
+        "email": "attacker@example.com", "password": "password1234",
+    }).json()
+
+    settings = load_settings()
+    # Decode attacker's real token to recover their jti.
+    attacker_payload = _jwt.decode(
+        attacker_data["token"], settings.jwt_secret,
+        algorithms=[settings.jwt_algorithm],
+    )
+    attacker_jti = attacker_payload["jti"]
+
+    # Forge a token: victim's user_id + attacker's live jti, signed with
+    # the same secret.
+    forged = _jwt.encode(
+        {
+            "sub": str(victim_data["user_id"]),
+            "jti": attacker_jti,
+            "exp": datetime.now(timezone.utc) + timedelta(days=1),
+        },
+        settings.jwt_secret,
+        algorithm=settings.jwt_algorithm,
+    )
+
+    resp = client.get("/auth/me", headers={"Authorization": f"Bearer {forged}"})
+    assert resp.status_code == 401
