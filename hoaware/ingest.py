@@ -14,6 +14,7 @@ from rich.progress import Progress
 from . import db
 from .chunker import PageContent, chunk_pages
 from .config import Settings, load_settings, normalize_hoa_name, UNIFIED_COLLECTION
+from .docai import OCRFailedError
 from .embeddings import batch_embeddings
 from .pdf_utils import compute_checksum, extract_pages
 from .vector_store import (
@@ -178,6 +179,8 @@ def _ingest_pdf(
         category=category,
         text_extractable=text_extractable,
         source_url=source_url,
+        # Clear any prior failure marker — extraction succeeded this time.
+        hidden_reason=None,
     )
     if not changed and not force_reindex:
         logger.info("Ingest skip for %s (document metadata unchanged)", rel_path)
@@ -333,6 +336,43 @@ def ingest_pdf_paths(
                         stats.indexed += 1
                     else:
                         stats.skipped += 1
+                except OCRFailedError as exc:
+                    rel_path = pdf_path.relative_to(settings.docs_root).as_posix()
+                    logger.error(
+                        "OCR failed for %s in HOA %s: %s (reason=%s)",
+                        rel_path, hoa_name, exc, exc.reason,
+                    )
+                    # Persist a hidden, marked-failed row so the doc shows up
+                    # in admin tooling (zero-chunk-docs hidden_count) instead
+                    # of looking like a successful 0-chunk ingest. Page count
+                    # may be unknown if PdfReader itself failed; best-effort.
+                    try:
+                        from pypdf import PdfReader as _PdfReader
+                        _pages = len(_PdfReader(str(pdf_path)).pages)
+                    except Exception:
+                        _pages = None
+                    db.upsert_document(
+                        conn,
+                        hoa_id,
+                        rel_path,
+                        compute_checksum(pdf_path),
+                        pdf_path.stat().st_size,
+                        _pages,
+                        category=meta.get("category"),
+                        text_extractable=meta.get("text_extractable"),
+                        source_url=meta.get("source_url"),
+                        hidden_reason=f"ocr_failed:{exc.reason}",
+                    )
+                    stats.failed += 1
+                    # Quota exhaustion likely means subsequent files in this
+                    # batch will also fail. Stop early so the failure mode is
+                    # obvious (one error in logs, not N).
+                    if exc.reason == "quota_exceeded":
+                        logger.error(
+                            "Aborting batch ingest for HOA %s after Document AI quota exhaustion",
+                            hoa_name,
+                        )
+                        raise
                 except Exception:
                     logger.exception("Failed to ingest %s for HOA %s", pdf_path, hoa_name)
                     rel_path = pdf_path.relative_to(settings.docs_root).as_posix()

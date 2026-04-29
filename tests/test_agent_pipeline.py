@@ -27,6 +27,7 @@ os.environ["HOA_DOCS_ROOT"] = _tmp_docs
 from api.main import app  # noqa: E402
 from hoaware import db  # noqa: E402
 from hoaware.config import load_settings  # noqa: E402
+from hoaware.docai import OCRFailedError  # noqa: E402
 from hoaware.pdf_utils import extract_pages, detect_text_extractable  # noqa: E402
 
 
@@ -89,13 +90,54 @@ def test_extract_pages_text_extractable_true_skips_ocr(tmp_path):
     assert "Declaration" in pages[0].text
 
 
-def test_extract_pages_text_extractable_false_no_docai_returns_blank(tmp_path):
-    """text_extractable=False with no DocAI configured returns blank pages, never tesseract."""
+def test_extract_pages_text_extractable_false_no_docai_raises(tmp_path):
+    """text_extractable=False with no DocAI configured must fail loudly:
+    raise OCRFailedError instead of silently returning blank pages.
+    Returning blank caused 2k+ docs to be persisted as 0-chunk 'success' on prod.
+    """
     pdf = tmp_path / "doc.pdf"
     pdf.write_bytes(_make_text_pdf("hello"))
-    pages = extract_pages(pdf, text_extractable=False, enable_docai=False)
-    assert len(pages) == 1
-    assert pages[0].text == ""  # no fallback to tesseract anymore
+    with pytest.raises(OCRFailedError) as excinfo:
+        extract_pages(pdf, text_extractable=False, enable_docai=False)
+    assert excinfo.value.reason == "not_configured"
+
+
+def test_ingest_records_hidden_doc_on_ocr_failure(tmp_path, monkeypatch):
+    """When OCR fails, ingest must persist the document with hidden_reason
+    set so it shows up in admin tooling — never as a silent 0-chunk success.
+    Also bumps the failed counter."""
+    from hoaware import ingest as ingest_mod
+    from hoaware.config import load_settings as _load
+    from hoaware.docai import OCRFailedError as _OCRFailedError
+
+    settings = _load()
+    docs_root = tmp_path / "docs"
+    hoa_dir = docs_root / "Failing HOA"
+    hoa_dir.mkdir(parents=True)
+    pdf_path = hoa_dir / "scanned.pdf"
+    pdf_path.write_bytes(_make_text_pdf("placeholder"))
+    monkeypatch.setattr(settings, "docs_root", docs_root)
+
+    def _fake_extract(*args, **kwargs):
+        raise _OCRFailedError("docai_failed", "simulated DocAI outage")
+    monkeypatch.setattr(ingest_mod, "extract_pages", _fake_extract)
+
+    stats = ingest_mod.ingest_pdf_paths(
+        "Failing HOA",
+        [pdf_path],
+        settings=settings,
+        metadata_by_path={pdf_path: {"category": "ccr", "text_extractable": False}},
+    )
+    assert stats.failed == 1
+    assert stats.indexed == 0
+
+    with db.get_connection(settings.db_path) as conn:
+        row = conn.execute(
+            "SELECT hidden_reason FROM documents WHERE relative_path = ?",
+            ("Failing HOA/scanned.pdf",),
+        ).fetchone()
+        assert row is not None, "document row must be persisted on OCR failure"
+        assert row["hidden_reason"] == "ocr_failed:docai_failed"
 
 
 def test_extract_pages_no_hint_uses_pypdf(tmp_path):

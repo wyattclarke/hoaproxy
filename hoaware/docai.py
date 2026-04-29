@@ -6,6 +6,7 @@ from pathlib import Path
 from time import perf_counter
 from typing import List
 
+from google.api_core import exceptions as gcp_exceptions
 from google.api_core.client_options import ClientOptions
 from google.cloud import documentai
 from pypdf import PdfReader, PdfWriter
@@ -14,6 +15,19 @@ from .chunker import PageContent
 from .cost_tracker import log_docai_usage
 
 logger = logging.getLogger(__name__)
+
+
+class OCRFailedError(RuntimeError):
+    """Raised when OCR is required but cannot produce usable text.
+
+    `reason` is one of: 'not_configured', 'page_cap_exceeded',
+    'quota_exceeded', 'docai_failed'. Lets the caller distinguish
+    transient (quota) from permanent (page_cap_exceeded) failures.
+    """
+
+    def __init__(self, reason: str, message: str | None = None):
+        super().__init__(message or reason)
+        self.reason = reason
 
 
 def _extract_layout_text(text: str, layout: documentai.Document.Page.Layout) -> str:
@@ -99,15 +113,33 @@ def extract_with_document_ai(
         location,
     )
 
+    chunks_attempted = 0
+    chunks_failed = 0
+    last_error: Exception | None = None
     for chunk_start_idx in range(0, len(target_pages), max_pages_per_call):
         chunk_pages = target_pages[chunk_start_idx : chunk_start_idx + max_pages_per_call]
         chunk_start = perf_counter()
+        chunks_attempted += 1
         pdf_bytes = _build_pdf_subset(reader, chunk_pages)
         raw_document = documentai.RawDocument(content=pdf_bytes, mime_type="application/pdf")
         request = documentai.ProcessRequest(name=processor_name, raw_document=raw_document)
         try:
             result = client.process_document(request=request)
-        except Exception:
+        except gcp_exceptions.ResourceExhausted as exc:
+            # Quota / rate limit — abort the whole document loudly. Continuing
+            # would just produce a partially-OCR'd doc with no signal that
+            # OCR was throttled.
+            logger.error(
+                "Document AI quota exhausted for %s pages %s..%s: %s",
+                path, chunk_pages[0], chunk_pages[-1], exc,
+            )
+            raise OCRFailedError(
+                "quota_exceeded",
+                f"Document AI quota exhausted ({exc})",
+            ) from exc
+        except Exception as exc:
+            chunks_failed += 1
+            last_error = exc
             logger.exception(
                 "Document AI OCR failed for %s pages %s..%s",
                 path,
@@ -145,4 +177,11 @@ def extract_with_document_ai(
         len(all_pages),
         perf_counter() - overall_start,
     )
+    # Every chunk failed — bubble up rather than returning empty. An empty
+    # return upstream becomes a 0-chunk document that looks like success.
+    if chunks_attempted > 0 and chunks_failed == chunks_attempted:
+        raise OCRFailedError(
+            "docai_failed",
+            f"All {chunks_attempted} Document AI chunks failed for {path.name}: {last_error}",
+        )
     return all_pages

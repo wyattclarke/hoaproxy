@@ -589,6 +589,9 @@ def get_document_record(
     return cur.fetchone()
 
 
+_HIDDEN_REASON_UNSET = object()
+
+
 def upsert_document(
     conn: sqlite3.Connection,
     hoa_id: int,
@@ -600,19 +603,28 @@ def upsert_document(
     category: str | None = None,
     text_extractable: bool | None = None,
     source_url: str | None = None,
+    hidden_reason: str | None | object = _HIDDEN_REASON_UNSET,
 ) -> tuple[int, bool]:
-    """Returns document_id and whether content changed."""
+    """Returns document_id and whether content changed.
+
+    `hidden_reason`: pass a string to flag the doc hidden, pass None to
+    explicitly clear, omit (default) to leave any existing value alone.
+    Used by ingest to record OCR failures and to clear that flag on a
+    successful re-ingest.
+    """
     record = get_document_record(conn, hoa_id, relative_path)
     te_int = None if text_extractable is None else (1 if text_extractable else 0)
+    set_hidden = hidden_reason is not _HIDDEN_REASON_UNSET
     if record is None:
         cur = conn.execute(
             """
             INSERT INTO documents (hoa_id, relative_path, checksum, bytes, page_count,
-                                   category, text_extractable, source_url)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                                   category, text_extractable, source_url, hidden_reason)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (hoa_id, relative_path, checksum, byte_size, page_count,
-             category, te_int, source_url),
+             category, te_int, source_url,
+             hidden_reason if set_hidden else None),
         )
         conn.commit()
         return int(cur.lastrowid), True
@@ -630,22 +642,31 @@ def upsert_document(
         if source_url and not record["source_url"]:
             updates.append("source_url = ?")
             params.append(source_url)
+        if set_hidden:
+            updates.append("hidden_reason = ?")
+            params.append(hidden_reason)
         if updates:
             params.append(record["id"])
             conn.execute(f"UPDATE documents SET {', '.join(updates)} WHERE id = ?", params)
             conn.commit()
         return int(record["id"]), False
 
+    extra_set = ""
+    extra_params: list = []
+    if set_hidden:
+        extra_set = ", hidden_reason = ?"
+        extra_params.append(hidden_reason)
     conn.execute(
-        """
+        f"""
         UPDATE documents
         SET checksum = ?, bytes = ?, page_count = ?, last_ingested = CURRENT_TIMESTAMP,
             category = COALESCE(?, category),
             text_extractable = COALESCE(?, text_extractable),
-            source_url = COALESCE(?, source_url)
+            source_url = COALESCE(?, source_url){extra_set}
         WHERE id = ?
         """,
-        (checksum, byte_size, page_count, category, te_int, source_url, record["id"]),
+        (checksum, byte_size, page_count, category, te_int, source_url,
+         *extra_params, record["id"]),
     )
     conn.commit()
     return int(record["id"]), True

@@ -20,7 +20,7 @@ from typing import Iterable
 from pypdf import PdfReader
 
 from .chunker import PageContent
-from .docai import extract_with_document_ai
+from .docai import OCRFailedError, extract_with_document_ai
 
 logger = logging.getLogger(__name__)
 
@@ -91,18 +91,24 @@ def extract_pages(
     # Mode 2: agent says scanned → DocAI for whole document, skip PyPDF
     if text_extractable is False:
         if not docai_configured:
-            logger.warning(
+            logger.error(
                 "Cannot OCR %s: text_extractable=False but DocAI not configured", path
             )
-            return [PageContent(number=i, text="") for i in range(1, total_pages + 1)]
+            raise OCRFailedError(
+                "not_configured",
+                f"OCR required for {path.name} but Document AI is not configured",
+            )
         if total_pages > MAX_PAGES_FOR_OCR:
-            logger.warning(
-                "Skipping OCR for %s: %d pages exceeds cap of %d",
+            logger.error(
+                "Refusing OCR for %s: %d pages exceeds cap of %d",
                 path,
                 total_pages,
                 MAX_PAGES_FOR_OCR,
             )
-            return [PageContent(number=i, text="") for i in range(1, total_pages + 1)]
+            raise OCRFailedError(
+                "page_cap_exceeded",
+                f"OCR refused for {path.name}: {total_pages} pages > cap of {MAX_PAGES_FOR_OCR}",
+            )
         try:
             docai_pages = extract_with_document_ai(
                 path,
@@ -112,9 +118,19 @@ def extract_pages(
                 endpoint=docai_endpoint,
                 max_pages_per_call=docai_chunk_pages,
             )
-        except Exception:
+        except OCRFailedError:
+            raise
+        except Exception as exc:
             logger.exception("Document AI OCR failed for %s", path)
-            return [PageContent(number=i, text="") for i in range(1, total_pages + 1)]
+            raise OCRFailedError(
+                "docai_failed",
+                f"Document AI OCR failed for {path.name}: {exc}",
+            ) from exc
+        if not docai_pages:
+            raise OCRFailedError(
+                "docai_failed",
+                f"Document AI returned 0 pages for {path.name}",
+            )
         # Fill any pages DocAI didn't return
         by_number = {p.number: p for p in docai_pages}
         result = [by_number.get(i, PageContent(number=i, text="")) for i in range(1, total_pages + 1)]
