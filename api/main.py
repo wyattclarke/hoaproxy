@@ -2328,22 +2328,32 @@ def _render_hoa_page(
         f"HOAproxy lets verified members of {hoa_name} assign a proxy to a delegate, sign electronically, and have the signed proxy delivered to the association before the meeting. Sign in or register an HOAproxy account to get started.",
     ))
 
-    faq_html_parts = ['<div class="faq" style="margin-top:14px">',
-                      '<h2 style="font-size:1.05rem;margin:0 0 8px">Frequently asked questions</h2>']
+    # Render the FAQ as collapsed <details> blocks. Content is in static
+    # HTML so Googlebot indexes it; the collapsed UI keeps the visible
+    # page tight. FAQPage rich-results work with this pattern.
+    faq_blocks = []
     for q, a in faq_items:
-        faq_html_parts.append(
-            f'<h3 style="font-size:0.95rem;margin:10px 0 4px;color:var(--ink,#12233a)">{html_escape(q)}</h3>'
-            f'<p style="margin:0 0 6px;color:var(--muted,#587091);font-size:0.92rem">{html_escape(a)}</p>'
+        faq_blocks.append(
+            f'<details><summary>{html_escape(q)}</summary>'
+            f'<p>{html_escape(a)}</p></details>'
         )
-    faq_html_parts.append('</div>')
-    faq_html = "\n".join(faq_html_parts)
+
+    # The "About this HOA" card lives at the bottom of the page, after the
+    # interactive grid. It carries the SEO-relevant prose (location sentence,
+    # mailing address, document inventory, last-updated, FAQ) without
+    # crowding the top of the page where users want to see documents and
+    # the assistant.
+    overview_paras: list[str] = [f'<p>{sent1}{sent_addr}</p>']
+    if doc_count > 0 or sent_docs:
+        overview_paras.append(f'<p>{sent_docs}{sent_last}</p>')
 
     overview_html = (
-        '<section class="hoa-overview" style="margin-top:10px;color:var(--ink,#12233a);font-size:0.96rem;line-height:1.45">'
-        f'<p style="margin:0 0 8px">{sent1}{sent_addr}</p>'
-        f'<p style="margin:0 0 8px">{sent_docs}{sent_last}</p>'
-        f'{faq_html}'
-        '</section>'
+        '<section class="hoa-about" aria-labelledby="hoaAboutHeading">'
+        f'<h2 id="hoaAboutHeading">About this HOA</h2>'
+        + "".join(overview_paras)
+        + '<h2 class="hoa-about-faq-heading">Frequently asked questions</h2>'
+        + "".join(faq_blocks)
+        + '</section>'
     )
 
     faq_ld = {
@@ -2390,6 +2400,16 @@ def _render_hoa_page(
         'id="hoaTitle">Loading HOA...</h1>',
         f'id="hoaTitle">{html_escape(hoa_name)}</h1>',
     )
+
+    # SSR the meta line directly under the H1 so Googlebot sees city/state
+    # without running JS (the JS-driven hydration also runs and overwrites
+    # this with richer content for users).
+    if city and state_upper:
+        meta_line = f'{html_escape(city)}, {html_escape(state_upper)}'
+        html = html.replace(
+            '<div class="hoa-meta" id="hoaMeta"></div>',
+            f'<div class="hoa-meta" id="hoaMeta">{meta_line}</div>',
+        )
 
     # Inject SSR overview block at marker
     html = html.replace("<!--SSR_OVERVIEW-->", overview_html)
@@ -2756,10 +2776,17 @@ ul.entries a { color:var(--accent); font-weight:700; text-decoration:none; }
 .muted-meta { color:var(--muted); font-size:0.86rem; }
 .metro-section { margin-top:20px; }
 .metro-section h2 { margin-top:18px; }
-.featured { background:#f3f8ff; border:1px solid var(--line); border-radius:12px; padding:16px 18px; margin:14px 0 8px; }
-.featured h2 { margin-top:0; }
-.featured ol { padding-left:18px; margin:6px 0 0; }
-.featured ol li { margin:4px 0; }
+.about-card {
+  margin:32px 0 0; padding:18px 22px;
+  border:1px solid var(--line); border-radius:12px;
+  background:rgba(255,255,255,0.7); color:var(--ink);
+  font-size:0.9rem; line-height:1.55;
+}
+.about-card h2 {
+  margin:0 0 6px; font-size:0.85rem; color:var(--muted);
+  text-transform:uppercase; letter-spacing:0.06em; font-weight:700;
+}
+.about-card p { margin:0; }
 """
 
 
@@ -2843,22 +2870,6 @@ def hoa_city_index(state: str, city: str) -> HTMLResponse:
         "and check participation history."
     )
 
-    # Featured: top HOAs by document coverage in this city
-    top = sorted(hoas, key=lambda h: (-h.get("doc_count", 0), h["hoa_name"]))
-    featured = [h for h in top if h.get("doc_count", 0) > 0][:8]
-    featured_html = ""
-    if len(featured) >= 3:
-        items = "".join(
-            f'<li><a href="{html_escape(db.build_hoa_path(h["hoa_name"], h["city"], h["state"]))}">'
-            f'{html_escape(h["hoa_name"])}</a> '
-            f'<span class="muted-meta">— {h["doc_count"]} doc{"s" if h["doc_count"] != 1 else ""}</span></li>'
-            for h in featured
-        )
-        featured_html = (
-            f'<section class="featured"><h2>Top HOAs in {html_escape(city_display)} by document coverage</h2>'
-            f"<ol>{items}</ol></section>"
-        )
-
     # Full alphabetical list
     rows_html: list[str] = []
     for h in hoas:
@@ -2904,10 +2915,8 @@ def hoa_city_index(state: str, city: str) -> HTMLResponse:
 <div class="breadcrumb"><a href="/">HOAproxy</a> › <a href="/hoa/{state_lower}/">{html_escape(state_full)}</a> › {html_escape(city_display)}</div>
 <h1>HOAs in {html_escape(city_display)}, {state_upper}</h1>
 <p class="subhead">{len(hoas)} homeowners association{"s" if len(hoas) != 1 else ""}</p>
-<p class="intro">{intro}</p>
-{featured_html}
-<h2>All HOAs in {html_escape(city_display)}</h2>
 <ul class="entries">{"".join(rows_html)}</ul>
+<section class="about-card"><h2>About {html_escape(city_display)} HOAs on HOAproxy</h2><p>{intro}</p></section>
 </div></main></body></html>"""
     return HTMLResponse(content=html)
 
@@ -2921,7 +2930,6 @@ def hoa_state_index(state: str) -> HTMLResponse:
     settings = load_settings()
     with db.get_connection(settings.db_path) as conn:
         cities = db.list_cities_in_state(conn, state)
-        top_hoas = db.list_top_hoas_in_state(conn, state, limit=10)
     if not cities:
         raise HTTPException(status_code=404, detail="No HOAs found for this state")
     total = sum(c["hoa_count"] for c in cities)
@@ -2951,21 +2959,6 @@ def hoa_state_index(state: str) -> HTMLResponse:
         cities_html = (
             f'<h2>Cities</h2>'
             f'<ul class="entries">{_city_list_html(state_lower, cities)}</ul>'
-        )
-
-    # Featured: top HOAs by doc coverage statewide
-    featured_html = ""
-    if len(top_hoas) >= 3:
-        items = "".join(
-            f'<li><a href="{html_escape(db.build_hoa_path(h["hoa_name"], h["city"], h["state"]))}">'
-            f'{html_escape(h["hoa_name"])}</a> '
-            f'<span class="muted-meta">— {html_escape(h["city"])}, {state_upper} · '
-            f'{h["doc_count"]} doc{"s" if h["doc_count"] != 1 else ""}</span></li>'
-            for h in top_hoas
-        )
-        featured_html = (
-            f'<section class="featured"><h2>Top HOAs in {html_escape(state_full)} by document coverage</h2>'
-            f"<ol>{items}</ol></section>"
         )
 
     canonical = f"https://hoaproxy.org/hoa/{state_lower}/"
@@ -3001,9 +2994,8 @@ def hoa_state_index(state: str) -> HTMLResponse:
 <div class="breadcrumb"><a href="/">HOAproxy</a> › {html_escape(state_full)}</div>
 <h1>HOAs in {html_escape(state_full)}</h1>
 <p class="subhead">{total} homeowners association{"s" if total != 1 else ""} across {len(cities)} cit{"ies" if len(cities) != 1 else "y"}</p>
-<p class="intro">{intro}</p>
-{featured_html}
 {cities_html}
+<section class="about-card"><h2>About HOAs in {html_escape(state_full)}</h2><p>{intro}</p></section>
 </div></main></body></html>"""
     return HTMLResponse(content=html)
 

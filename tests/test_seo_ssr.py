@@ -165,14 +165,15 @@ def test_state_index_has_intro_and_metros_and_jsonld(client):
     assert resp.status_code == 200
     body = resp.text
 
-    # State-specific intro paragraph (Texas has a curated entry)
+    # State-specific intro paragraph (Texas has a curated entry) — now in
+    # the about-card at the bottom rather than above the city list, but
+    # still in static HTML and crawlable.
     assert "Texas Property Code" in body
     assert "Chapter 209" in body
+    assert 'class="about-card"' in body
     # Metro grouping renders headings
     assert "Houston Metro" in body
     assert "Dallas&#x2013;Fort Worth" in body or "Dallas–Fort Worth" in body
-    # Featured / Top HOAs section
-    assert "Top HOAs in Texas by document coverage" in body
     # JSON-LD blocks
     assert "BreadcrumbList" in body and "CollectionPage" in body
     # Canonical URL
