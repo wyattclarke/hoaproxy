@@ -62,21 +62,35 @@ Within 2–3 days the **Coverage** report populates. That's where indexing probl
 
 ## 4. Validate structured data (one-time)
 
-Paste an HOA URL into Google's Rich Results Test:
+Two different tools for two different jobs:
 
-- https://search.google.com/test/rich-results
+**Google's Rich Results Test** — https://search.google.com/test/rich-results
+Reports only schema types that are eligible for SERP rich results. Use this to confirm the rich-result-eligible markup is well-formed and would render. Other valid schema types are silently parsed but **not listed** by this tool — so the absence of a type here doesn't mean the markup is missing.
 
 For an HOA profile page (e.g. `https://hoaproxy.org/hoa/tx/san-marcos/blanco-vista-residential-owners-association-inc`), expect:
 - `BreadcrumbList` detected ✓
 - `FAQPage` detected ✓
-- `Organization` detected ✓
 - No errors
 
 For a state index page (e.g. `https://hoaproxy.org/hoa/tx/`), expect:
 - `BreadcrumbList` detected ✓
-- `CollectionPage` detected ✓
+- No errors
 
-If the tool flags errors, fix before they accumulate in GSC's "Enhancements" reports.
+**Schema Markup Validator** — https://validator.schema.org/
+Reports *every* schema type it can parse. Use this if you want to confirm `Organization`, `CollectionPage`, `PostalAddress`, `Question`/`Answer`, etc. are also being served correctly. None of those produce SERP rich results, but they help Google understand page intent and link the site to a knowledge-graph entity.
+
+If either tool flags errors, fix them before they accumulate in GSC's "Enhancements" reports.
+
+**Quick CLI confirmation that all types are being emitted:**
+```bash
+curl -sS https://hoaproxy.org/hoa/tx/san-marcos/blanco-vista-residential-owners-association-inc \
+  | grep -oE '"@type":\s*"[A-Za-z]+"' | sort -u
+# Expect: Answer, BreadcrumbList, FAQPage, ListItem, Organization, PostalAddress, Question
+
+curl -sS https://hoaproxy.org/hoa/tx/ \
+  | grep -oE '"@type":\s*"[A-Za-z]+"' | sort -u
+# Expect: BreadcrumbList, CollectionPage, ListItem
+```
 
 ## 5. Validate Open Graph (one-time)
 

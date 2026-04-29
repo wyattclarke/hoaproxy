@@ -2378,7 +2378,12 @@ def _render_hoa_page(
         f"<title>{title}</title>",
     )
 
-    og_block = _og_meta_block(title=title, desc=desc, canonical=canonical).replace("\n", "\n    ")
+    # Short social title — SERP <title> stays long for keyword reach, but
+    # OG/Twitter cards truncate around 60 chars so we shorten here.
+    social_title = html_escape(_shorten_for_social(hoa_name))
+    og_block = _og_meta_block(
+        title=title, desc=desc, canonical=canonical, social_title=social_title,
+    ).replace("\n", "\n    ")
 
     # Inject meta description + canonical + OG + JSON-LD blocks before ga-measurement-id meta
     injected_head = (
@@ -2737,21 +2742,39 @@ _STATE_METROS: dict[str, list[tuple[str, list[str]]]] = {
 }
 
 
-def _og_meta_block(*, title: str, desc: str, canonical: str) -> str:
-    """Render the Open Graph + Twitter Card meta tags shared by all pages."""
-    image = "https://hoaproxy.org/static/favicon-48x48.png"
+def _og_meta_block(
+    *, title: str, desc: str, canonical: str, social_title: str | None = None
+) -> str:
+    """Render the Open Graph + Twitter Card meta tags shared by all pages.
+
+    `social_title` overrides the SERP `<title>` for OG/Twitter, where short
+    titles render better. SERP titles benefit from being long-tail and
+    keyword-rich; social previews don't.
+    """
+    image = "https://hoaproxy.org/static/og-card.png"
+    og_title = social_title or title
     return (
         f'<meta property="og:type" content="website">\n'
         f'<meta property="og:url" content="{html_escape(canonical)}">\n'
-        f'<meta property="og:title" content="{title}">\n'
+        f'<meta property="og:title" content="{og_title}">\n'
         f'<meta property="og:description" content="{html_escape(desc)}">\n'
         f'<meta property="og:image" content="{image}">\n'
+        f'<meta property="og:image:width" content="1200">\n'
+        f'<meta property="og:image:height" content="630">\n'
         f'<meta property="og:site_name" content="HOAproxy">\n'
-        f'<meta name="twitter:card" content="summary">\n'
-        f'<meta name="twitter:title" content="{title}">\n'
+        f'<meta name="twitter:card" content="summary_large_image">\n'
+        f'<meta name="twitter:title" content="{og_title}">\n'
         f'<meta name="twitter:description" content="{html_escape(desc)}">\n'
         f'<meta name="twitter:image" content="{image}">'
     )
+
+
+def _shorten_for_social(text: str, limit: int = 60) -> str:
+    """Truncate to fit in OG/Twitter title limits without breaking words."""
+    if len(text) <= limit:
+        return text
+    cut = text[: limit - 1].rsplit(" ", 1)[0]
+    return f"{cut}…"
 
 
 _INDEX_PAGE_CSS = """\
