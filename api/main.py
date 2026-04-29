@@ -3483,6 +3483,62 @@ def admin_cleanup_qdrant_local(request: Request):
     return {"deleted": True, "path": str(target), "bytes_freed": size_before}
 
 
+@app.get("/admin/zero-chunk-docs")
+def admin_zero_chunk_docs(request: Request):
+    """Diagnostic: list documents that have no chunks. Useful for finding
+    PDFs that were uploaded but never successfully parsed (e.g., OCR failed,
+    DocAI budget exceeded mid-upload, scanned pages with no text layer when
+    text_extractable was True, etc.). Returns hidden_reason + text_extractable
+    so you can separate real misses from intentionally-hidden docs.
+    """
+    _require_admin(request)
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        cur = conn.execute(
+            """
+            SELECT
+                h.name AS hoa_name,
+                d.id AS document_id,
+                d.relative_path,
+                d.bytes,
+                d.page_count,
+                d.category,
+                d.text_extractable,
+                d.hidden_reason,
+                d.last_ingested
+            FROM documents d
+            JOIN hoas h ON h.id = d.hoa_id
+            LEFT JOIN chunks c ON c.document_id = d.id
+            GROUP BY d.id
+            HAVING COUNT(c.id) = 0
+            ORDER BY h.name COLLATE NOCASE, d.relative_path COLLATE NOCASE
+            """
+        )
+        rows = cur.fetchall()
+    items = [
+        {
+            "hoa_name": str(r["hoa_name"]),
+            "document_id": int(r["document_id"]),
+            "relative_path": str(r["relative_path"]),
+            "bytes": int(r["bytes"]),
+            "page_count": int(r["page_count"]) if r["page_count"] is not None else None,
+            "category": str(r["category"]) if r["category"] is not None else None,
+            "text_extractable": (bool(r["text_extractable"])
+                                 if r["text_extractable"] is not None else None),
+            "hidden_reason": str(r["hidden_reason"]) if r["hidden_reason"] is not None else None,
+            "last_ingested": str(r["last_ingested"]) if r["last_ingested"] is not None else None,
+        }
+        for r in rows
+    ]
+    visible = [i for i in items if not i["hidden_reason"]]
+    return {
+        "total": len(items),
+        "visible_count": len(visible),
+        "hidden_count": len(items) - len(visible),
+        "items": items,
+    }
+
+
 @app.get("/admin/disk-usage")
 def admin_disk_usage(request: Request):
     """Temporary diagnostic: report on-disk sizes under /var/data so we can
