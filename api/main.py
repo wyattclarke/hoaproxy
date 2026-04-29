@@ -1905,6 +1905,14 @@ def sitemap_xml() -> Response:
         hoas = db.list_hoas_for_sitemap(conn)
 
     urls: list[str] = []
+    today = datetime.now(timezone.utc).date().isoformat()
+
+    def _to_iso_date(value: object) -> str | None:
+        """Sitemap lastmod accepts YYYY-MM-DD; trim time component if present."""
+        if not value:
+            return None
+        s = str(value).strip()
+        return s.split(" ")[0].split("T")[0] if s else None
 
     # Static pages
     static_pages = [
@@ -1919,32 +1927,45 @@ def sitemap_xml() -> Response:
     for path, freq, priority in static_pages:
         urls.append(
             f"  <url><loc>https://hoaproxy.org{path}</loc>"
+            f"<lastmod>{today}</lastmod>"
             f"<changefreq>{freq}</changefreq><priority>{priority}</priority></url>"
         )
 
-    # Collect states and cities
-    states: dict[str, int] = {}
-    cities: dict[tuple[str, str, str], int] = {}  # (state, city_slug, city_display) → count
+    # Aggregate per-state and per-city stats including newest lastmod
+    states: dict[str, dict] = {}
+    cities: dict[tuple[str, str, str], dict] = {}
     for h in hoas:
         s = (h["state"] or "").strip().lower()
         c = (h["city"] or "").strip()
         if not s or not c:
             continue
-        states[s] = states.get(s, 0) + 1
+        last = _to_iso_date(h.get("last_ingested"))
+        st = states.setdefault(s, {"count": 0, "last": None})
+        st["count"] += 1
+        if last and (st["last"] is None or last > st["last"]):
+            st["last"] = last
         key = (s, db.slugify_city(c), c)
-        cities[key] = cities.get(key, 0) + 1
+        ct = cities.setdefault(key, {"count": 0, "last": None})
+        ct["count"] += 1
+        if last and (ct["last"] is None or last > ct["last"]):
+            ct["last"] = last
 
     # State index pages
     for s in sorted(states):
+        last = states[s]["last"] or today
         urls.append(
             f"  <url><loc>https://hoaproxy.org/hoa/{s}/</loc>"
+            f"<lastmod>{last}</lastmod>"
             f"<changefreq>weekly</changefreq><priority>0.7</priority></url>"
         )
 
     # City index pages
-    for (s, cs, _cd) in sorted(cities):
+    for key in sorted(cities):
+        s, cs, _cd = key
+        last = cities[key]["last"] or today
         urls.append(
             f"  <url><loc>https://hoaproxy.org/hoa/{s}/{cs}/</loc>"
+            f"<lastmod>{last}</lastmod>"
             f"<changefreq>weekly</changefreq><priority>0.6</priority></url>"
         )
 
@@ -1956,8 +1977,10 @@ def sitemap_xml() -> Response:
             continue
         cs = db.slugify_city(c)
         ns = db.slugify_name(h["hoa_name"])
+        last = _to_iso_date(h.get("last_ingested")) or today
         urls.append(
             f"  <url><loc>https://hoaproxy.org/hoa/{s}/{cs}/{ns}</loc>"
+            f"<lastmod>{last}</lastmod>"
             f"<changefreq>weekly</changefreq><priority>0.5</priority></url>"
         )
 
@@ -1978,11 +2001,101 @@ def sitemap_xml() -> Response:
     )
 
 
+# Census region grouping for the homepage state-pill grid (item #3 of
+# docs/seo-roadmap.md). Used to render `/hoa/{state}/` links grouped by
+# region so the layout scales as the active-states list grows. Source:
+# US Census Bureau region definitions.
+_STATE_REGIONS: list[tuple[str, list[str]]] = [
+    ("Northeast", ["ct", "me", "ma", "nh", "nj", "ny", "pa", "ri", "vt"]),
+    ("Midwest", ["il", "in", "ia", "ks", "mi", "mn", "mo", "ne", "nd", "oh", "sd", "wi"]),
+    ("South", ["al", "ar", "de", "dc", "fl", "ga", "ky", "la", "md", "ms", "nc", "ok", "sc", "tn", "tx", "va", "wv"]),
+    ("West", ["ak", "az", "ca", "co", "hi", "id", "mt", "nv", "nm", "or", "ut", "wa", "wy"]),
+]
+
+
+@functools.lru_cache(maxsize=1)
+def _load_index_template() -> str:
+    return (STATIC_DIR / "index.html").read_text()
+
+
+# Module-level TTL cache for state counts on the homepage. Re-queried at
+# most every 5 minutes; the underlying list barely changes between deploys.
+_INDEX_STATES_CACHE: dict[str, object] = {"ts": 0.0, "states": []}
+_INDEX_STATES_TTL = 300
+
+
+def _get_index_state_counts() -> list[dict]:
+    now = time.time()
+    cached_ts = _INDEX_STATES_CACHE["ts"]
+    if isinstance(cached_ts, (int, float)) and now - cached_ts < _INDEX_STATES_TTL:
+        cached = _INDEX_STATES_CACHE["states"]
+        if isinstance(cached, list):
+            return cached
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        rows = db.list_hoa_states(conn)
+    _INDEX_STATES_CACHE["ts"] = now
+    _INDEX_STATES_CACHE["states"] = rows
+    return rows
+
+
+def _render_state_pill_grid(state_counts: list[dict]) -> str:
+    """Render homepage state pills as anchor links grouped by Census region.
+
+    Each pill is `<a href="/hoa/{state}/">{NAME} <span>{count}</span></a>` so
+    Googlebot follows the link into `/hoa/{state}/` and PageRank flows from `/`
+    into the directory. JS attaches click handlers separately to provide
+    in-place filter UX for users without overwriting these anchors.
+    """
+    by_state = {str(r["state"]).lower(): int(r["count"]) for r in state_counts}
+    region_html: list[str] = []
+    for region, states in _STATE_REGIONS:
+        pills: list[str] = []
+        for code in states:
+            if code not in by_state:
+                continue
+            count = by_state[code]
+            full = _STATE_NAMES.get(code, code.upper())
+            pills.append(
+                f'<a class="state-pill" href="/hoa/{code}/" data-state="{html_escape(code.upper())}" '
+                f'aria-label="{html_escape(full)} — {count} homeowners associations">'
+                f'{html_escape(code.upper())} <span class="state-pill-count">{count}</span></a>'
+            )
+        if not pills:
+            continue
+        region_html.append(
+            f'<div class="state-region">'
+            f'<div class="state-region-label">{html_escape(region)}</div>'
+            f'<div class="state-region-pills">{"".join(pills)}</div>'
+            f'</div>'
+        )
+    if not region_html:
+        return ""
+    all_pill = '<button class="state-pill state-pill-all active" type="button" data-state="">All states</button>'
+    return (
+        '<div class="state-region-grid">'
+        + f'<div class="state-region state-region-all">{all_pill}</div>'
+        + "".join(region_html)
+        + '</div>'
+    )
+
+
+def _render_index() -> HTMLResponse:
+    """Render the homepage with SSR'd state-pill grid for SEO + scalability."""
+    template = _load_index_template()
+    grid_html = _render_state_pill_grid(_get_index_state_counts())
+    html = template.replace(
+        '<div id="stateFilter" class="state-filter-row"></div>',
+        f'<div id="stateFilter" class="state-region-grid-wrap">{grid_html}</div>',
+    )
+    return HTMLResponse(content=html)
+
+
 @app.get("/", include_in_schema=False)
-def index() -> FileResponse:
+def index() -> HTMLResponse:
     if not STATIC_DIR.exists():
         raise HTTPException(status_code=404, detail="UI not available")
-    return FileResponse(STATIC_DIR / "index.html")
+    return _render_index()
 
 
 @app.get("/add-hoa", include_in_schema=False)
@@ -2019,30 +2132,97 @@ def _load_hoa_template() -> str:
     return (STATIC_DIR / "hoa.html").read_text()
 
 
+# Human-readable category labels for the SSR document inventory line.
+# Keys match VALID_CATEGORIES in hoaware/doc_classifier.py.
+_CATEGORY_LABELS_SINGULAR: dict[str, str] = {
+    "ccr": "CC&R",
+    "bylaws": "set of bylaws",
+    "articles": "articles of incorporation",
+    "rules": "rules document",
+    "amendment": "amendment",
+    "resolution": "resolution",
+    "minutes": "meeting minutes document",
+    "financial": "financial filing",
+    "insurance": "insurance document",
+    "unknown": "uncategorized document",
+}
+_CATEGORY_LABELS_PLURAL: dict[str, str] = {
+    "ccr": "CC&Rs",
+    "bylaws": "sets of bylaws",
+    "articles": "articles of incorporation",
+    "rules": "rules documents",
+    "amendment": "amendments",
+    "resolution": "resolutions",
+    "minutes": "meeting minutes",
+    "financial": "financial filings",
+    "insurance": "insurance documents",
+    "unknown": "uncategorized documents",
+}
+
+# Census region grouping, used by the homepage state grid (item #3) and
+# also when we need an ordered presentation of categories. Item #2 only
+# uses the category labels above; defining region map here keeps SEO
+# helpers in one place.
+
+
+def _format_category_phrase(categories: dict[str, int]) -> str:
+    """Render `{2: 'CC&Rs', 1: 'set of bylaws'}` style phrase."""
+    if not categories:
+        return ""
+    # Sort by count desc, then by category name for stability
+    items = sorted(categories.items(), key=lambda kv: (-kv[1], kv[0]))
+    parts = []
+    for cat, n in items:
+        if n <= 0:
+            continue
+        label = (_CATEGORY_LABELS_PLURAL if n != 1 else _CATEGORY_LABELS_SINGULAR).get(cat, cat)
+        parts.append(f"{n} {label}")
+    if not parts:
+        return ""
+    if len(parts) == 1:
+        return parts[0]
+    if len(parts) == 2:
+        return f"{parts[0]} and {parts[1]}"
+    return ", ".join(parts[:-1]) + f", and {parts[-1]}"
+
+
+def _format_address(street: str | None, city: str | None, state: str | None, postal: str | None) -> str:
+    """Format a US-style mailing address for the SSR overview."""
+    line2 = ", ".join([p for p in [city, f"{state.upper()} {postal}".strip() if state or postal else None] if p])
+    return ", ".join([p for p in [street, line2] if p])
+
+
 def _render_hoa_page(
     hoa_name: str,
     hoa_id: int,
     city: str | None,
     state: str | None,
     doc_count: int,
+    overview: dict | None = None,
 ) -> HTMLResponse:
-    """Return hoa.html with server-injected SEO metadata and SSR data."""
+    """Return hoa.html with server-injected SEO metadata and SSR content.
+
+    The `overview` dict (from `db.get_hoa_overview()`) drives the SSR
+    overview block — visible body text + FAQ items that give Googlebot
+    something unique to index per HOA. Without it, every HOA page is the
+    same JS shell.
+    """
     template = _load_hoa_template()
+    state_upper = state.upper() if state else None
+    canonical_path = db.build_hoa_path(hoa_name, city, state)
+    canonical = f"https://hoaproxy.org{canonical_path}"
 
     # --- <title> ---
     title = html_escape(hoa_name)
-    if city and state:
-        title += f" | {html_escape(city)}, {html_escape(state.upper())}"
+    if city and state_upper:
+        title += f" | {html_escape(city)}, {html_escape(state_upper)}"
     title += " | HOAproxy"
 
     # --- meta description ---
     desc = f"View governing documents, CC&Rs, bylaws and rules for {html_escape(hoa_name)}"
-    if city and state:
-        desc += f" in {html_escape(city)}, {html_escape(state.upper())}"
+    if city and state_upper:
+        desc += f" in {html_escape(city)}, {html_escape(state_upper)}"
     desc += f". {doc_count} document{'s' if doc_count != 1 else ''} available."
-
-    # --- canonical URL ---
-    canonical = f"https://hoaproxy.org{db.build_hoa_path(hoa_name, city, state)}"
 
     # --- SSR data for client JS ---
     ssr_json = json.dumps(
@@ -2050,11 +2230,135 @@ def _render_hoa_page(
         ensure_ascii=False,
     )
 
-    # --- JSON-LD structured data ---
-    ld = {"@context": "https://schema.org", "@type": "Organization", "name": hoa_name}
-    if city and state:
-        ld["address"] = {"@type": "PostalAddress", "addressLocality": city, "addressRegion": state.upper()}
-    ld_json = json.dumps(ld, ensure_ascii=False)
+    # --- Organization JSON-LD (existing) ---
+    org_ld: dict = {"@context": "https://schema.org", "@type": "Organization", "name": hoa_name}
+    if city and state_upper:
+        org_ld["address"] = {"@type": "PostalAddress", "addressLocality": city, "addressRegion": state_upper}
+        if overview and overview.get("street"):
+            org_ld["address"]["streetAddress"] = overview["street"]
+        if overview and overview.get("postal_code"):
+            org_ld["address"]["postalCode"] = overview["postal_code"]
+    org_ld_json = json.dumps(org_ld, ensure_ascii=False)
+
+    # --- BreadcrumbList JSON-LD ---
+    crumbs: list[dict] = [{"@type": "ListItem", "position": 1, "name": "HOAproxy", "item": "https://hoaproxy.org/"}]
+    if state and state_upper:
+        state_full = _STATE_NAMES.get(state.lower(), state_upper)
+        crumbs.append({
+            "@type": "ListItem",
+            "position": len(crumbs) + 1,
+            "name": state_full,
+            "item": f"https://hoaproxy.org/hoa/{state.lower()}/",
+        })
+        if city:
+            crumbs.append({
+                "@type": "ListItem",
+                "position": len(crumbs) + 1,
+                "name": city,
+                "item": f"https://hoaproxy.org/hoa/{state.lower()}/{db.slugify_city(city)}/",
+            })
+    crumbs.append({
+        "@type": "ListItem",
+        "position": len(crumbs) + 1,
+        "name": hoa_name,
+        "item": canonical,
+    })
+    breadcrumb_ld_json = json.dumps(
+        {"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": crumbs},
+        ensure_ascii=False,
+    )
+
+    # --- SSR overview block + FAQPage JSON-LD ---
+    ov = overview or {}
+    inventory_phrase = _format_category_phrase(ov.get("doc_categories") or {})
+    address_str = _format_address(ov.get("street"), city, state_upper, ov.get("postal_code"))
+    last_ingested = ov.get("last_ingested")
+    last_date = last_ingested.split(" ")[0] if isinstance(last_ingested, str) else None
+
+    # Sentence 1: location summary
+    if city and state_upper:
+        sent1 = f"{html_escape(hoa_name)} is a homeowners association in {html_escape(city)}, {html_escape(state_upper)}."
+    else:
+        sent1 = f"{html_escape(hoa_name)} is a homeowners association tracked on HOAproxy."
+
+    # Sentence 2: mailing address (if present)
+    sent_addr = (
+        f' Mailing address: {html_escape(address_str)}.'
+        if ov.get("street") and address_str
+        else ""
+    )
+
+    # Sentence 3: document inventory
+    if doc_count > 0 and inventory_phrase:
+        sent_docs = f"HOAproxy has {doc_count} document{'s' if doc_count != 1 else ''} on file for {html_escape(hoa_name)}: {html_escape(inventory_phrase)}."
+    elif doc_count > 0:
+        sent_docs = f"HOAproxy has {doc_count} document{'s' if doc_count != 1 else ''} on file for {html_escape(hoa_name)}."
+    else:
+        sent_docs = (
+            f"HOAproxy doesn't have any governing documents on file for {html_escape(hoa_name)} yet. "
+            f"Members can upload CC&Rs, bylaws, rules, and amendments below."
+        )
+
+    # Sentence 4: last updated
+    sent_last = f" Last updated {html_escape(last_date)}." if last_date and doc_count > 0 else ""
+
+    # FAQ items — visible in HTML and emitted as FAQPage schema
+    faq_items: list[tuple[str, str]] = []
+    if doc_count > 0:
+        ans1 = f"HOAproxy has {doc_count} document{'s' if doc_count != 1 else ''} on file"
+        if inventory_phrase:
+            ans1 += f" for {hoa_name} ({inventory_phrase})"
+        ans1 += ". You can browse and search the full text of each document on this page."
+    else:
+        ans1 = (
+            f"HOAproxy doesn't have any governing documents on file for {hoa_name} yet. "
+            "Homeowners and board members can upload CC&Rs, bylaws, rules, and amendments using the upload form on this page."
+        )
+    faq_items.append((f"What governing documents does {hoa_name} have on file?", ans1))
+
+    if city and state_upper:
+        loc_ans = f"{hoa_name} is located in {city}, {state_upper}"
+        if address_str and ov.get("street"):
+            loc_ans += f". Mailing address: {address_str}"
+        loc_ans += "."
+        faq_items.append((f"Where is {hoa_name} located?", loc_ans))
+
+    faq_items.append((
+        f"How do I file a proxy vote for {hoa_name}?",
+        f"HOAproxy lets verified members of {hoa_name} assign a proxy to a delegate, sign electronically, and have the signed proxy delivered to the association before the meeting. Sign in or register an HOAproxy account to get started.",
+    ))
+
+    faq_html_parts = ['<div class="faq" style="margin-top:14px">',
+                      '<h2 style="font-size:1.05rem;margin:0 0 8px">Frequently asked questions</h2>']
+    for q, a in faq_items:
+        faq_html_parts.append(
+            f'<h3 style="font-size:0.95rem;margin:10px 0 4px;color:var(--ink,#12233a)">{html_escape(q)}</h3>'
+            f'<p style="margin:0 0 6px;color:var(--muted,#587091);font-size:0.92rem">{html_escape(a)}</p>'
+        )
+    faq_html_parts.append('</div>')
+    faq_html = "\n".join(faq_html_parts)
+
+    overview_html = (
+        '<section class="hoa-overview" style="margin-top:10px;color:var(--ink,#12233a);font-size:0.96rem;line-height:1.45">'
+        f'<p style="margin:0 0 8px">{sent1}{sent_addr}</p>'
+        f'<p style="margin:0 0 8px">{sent_docs}{sent_last}</p>'
+        f'{faq_html}'
+        '</section>'
+    )
+
+    faq_ld = {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "mainEntity": [
+            {
+                "@type": "Question",
+                "name": q,
+                "acceptedAnswer": {"@type": "Answer", "text": a},
+            }
+            for q, a in faq_items
+        ],
+    }
+    faq_ld_json = json.dumps(faq_ld, ensure_ascii=False)
 
     html = template
 
@@ -2064,11 +2368,16 @@ def _render_hoa_page(
         f"<title>{title}</title>",
     )
 
-    # Inject meta description + canonical + JSON-LD before ga-measurement-id meta
+    og_block = _og_meta_block(title=title, desc=desc, canonical=canonical).replace("\n", "\n    ")
+
+    # Inject meta description + canonical + OG + JSON-LD blocks before ga-measurement-id meta
     injected_head = (
         f'<meta name="description" content="{desc}">\n'
         f'    <link rel="canonical" href="{html_escape(canonical)}">\n'
-        f'    <script type="application/ld+json">{ld_json}</script>\n'
+        f'    {og_block}\n'
+        f'    <script type="application/ld+json">{org_ld_json}</script>\n'
+        f'    <script type="application/ld+json">{breadcrumb_ld_json}</script>\n'
+        f'    <script type="application/ld+json">{faq_ld_json}</script>\n'
         f'    <meta name="ga-measurement-id"'
     )
     html = html.replace('<meta name="ga-measurement-id"', injected_head)
@@ -2076,11 +2385,14 @@ def _render_hoa_page(
     # Inject SSR data script before closing </head>
     html = html.replace("</head>", f'<script>window.__SSR_DATA__={ssr_json};</script>\n  </head>')
 
-    # Pre-populate visible title
+    # Pre-populate visible page heading (now an <h1>)
     html = html.replace(
-        'id="hoaTitle">Loading HOA...</h2>',
-        f'id="hoaTitle">{html_escape(hoa_name)}</h2>',
+        'id="hoaTitle">Loading HOA...</h1>',
+        f'id="hoaTitle">{html_escape(hoa_name)}</h1>',
     )
+
+    # Inject SSR overview block at marker
+    html = html.replace("<!--SSR_OVERVIEW-->", overview_html)
 
     return HTMLResponse(content=html)
 
@@ -2255,14 +2567,16 @@ def hoa_profile_page(state: str, city: str, slug: str) -> HTMLResponse:
     settings = load_settings()
     with db.get_connection(settings.db_path) as conn:
         result = db.resolve_hoa_by_hierarchical_slug(conn, state, city, slug)
-    if result is None:
-        raise HTTPException(status_code=404, detail="HOA not found")
+        if result is None:
+            raise HTTPException(status_code=404, detail="HOA not found")
+        overview = db.get_hoa_overview(conn, result["hoa_id"])
     return _render_hoa_page(
         hoa_name=result["hoa_name"],
         hoa_id=result["hoa_id"],
         city=result["city"],
         state=result["state"],
         doc_count=result["doc_count"],
+        overview=overview,
     )
 
 
@@ -2282,10 +2596,231 @@ _STATE_NAMES: dict[str, str] = {
     "wi": "Wisconsin", "wy": "Wyoming", "dc": "District of Columbia",
 }
 
+# State-specific intro paragraph for `/hoa/{state}/` index pages (item #4
+# of docs/seo-roadmap.md). Each entry should be ~80–120 words of unique
+# prose mentioning the state name and the primary HOA-governing statute,
+# so the page has rankable content beyond the bare city list. Add new
+# entries as additional states come online; states without an entry fall
+# back to a generic template that still includes the state name.
+_STATE_INTROS: dict[str, str] = {
+    "tx": (
+        "Homeowners associations in Texas are governed by the Texas Property Code, primarily Chapter 209 "
+        "(the Texas Residential Property Owners Protection Act) for HOAs and Chapter 82 (the Texas Uniform "
+        "Condominium Act) for condominiums. State law gives Texas homeowners specific rights around access to "
+        "governing documents, open board meetings, dedicatory instruments, and proxy voting at member meetings. "
+        "Each association also adopts its own CC&Rs, bylaws, rules, and amendments — these are the documents "
+        "HOAproxy makes searchable so members can find what their community actually requires without paging "
+        "through hundreds of recorded pages."
+    ),
+    "ca": (
+        "California homeowners associations operate under the Davis-Stirling Common Interest Development Act "
+        "(California Civil Code §§4000–6150). Davis-Stirling sets out detailed requirements for how associations "
+        "publish governing documents, conduct elections, hold open meetings, and respond to records requests. "
+        "Beyond state law, every California HOA has its own CC&Rs, bylaws, operating rules, and any amendments "
+        "homeowners have adopted over the years — and those documents are usually scattered across the management "
+        "company's portal, the county recorder, and old emails. HOAproxy collects them in one searchable place."
+    ),
+    "co": (
+        "Colorado homeowners associations are governed by the Colorado Common Interest Ownership Act (CCIOA, "
+        "C.R.S. §38-33.3-101 et seq.). CCIOA sets minimum standards for member meetings, document access, "
+        "board elections, and proxy voting that apply on top of each association's own CC&Rs, bylaws, rules, "
+        "and amendments. The Colorado Division of Real Estate also requires associations to register annually. "
+        "HOAproxy makes the documents that actually govern day-to-day life — what you can build, when dues are "
+        "due, how rules get changed — searchable across every Colorado HOA on the platform."
+    ),
+    "nc": (
+        "North Carolina homeowners associations are governed primarily by the North Carolina Planned Community Act "
+        "(NCGS Chapter 47F) and, for condominiums, the NC Condominium Act (Chapter 47C). State law sets a baseline "
+        "for member rights around document access, meeting notice, board elections, and proxy voting. On top of that, "
+        "every NC association has its own recorded CC&Rs, bylaws, rules, and amendments — and those are often the "
+        "documents members actually need to read before disputes, ARC submissions, or board votes. HOAproxy collects "
+        "them in one place and makes the full text searchable."
+    ),
+    "az": (
+        "Arizona homeowners associations are governed by the Arizona Planned Community Act "
+        "(A.R.S. Title 33, Chapter 16) and, for condominiums, the Condominium Act (Title 33, Chapter 9). "
+        "Arizona statutes give homeowners specific rights around access to governing documents, member meetings, "
+        "open records, and the procedures associations must follow when changing rules or assessing fines. Each "
+        "Arizona HOA also has its own CC&Rs, bylaws, rules, and amendments — HOAproxy makes those documents "
+        "searchable so members and prospective buyers can find the rules that actually apply to a property."
+    ),
+    "sc": (
+        "South Carolina homeowners associations operate under the South Carolina Homeowners Association Act "
+        "(S.C. Code Title 27, Chapter 30), enacted in 2018, which requires associations to record their "
+        "governing documents with the county and gives homeowners a baseline of rights around access. Each "
+        "association also has its own recorded CC&Rs, bylaws, rules, and any amendments. HOAproxy collects "
+        "those documents in one place and makes their full text searchable, so South Carolina homeowners can "
+        "actually find the provisions that apply to their property without filing a records request."
+    ),
+    "va": (
+        "Virginia homeowners associations are governed primarily by the Virginia Property Owners' Association "
+        "Act (Va. Code §§55.1-1800 et seq.) and, for condominiums, the Virginia Condominium Act (§§55.1-1900 et seq.). "
+        "Virginia law sets a baseline for member access to governing documents, open meetings, board elections, "
+        "and proxy voting. Each Virginia association also has its own CC&Rs, bylaws, rules, and amendments — "
+        "HOAproxy aggregates those documents and makes the full text searchable across every Virginia HOA on "
+        "the platform."
+    ),
+}
+
+# Static metro groupings for state index pages with enough cities that a
+# flat alphabetical list is unwieldy. States without an entry fall back
+# to the flat list. Cities are matched by name (case-insensitive) against
+# the rows from `db.list_cities_in_state()`.
+_STATE_METROS: dict[str, list[tuple[str, list[str]]]] = {
+    "tx": [
+        ("Houston Metro", [
+            "Houston", "Katy", "Sugar Land", "Pearland", "The Woodlands", "Spring", "Cypress",
+            "Humble", "Kingwood", "Tomball", "Conroe", "Friendswood", "League City", "Missouri City",
+            "Richmond", "Rosenberg", "Magnolia", "Fulshear", "Manvel", "Pasadena", "Baytown",
+        ]),
+        ("Dallas–Fort Worth", [
+            "Dallas", "Fort Worth", "Plano", "Frisco", "McKinney", "Allen", "Arlington", "Irving",
+            "Garland", "Mesquite", "Carrollton", "Lewisville", "Flower Mound", "Grapevine",
+            "Coppell", "Richardson", "Mansfield", "Euless", "Hurst", "Bedford", "Grand Prairie",
+            "Rowlett", "Wylie", "Sachse", "Murphy", "Little Elm", "Prosper", "Celina", "Anna",
+            "Forney", "Rockwall", "Heath", "Waxahachie", "Midlothian", "Cedar Hill", "DeSoto",
+            "Lancaster", "Duncanville", "Burleson", "Crowley", "Keller", "Southlake", "Roanoke",
+            "Trophy Club", "Westlake", "Argyle", "Justin", "Aubrey",
+        ]),
+        ("Austin Metro", [
+            "Austin", "Round Rock", "Cedar Park", "Pflugerville", "Leander", "Georgetown",
+            "Kyle", "Buda", "Hutto", "Lago Vista", "Manor", "Bastrop", "Liberty Hill", "Dripping Springs",
+            "Lakeway", "Bee Cave",
+        ]),
+        ("San Antonio Metro", [
+            "San Antonio", "New Braunfels", "Schertz", "Cibolo", "Universal City", "Converse",
+            "Live Oak", "Helotes", "Boerne", "Bulverde", "Selma",
+        ]),
+    ],
+    "nc": [
+        ("Charlotte Metro", [
+            "Charlotte", "Concord", "Huntersville", "Cornelius", "Davidson", "Mooresville",
+            "Matthews", "Mint Hill", "Pineville", "Indian Trail", "Waxhaw", "Weddington",
+            "Monroe", "Stallings", "Harrisburg", "Kannapolis",
+        ]),
+        ("Triangle (Raleigh–Durham)", [
+            "Raleigh", "Durham", "Cary", "Apex", "Wake Forest", "Holly Springs", "Fuquay-Varina",
+            "Morrisville", "Chapel Hill", "Garner", "Knightdale", "Wendell", "Zebulon",
+            "Clayton", "Smithfield", "Hillsborough", "Pittsboro", "Carrboro",
+        ]),
+        ("Triad (Greensboro–Winston-Salem)", [
+            "Greensboro", "Winston-Salem", "High Point", "Burlington", "Kernersville",
+            "Clemmons", "Lewisville", "Jamestown", "Oak Ridge", "Summerfield",
+        ]),
+        ("Coastal", [
+            "Wilmington", "Leland", "Hampstead", "Surf City", "Sneads Ferry", "Carolina Beach",
+            "Wrightsville Beach", "Topsail Beach", "New Bern", "Morehead City", "Beaufort",
+            "Emerald Isle", "Atlantic Beach", "Jacksonville", "Hubert", "Cape Carteret",
+            "Kitty Hawk", "Kill Devil Hills", "Nags Head", "Manteo", "Corolla", "Duck",
+        ]),
+    ],
+}
+
+
+def _og_meta_block(*, title: str, desc: str, canonical: str) -> str:
+    """Render the Open Graph + Twitter Card meta tags shared by all pages."""
+    image = "https://hoaproxy.org/static/favicon-48x48.png"
+    return (
+        f'<meta property="og:type" content="website">\n'
+        f'<meta property="og:url" content="{html_escape(canonical)}">\n'
+        f'<meta property="og:title" content="{title}">\n'
+        f'<meta property="og:description" content="{html_escape(desc)}">\n'
+        f'<meta property="og:image" content="{image}">\n'
+        f'<meta property="og:site_name" content="HOAproxy">\n'
+        f'<meta name="twitter:card" content="summary">\n'
+        f'<meta name="twitter:title" content="{title}">\n'
+        f'<meta name="twitter:description" content="{html_escape(desc)}">\n'
+        f'<meta name="twitter:image" content="{image}">'
+    )
+
+
+_INDEX_PAGE_CSS = """\
+@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Space+Grotesk:wght@600;700&display=swap");
+:root { --bg:#eef5ff; --ink:#12233a; --muted:#587091; --line:#d3e0f4; --accent:#1662f3; }
+* { box-sizing:border-box; }
+body { margin:0; min-height:100vh; font-family:"Manrope","Segoe UI",sans-serif; color:var(--ink);
+  background:linear-gradient(180deg,#f8fbff 0%,var(--bg) 54%,#edf3ff 100%); }
+.shell { width:min(860px,94vw); margin:40px auto 60px; }
+.card { border:1px solid var(--line); border-radius:18px; background:rgba(255,255,255,0.94);
+  box-shadow:0 10px 32px rgba(16,40,73,0.09); padding:28px; }
+h1 { margin:0 0 6px; font-family:"Space Grotesk","Manrope",sans-serif; font-size:clamp(1.4rem,3vw,2rem); }
+h2 { font-family:"Space Grotesk","Manrope",sans-serif; font-size:1.05rem; margin:24px 0 10px; }
+.breadcrumb { margin-bottom:16px; font-size:0.9rem; color:var(--muted); }
+.breadcrumb a { color:var(--accent); text-decoration:none; font-weight:600; }
+.intro { color:var(--ink); font-size:0.96rem; line-height:1.55; margin:0 0 16px; }
+.subhead { color:var(--muted); margin:0 0 18px; font-size:0.95rem; }
+ul.entries { list-style:none; padding:0; margin:0; columns:2; column-gap:24px; }
+ul.entries.flat { columns:1; }
+ul.entries li { margin:6px 0; break-inside:avoid; }
+ul.entries a { color:var(--accent); font-weight:700; text-decoration:none; }
+.muted-meta { color:var(--muted); font-size:0.86rem; }
+.metro-section { margin-top:20px; }
+.metro-section h2 { margin-top:18px; }
+.featured { background:#f3f8ff; border:1px solid var(--line); border-radius:12px; padding:16px 18px; margin:14px 0 8px; }
+.featured h2 { margin-top:0; }
+.featured ol { padding-left:18px; margin:6px 0 0; }
+.featured ol li { margin:4px 0; }
+"""
+
+
+def _generic_state_intro(state_full: str, total: int, n_cities: int) -> str:
+    return (
+        f"Homeowners associations in {state_full} are governed by both state law — including the "
+        "rules each state sets for HOA documents, member meetings, voting, and records access — and "
+        "by each association's own recorded CC&Rs, bylaws, rules, and amendments. HOAproxy collects "
+        f"those governing documents for {total} {state_full} HOAs across {n_cities} cit"
+        f"{'ies' if n_cities != 1 else 'y'} and makes the full text searchable, so members can find "
+        "the rules that actually apply to their property without paging through hundreds of recorded pages."
+    )
+
+
+def _build_metro_groups(
+    state_code: str, cities: list[dict]
+) -> tuple[list[tuple[str, list[dict]]], list[dict]]:
+    """Group cities into named metros for states in `_STATE_METROS`.
+
+    Returns ``(metros, leftover)`` where ``metros`` is a list of
+    ``(metro_name, [city_row, ...])`` and ``leftover`` are cities that
+    didn't match any metro (rendered under "Other cities"). For states
+    not in `_STATE_METROS`, returns ``([], cities)``.
+    """
+    rules = _STATE_METROS.get(state_code.lower())
+    if not rules:
+        return [], cities
+
+    by_lower = {c["city"].lower(): c for c in cities if c.get("city")}
+    used: set[str] = set()
+    out: list[tuple[str, list[dict]]] = []
+    for metro_name, city_list in rules:
+        bucket = []
+        for cn in city_list:
+            row = by_lower.get(cn.lower())
+            if row and cn.lower() not in used:
+                bucket.append(row)
+                used.add(cn.lower())
+        if bucket:
+            out.append((metro_name, bucket))
+    leftover = [c for c in cities if c.get("city", "").lower() not in used]
+    return out, leftover
+
+
+def _city_list_html(state_code: str, cities: list[dict]) -> str:
+    parts: list[str] = []
+    for c in cities:
+        city_slug = db.slugify_city(c["city"])
+        href = f"/hoa/{state_code.lower()}/{html_escape(city_slug)}/"
+        name = html_escape(c["city"])
+        count = c["hoa_count"]
+        parts.append(
+            f'<li><a href="{href}">{name}</a> '
+            f'<span class="muted-meta">— {count} HOA{"s" if count != 1 else ""}</span></li>'
+        )
+    return "".join(parts)
+
 
 @app.get("/hoa/{state}/{city}/", include_in_schema=False)
 def hoa_city_index(state: str, city: str) -> HTMLResponse:
-    """List all HOAs in a city."""
+    """List all HOAs in a city, with intro copy + a featured-HOAs section."""
     settings = load_settings()
     with db.get_connection(settings.db_path) as conn:
         hoas = db.list_hoas_in_city(conn, state, city)
@@ -2293,103 +2828,182 @@ def hoa_city_index(state: str, city: str) -> HTMLResponse:
         raise HTTPException(status_code=404, detail="No HOAs found for this city")
     city_display = hoas[0]["city"]
     state_upper = state.upper()
-    state_full = _STATE_NAMES.get(state.lower(), state_upper)
+    state_lower = state.lower()
+    state_full = _STATE_NAMES.get(state_lower, state_upper)
     title = f"HOAs in {html_escape(city_display)}, {state_upper} | HOAproxy"
-    desc = f"Browse {len(hoas)} homeowners associations in {html_escape(city_display)}, {state_upper}. View CC&Rs, bylaws, and governing documents."
+    desc = (
+        f"Browse {len(hoas)} homeowners associations in {html_escape(city_display)}, {state_upper}. "
+        "View CC&Rs, bylaws, and governing documents."
+    )
+    intro = (
+        f"There {'is' if len(hoas) == 1 else 'are'} {len(hoas)} homeowners association"
+        f"{'s' if len(hoas) != 1 else ''} on HOAproxy in {html_escape(city_display)}, {state_upper}. "
+        f"Each {html_escape(city_display)} HOA on the site has its own profile page where you can browse "
+        "governing documents (CC&Rs, bylaws, rules, amendments), search the full text, file a proxy vote, "
+        "and check participation history."
+    )
 
-    rows_html = []
+    # Featured: top HOAs by document coverage in this city
+    top = sorted(hoas, key=lambda h: (-h.get("doc_count", 0), h["hoa_name"]))
+    featured = [h for h in top if h.get("doc_count", 0) > 0][:8]
+    featured_html = ""
+    if len(featured) >= 3:
+        items = "".join(
+            f'<li><a href="{html_escape(db.build_hoa_path(h["hoa_name"], h["city"], h["state"]))}">'
+            f'{html_escape(h["hoa_name"])}</a> '
+            f'<span class="muted-meta">— {h["doc_count"]} doc{"s" if h["doc_count"] != 1 else ""}</span></li>'
+            for h in featured
+        )
+        featured_html = (
+            f'<section class="featured"><h2>Top HOAs in {html_escape(city_display)} by document coverage</h2>'
+            f"<ol>{items}</ol></section>"
+        )
+
+    # Full alphabetical list
+    rows_html: list[str] = []
     for h in hoas:
         href = html_escape(db.build_hoa_path(h["hoa_name"], h["city"], h["state"]))
         name = html_escape(h["hoa_name"])
         docs = h["doc_count"]
         rows_html.append(
-            f'<li style="margin:8px 0"><a href="{href}" style="color:var(--accent);font-weight:700;text-decoration:none">{name}</a>'
-            f' <span style="color:var(--muted);font-size:0.88rem">— {docs} doc{"s" if docs != 1 else ""}</span></li>'
+            f'<li><a href="{href}">{name}</a> '
+            f'<span class="muted-meta">— {docs} doc{"s" if docs != 1 else ""}</span></li>'
         )
+
+    canonical = f"https://hoaproxy.org/hoa/{state_lower}/{db.slugify_city(city_display)}/"
+    breadcrumb_ld = {
+        "@context": "https://schema.org", "@type": "BreadcrumbList",
+        "itemListElement": [
+            {"@type": "ListItem", "position": 1, "name": "HOAproxy", "item": "https://hoaproxy.org/"},
+            {"@type": "ListItem", "position": 2, "name": state_full, "item": f"https://hoaproxy.org/hoa/{state_lower}/"},
+            {"@type": "ListItem", "position": 3, "name": city_display, "item": canonical},
+        ],
+    }
+    collection_ld = {
+        "@context": "https://schema.org", "@type": "CollectionPage",
+        "name": f"HOAs in {city_display}, {state_upper}",
+        "description": desc,
+        "url": canonical,
+    }
 
     html = f"""<!doctype html>
 <html lang="en"><head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="description" content="{html_escape(desc)}">
+<link rel="canonical" href="{html_escape(canonical)}">
+{_og_meta_block(title=title, desc=desc, canonical=canonical)}
 <meta name="ga-measurement-id" content="G-BV7JXG4JDE">
 <script src="/static/js/analytics.js"></script>
 <title>{title}</title>
 <link rel="stylesheet" href="/static/css/mobile.css">
-<style>
-@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Space+Grotesk:wght@600;700&display=swap");
-:root {{ --bg:#eef5ff; --ink:#12233a; --muted:#587091; --line:#d3e0f4; --accent:#1662f3; }}
-* {{ box-sizing:border-box; }}
-body {{ margin:0; min-height:100vh; font-family:"Manrope","Segoe UI",sans-serif; color:var(--ink);
-  background:linear-gradient(180deg,#f8fbff 0%,var(--bg) 54%,#edf3ff 100%); }}
-.shell {{ width:min(860px,94vw); margin:40px auto 60px; }}
-.card {{ border:1px solid var(--line); border-radius:18px; background:rgba(255,255,255,0.94);
-  box-shadow:0 10px 32px rgba(16,40,73,0.09); padding:28px; }}
-h1 {{ margin:0 0 6px; font-family:"Space Grotesk","Manrope",sans-serif; font-size:clamp(1.4rem,3vw,2rem); }}
-.breadcrumb {{ margin-bottom:16px; font-size:0.9rem; color:var(--muted); }}
-.breadcrumb a {{ color:var(--accent); text-decoration:none; font-weight:600; }}
-ul {{ list-style:none; padding:0; }}
-</style></head><body>
+<style>{_INDEX_PAGE_CSS}</style>
+<script type="application/ld+json">{json.dumps(breadcrumb_ld, ensure_ascii=False)}</script>
+<script type="application/ld+json">{json.dumps(collection_ld, ensure_ascii=False)}</script>
+</head><body>
 <main class="shell"><div class="card">
-<div class="breadcrumb"><a href="/">HOAproxy</a> › <a href="/hoa/{state.lower()}/">{html_escape(state_full)}</a> › {html_escape(city_display)}</div>
+<div class="breadcrumb"><a href="/">HOAproxy</a> › <a href="/hoa/{state_lower}/">{html_escape(state_full)}</a> › {html_escape(city_display)}</div>
 <h1>HOAs in {html_escape(city_display)}, {state_upper}</h1>
-<p style="color:var(--muted);margin:0 0 18px">{len(hoas)} homeowners association{"s" if len(hoas) != 1 else ""}</p>
-<ul>{"".join(rows_html)}</ul>
+<p class="subhead">{len(hoas)} homeowners association{"s" if len(hoas) != 1 else ""}</p>
+<p class="intro">{intro}</p>
+{featured_html}
+<h2>All HOAs in {html_escape(city_display)}</h2>
+<ul class="entries">{"".join(rows_html)}</ul>
 </div></main></body></html>"""
     return HTMLResponse(content=html)
 
 
 @app.get("/hoa/{state}/", include_in_schema=False)
 def hoa_state_index(state: str) -> HTMLResponse:
-    """List all cities with HOAs in a state."""
+    """List cities (grouped by metro where applicable) + featured HOAs."""
+    state_lower = state.lower()
+    state_upper = state.upper()
+    state_full = _STATE_NAMES.get(state_lower, state_upper)
     settings = load_settings()
     with db.get_connection(settings.db_path) as conn:
         cities = db.list_cities_in_state(conn, state)
+        top_hoas = db.list_top_hoas_in_state(conn, state, limit=10)
     if not cities:
         raise HTTPException(status_code=404, detail="No HOAs found for this state")
-    state_upper = state.upper()
-    state_full = _STATE_NAMES.get(state.lower(), state_upper)
     total = sum(c["hoa_count"] for c in cities)
     title = f"HOAs in {html_escape(state_full)} | HOAproxy"
     desc = f"Browse {total} homeowners associations across {len(cities)} cities in {html_escape(state_full)}."
+    intro = _STATE_INTROS.get(state_lower) or _generic_state_intro(state_full, total, len(cities))
 
-    rows_html = []
-    for c in cities:
-        city_slug = db.slugify_city(c["city"])
-        href = f"/hoa/{state.lower()}/{html_escape(city_slug)}/"
-        name = html_escape(c["city"])
-        count = c["hoa_count"]
-        rows_html.append(
-            f'<li style="margin:8px 0"><a href="{href}" style="color:var(--accent);font-weight:700;text-decoration:none">{name}</a>'
-            f' <span style="color:var(--muted);font-size:0.88rem">— {count} HOA{"s" if count != 1 else ""}</span></li>'
+    metros, leftover = _build_metro_groups(state_lower, cities)
+
+    if metros:
+        body_parts: list[str] = []
+        for metro_name, city_rows in metros:
+            metro_total = sum(c["hoa_count"] for c in city_rows)
+            body_parts.append(
+                f'<section class="metro-section"><h2>{html_escape(metro_name)} '
+                f'<span class="muted-meta" style="font-weight:400">— {metro_total} HOA'
+                f'{"s" if metro_total != 1 else ""}</span></h2>'
+                f'<ul class="entries">{_city_list_html(state_lower, city_rows)}</ul></section>'
+            )
+        if leftover:
+            body_parts.append(
+                f'<section class="metro-section"><h2>Other cities</h2>'
+                f'<ul class="entries">{_city_list_html(state_lower, leftover)}</ul></section>'
+            )
+        cities_html = "".join(body_parts)
+    else:
+        cities_html = (
+            f'<h2>Cities</h2>'
+            f'<ul class="entries">{_city_list_html(state_lower, cities)}</ul>'
         )
+
+    # Featured: top HOAs by doc coverage statewide
+    featured_html = ""
+    if len(top_hoas) >= 3:
+        items = "".join(
+            f'<li><a href="{html_escape(db.build_hoa_path(h["hoa_name"], h["city"], h["state"]))}">'
+            f'{html_escape(h["hoa_name"])}</a> '
+            f'<span class="muted-meta">— {html_escape(h["city"])}, {state_upper} · '
+            f'{h["doc_count"]} doc{"s" if h["doc_count"] != 1 else ""}</span></li>'
+            for h in top_hoas
+        )
+        featured_html = (
+            f'<section class="featured"><h2>Top HOAs in {html_escape(state_full)} by document coverage</h2>'
+            f"<ol>{items}</ol></section>"
+        )
+
+    canonical = f"https://hoaproxy.org/hoa/{state_lower}/"
+    breadcrumb_ld = {
+        "@context": "https://schema.org", "@type": "BreadcrumbList",
+        "itemListElement": [
+            {"@type": "ListItem", "position": 1, "name": "HOAproxy", "item": "https://hoaproxy.org/"},
+            {"@type": "ListItem", "position": 2, "name": state_full, "item": canonical},
+        ],
+    }
+    collection_ld = {
+        "@context": "https://schema.org", "@type": "CollectionPage",
+        "name": f"HOAs in {state_full}",
+        "description": desc,
+        "url": canonical,
+    }
 
     html = f"""<!doctype html>
 <html lang="en"><head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="description" content="{html_escape(desc)}">
+<link rel="canonical" href="{html_escape(canonical)}">
+{_og_meta_block(title=title, desc=desc, canonical=canonical)}
 <meta name="ga-measurement-id" content="G-BV7JXG4JDE">
 <script src="/static/js/analytics.js"></script>
 <title>{title}</title>
 <link rel="stylesheet" href="/static/css/mobile.css">
-<style>
-@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Space+Grotesk:wght@600;700&display=swap");
-:root {{ --bg:#eef5ff; --ink:#12233a; --muted:#587091; --line:#d3e0f4; --accent:#1662f3; }}
-* {{ box-sizing:border-box; }}
-body {{ margin:0; min-height:100vh; font-family:"Manrope","Segoe UI",sans-serif; color:var(--ink);
-  background:linear-gradient(180deg,#f8fbff 0%,var(--bg) 54%,#edf3ff 100%); }}
-.shell {{ width:min(860px,94vw); margin:40px auto 60px; }}
-.card {{ border:1px solid var(--line); border-radius:18px; background:rgba(255,255,255,0.94);
-  box-shadow:0 10px 32px rgba(16,40,73,0.09); padding:28px; }}
-h1 {{ margin:0 0 6px; font-family:"Space Grotesk","Manrope",sans-serif; font-size:clamp(1.4rem,3vw,2rem); }}
-.breadcrumb {{ margin-bottom:16px; font-size:0.9rem; color:var(--muted); }}
-.breadcrumb a {{ color:var(--accent); text-decoration:none; font-weight:600; }}
-ul {{ list-style:none; padding:0; }}
-</style></head><body>
+<style>{_INDEX_PAGE_CSS}</style>
+<script type="application/ld+json">{json.dumps(breadcrumb_ld, ensure_ascii=False)}</script>
+<script type="application/ld+json">{json.dumps(collection_ld, ensure_ascii=False)}</script>
+</head><body>
 <main class="shell"><div class="card">
 <div class="breadcrumb"><a href="/">HOAproxy</a> › {html_escape(state_full)}</div>
 <h1>HOAs in {html_escape(state_full)}</h1>
-<p style="color:var(--muted);margin:0 0 18px">{total} homeowners association{"s" if total != 1 else ""} across {len(cities)} cit{"ies" if len(cities) != 1 else "y"}</p>
-<ul>{"".join(rows_html)}</ul>
+<p class="subhead">{total} homeowners association{"s" if total != 1 else ""} across {len(cities)} cit{"ies" if len(cities) != 1 else "y"}</p>
+<p class="intro">{intro}</p>
+{featured_html}
+{cities_html}
 </div></main></body></html>"""
     return HTMLResponse(content=html)
 
@@ -2411,12 +3025,14 @@ def hoa_legacy_redirect(old_slug: str):
                 "SELECT COUNT(*) FROM documents d JOIN hoas h ON h.id = d.hoa_id WHERE h.name = ?",
                 (result["hoa_name"],),
             ).fetchone()[0]
+            overview = db.get_hoa_overview(conn, result["hoa_id"])
         return _render_hoa_page(
             hoa_name=result["hoa_name"],
             hoa_id=result["hoa_id"],
             city=result.get("city"),
             state=result.get("state"),
             doc_count=doc_count,
+            overview=overview,
         )
     return RedirectResponse(url=new_url, status_code=301)
 

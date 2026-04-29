@@ -910,6 +910,41 @@ def resolve_hoa_by_slug(conn: sqlite3.Connection, slug: str) -> dict | None:
     return None
 
 
+def get_hoa_overview(conn: sqlite3.Connection, hoa_id: int) -> dict:
+    """Return SSR overview fields for an HOA profile page.
+
+    Used by `_render_hoa_page()` to inject visible body content (address,
+    document inventory by category, last-updated date) so each profile page
+    has unique crawlable text instead of an identical JS shell.
+    """
+    loc = conn.execute(
+        "SELECT street, city, state, postal_code, country "
+        "FROM hoa_locations WHERE hoa_id = ?",
+        (hoa_id,),
+    ).fetchone()
+    cats = conn.execute(
+        "SELECT COALESCE(category, 'unknown') AS category, COUNT(*) AS n "
+        "FROM documents WHERE hoa_id = ? "
+        "AND (hidden_reason IS NULL OR hidden_reason = '') "
+        "GROUP BY category",
+        (hoa_id,),
+    ).fetchall()
+    last = conn.execute(
+        "SELECT MAX(last_ingested) AS last FROM documents "
+        "WHERE hoa_id = ? AND (hidden_reason IS NULL OR hidden_reason = '')",
+        (hoa_id,),
+    ).fetchone()
+    return {
+        "street": loc["street"] if loc and loc["street"] else None,
+        "city": loc["city"] if loc and loc["city"] else None,
+        "state": loc["state"] if loc and loc["state"] else None,
+        "postal_code": loc["postal_code"] if loc and loc["postal_code"] else None,
+        "country": loc["country"] if loc and loc["country"] else None,
+        "doc_categories": {str(r["category"]): int(r["n"]) for r in cats},
+        "last_ingested": last["last"] if last and last["last"] else None,
+    }
+
+
 def resolve_hoa_by_hierarchical_slug(
     conn: sqlite3.Connection,
     state: str,
@@ -953,18 +988,29 @@ def resolve_hoa_by_hierarchical_slug(
 
 
 def list_hoas_for_sitemap(conn: sqlite3.Connection) -> list[dict]:
-    """Return lightweight data for every HOA (sitemap + index pages)."""
+    """Return lightweight data for every HOA (sitemap + index pages).
+
+    Each row includes ``last_ingested`` (max of `documents.last_ingested`
+    for that HOA, or NULL if no documents) so the sitemap can emit
+    `<lastmod>` per URL — measurably improves Google's crawl prioritization.
+    """
     cur = conn.execute(
         """
         SELECT h.id   AS hoa_id,
                h.name AS hoa_name,
                l.city,
                l.state,
-               COALESCE(ds.doc_count, 0) AS doc_count
+               COALESCE(ds.doc_count, 0) AS doc_count,
+               ds.last_ingested
         FROM hoas h
         LEFT JOIN hoa_locations l ON l.hoa_id = h.id
         LEFT JOIN (
-            SELECT hoa_id, COUNT(*) AS doc_count FROM documents GROUP BY hoa_id
+            SELECT hoa_id,
+                   COUNT(*) AS doc_count,
+                   MAX(last_ingested) AS last_ingested
+            FROM documents
+            WHERE hidden_reason IS NULL OR hidden_reason = ''
+            GROUP BY hoa_id
         ) ds ON ds.hoa_id = h.id
         ORDER BY l.state, l.city, h.name
         """
@@ -1018,6 +1064,39 @@ def list_hoas_in_city(
         dict(row) for row in cur.fetchall()
         if slugify_city(row["city"] or "") == city_slug
     ]
+
+
+def list_top_hoas_in_state(
+    conn: sqlite3.Connection, state: str, *, limit: int = 10
+) -> list[dict]:
+    """Return HOAs in `state` with the most documents on file.
+
+    Used by the state index page (`/hoa/{state}/`) to surface a short
+    "Top HOAs" list ahead of the city-by-city catalog. HOAs with at least
+    one document are preferred; ties broken alphabetically.
+    """
+    cur = conn.execute(
+        """
+        SELECT h.id   AS hoa_id,
+               h.name AS hoa_name,
+               l.city,
+               l.state,
+               COALESCE(ds.doc_count, 0) AS doc_count
+        FROM hoas h
+        JOIN hoa_locations l ON l.hoa_id = h.id
+        LEFT JOIN (
+            SELECT hoa_id, COUNT(*) AS doc_count FROM documents
+            WHERE hidden_reason IS NULL OR hidden_reason = ''
+            GROUP BY hoa_id
+        ) ds ON ds.hoa_id = h.id
+        WHERE LOWER(l.state) = ? AND l.city IS NOT NULL AND l.city != ''
+              AND COALESCE(ds.doc_count, 0) > 0
+        ORDER BY ds.doc_count DESC, h.name COLLATE NOCASE
+        LIMIT ?
+        """,
+        (state.lower(), limit),
+    )
+    return [dict(row) for row in cur.fetchall()]
 
 
 def get_hoa_location(conn: sqlite3.Connection, hoa_name: str) -> dict | None:
