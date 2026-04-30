@@ -3689,8 +3689,16 @@ def admin_reingest_failed(
 
     with db.get_connection(settings.db_path) as conn:
         remaining_total = conn.execute(
-            "SELECT COUNT(*) FROM documents WHERE hidden_reason LIKE ? || '%'",
-            (reason_prefix,),
+            f"""
+            SELECT COUNT(*) FROM (
+                SELECT d.id
+                FROM documents d
+                LEFT JOIN chunks c ON c.document_id = d.id
+                WHERE 1=1 {te_filter}
+                GROUP BY d.id
+                HAVING COUNT(c.id) = 0
+            )
+            """
         ).fetchone()[0]
 
     return {
