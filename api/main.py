@@ -3539,6 +3539,150 @@ def admin_zero_chunk_docs(request: Request):
     }
 
 
+@app.post("/admin/reingest-failed")
+def admin_reingest_failed(
+    request: Request,
+    limit: int = 50,
+    reason_prefix: str = "ocr_failed:",
+    dry_run: bool = False,
+):
+    """One-shot recovery: re-attempt ingestion for documents previously
+    marked failed. Operates on PDFs already on disk under HOA_DOCS_ROOT —
+    no re-upload. Pre-flights against DAILY_DOCAI_BUDGET_USD; refuses if
+    over. On success, the new loud-OCR path clears `hidden_reason`; on
+    re-failure it stays marked. Loop client-side until `remaining` is 0.
+    """
+    _require_admin(request)
+    if limit < 1 or limit > 500:
+        raise HTTPException(status_code=400, detail="limit must be 1..500")
+    settings = load_settings()
+    docs_root = Path(settings.docs_root)
+
+    with db.get_connection(settings.db_path) as conn:
+        cur = conn.execute(
+            """
+            SELECT
+                d.id, d.relative_path, d.page_count, d.category,
+                d.text_extractable, d.source_url, d.hidden_reason,
+                h.name AS hoa_name
+            FROM documents d
+            JOIN hoas h ON h.id = d.hoa_id
+            WHERE d.hidden_reason LIKE ? || '%'
+            ORDER BY d.id ASC
+            LIMIT ?
+            """,
+            (reason_prefix, limit),
+        )
+        rows = [dict(r) for r in cur.fetchall()]
+        # Total still-failed for the loop client
+        remaining_total = conn.execute(
+            "SELECT COUNT(*) FROM documents WHERE hidden_reason LIKE ? || '%'",
+            (reason_prefix,),
+        ).fetchone()[0]
+
+    if not rows:
+        return {
+            "indexed": 0, "skipped": 0, "failed": 0,
+            "remaining": int(remaining_total), "selected": 0,
+            "message": "no rows match",
+        }
+
+    # Pre-flight budget check on the OCR-needing subset
+    projected_pages = 0
+    for r in rows:
+        if r["text_extractable"] in (0, None) and r["page_count"]:
+            projected_pages += int(r["page_count"])
+    try:
+        _check_daily_docai_budget(projected_pages)
+    except HTTPException as exc:
+        return {
+            "indexed": 0, "skipped": 0, "failed": 0,
+            "remaining": int(remaining_total), "selected": len(rows),
+            "projected_ocr_pages": projected_pages,
+            "blocked": True, "detail": exc.detail,
+        }
+
+    if dry_run:
+        return {
+            "dry_run": True,
+            "selected": len(rows),
+            "projected_ocr_pages": projected_pages,
+            "projected_ocr_cost_usd": round(projected_pages * COST_DOCAI_PER_PAGE, 4),
+            "remaining": int(remaining_total),
+            "sample": rows[:5],
+        }
+
+    # Group rows by HOA and run ingest. Each HOA opens one DB connection
+    # via ingest_pdf_paths; doing it per-HOA keeps the existing semantics.
+    by_hoa: dict[str, list[dict]] = {}
+    for r in rows:
+        by_hoa.setdefault(r["hoa_name"], []).append(r)
+
+    total_indexed = 0
+    total_skipped = 0
+    total_failed = 0
+    quota_aborted = False
+    for hoa_name, hoa_rows in by_hoa.items():
+        paths: list[Path] = []
+        metadata_by_path: dict[Path, dict] = {}
+        for r in hoa_rows:
+            p = (docs_root / r["relative_path"]).resolve()
+            try:
+                p.relative_to(docs_root.resolve())
+            except ValueError:
+                logger.error("reingest skip — path escape: %s", r["relative_path"])
+                total_failed += 1
+                continue
+            if not p.exists():
+                logger.error("reingest skip — file missing on disk: %s", p)
+                total_failed += 1
+                continue
+            paths.append(p)
+            metadata_by_path[p] = {
+                "category": r["category"],
+                "text_extractable": (
+                    None if r["text_extractable"] is None
+                    else bool(r["text_extractable"])
+                ),
+                "source_url": r["source_url"],
+            }
+        if not paths:
+            continue
+        try:
+            stats = ingest_pdf_paths(
+                hoa_name, paths,
+                settings=settings, show_progress=False,
+                metadata_by_path=metadata_by_path,
+            )
+            total_indexed += stats.indexed
+            total_skipped += stats.skipped
+            total_failed += stats.failed
+        except Exception as exc:
+            # ingest_pdf_paths re-raises on quota_exceeded — that's the
+            # signal to stop the whole reingest call and return what we
+            # got so far.
+            logger.exception("reingest aborted for HOA %s: %s", hoa_name, exc)
+            if "quota_exceeded" in str(exc):
+                quota_aborted = True
+            break
+
+    with db.get_connection(settings.db_path) as conn:
+        remaining_total = conn.execute(
+            "SELECT COUNT(*) FROM documents WHERE hidden_reason LIKE ? || '%'",
+            (reason_prefix,),
+        ).fetchone()[0]
+
+    return {
+        "indexed": total_indexed,
+        "skipped": total_skipped,
+        "failed": total_failed,
+        "selected": len(rows),
+        "projected_ocr_pages": projected_pages,
+        "remaining": int(remaining_total),
+        "quota_aborted": quota_aborted,
+    }
+
+
 @app.get("/admin/disk-usage")
 def admin_disk_usage(request: Request):
     """Temporary diagnostic: report on-disk sizes under /var/data so we can
