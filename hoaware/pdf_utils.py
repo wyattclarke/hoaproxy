@@ -152,6 +152,8 @@ def extract_pages(
         total_pages,
     )
 
+    docai_attempted = False
+    docai_succeeded = False
     if missing and docai_configured:
         if total_pages > MAX_PAGES_FOR_OCR:
             logger.warning(
@@ -161,6 +163,7 @@ def extract_pages(
                 MAX_PAGES_FOR_OCR,
             )
         else:
+            docai_attempted = True
             ocr_start = perf_counter()
             try:
                 docai_pages = extract_with_document_ai(
@@ -176,6 +179,7 @@ def extract_pages(
                     if item.text.strip():
                         pages[item.number - 1] = item
                 final_blank = sum(1 for p in pages if not p.text.strip())
+                docai_succeeded = True
                 logger.info(
                     "DocAI fill complete for %s (input_blank=%d, output_blank=%d, elapsed_s=%.2f)",
                     path,
@@ -183,8 +187,34 @@ def extract_pages(
                     final_blank,
                     perf_counter() - ocr_start,
                 )
-            except Exception:
-                logger.exception("Document AI OCR failed for %s", path)
+            except OCRFailedError:
+                # Already-loud error from docai.py (quota / total chunk failure).
+                # Reraise only if PyPDF gave us nothing — otherwise the partial
+                # PyPDF text is still usable; just log.
+                if all(not p.text.strip() for p in pages):
+                    raise
+                logger.exception(
+                    "Document AI OCR failed for %s but PyPDF text is usable; continuing", path
+                )
+            except Exception as exc:
+                # Unexpected non-OCRFailedError exception (e.g., transport).
+                # Same rule: usable PyPDF → continue with log; otherwise raise loud.
+                if all(not p.text.strip() for p in pages):
+                    raise OCRFailedError(
+                        "docai_failed",
+                        f"Document AI OCR failed for {path.name} and PyPDF produced no text: {exc}",
+                    ) from exc
+                logger.exception(
+                    "Document AI OCR failed for %s but PyPDF text is usable; continuing", path
+                )
+
+    # Mode 3 final guard: if DocAI was attempted, wholly failed, AND PyPDF
+    # produced no text, raise rather than persist a 0-chunk doc.
+    if docai_attempted and not docai_succeeded and all(not p.text.strip() for p in pages):
+        raise OCRFailedError(
+            "docai_failed",
+            f"Document AI OCR failed and PyPDF produced no text for {path.name}",
+        )
 
     logger.info(
         "Extract end for %s (elapsed_s=%.2f)",
