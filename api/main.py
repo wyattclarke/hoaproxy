@@ -3652,19 +3652,36 @@ def admin_reingest_failed(
     total_skipped = 0
     total_failed = 0
     quota_aborted = False
+
+    def _mark_failed(hoa_id: int, r: dict, reason: str) -> None:
+        """Park a doc that can't be reingested (missing file, path escape) so
+        it's excluded from the selector and we don't loop on it forever."""
+        with db.get_connection(settings.db_path) as c:
+            c.execute(
+                "UPDATE documents SET hidden_reason = ? WHERE id = ?",
+                (f"ocr_failed:{reason}", r["id"]),
+            )
+            c.commit()
+
     for hoa_name, hoa_rows in by_hoa.items():
         paths: list[Path] = []
         metadata_by_path: dict[Path, dict] = {}
+        # Resolve hoa_id once per group for the marker helper
+        with db.get_connection(settings.db_path) as _c:
+            row = _c.execute("SELECT id FROM hoas WHERE name = ?", (hoa_name,)).fetchone()
+            hoa_id = int(row["id"]) if row else 0
         for r in hoa_rows:
             p = (docs_root / r["relative_path"]).resolve()
             try:
                 p.relative_to(docs_root.resolve())
             except ValueError:
                 logger.error("reingest skip — path escape: %s", r["relative_path"])
+                _mark_failed(hoa_id, r, "path_escape")
                 total_failed += 1
                 continue
             if not p.exists():
                 logger.error("reingest skip — file missing on disk: %s", p)
+                _mark_failed(hoa_id, r, "file_missing")
                 total_failed += 1
                 continue
             paths.append(p)
