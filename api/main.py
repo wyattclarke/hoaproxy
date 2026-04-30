@@ -3542,15 +3542,21 @@ def admin_zero_chunk_docs(request: Request):
 @app.post("/admin/reingest-failed")
 def admin_reingest_failed(
     request: Request,
-    limit: int = 50,
-    reason_prefix: str = "ocr_failed:",
+    limit: int = 10,
     dry_run: bool = False,
+    skip_extractable_true: bool = True,
 ):
-    """One-shot recovery: re-attempt ingestion for documents previously
-    marked failed. Operates on PDFs already on disk under HOA_DOCS_ROOT —
-    no re-upload. Pre-flights against DAILY_DOCAI_BUDGET_USD; refuses if
-    over. On success, the new loud-OCR path clears `hidden_reason`; on
-    re-failure it stays marked. Loop client-side until `remaining` is 0.
+    """One-shot recovery: re-attempt ingestion for documents that have 0
+    chunks (silent failures with hidden_reason=NULL pre-fix, plus newer
+    rows marked hidden_reason='ocr_failed:*'). Operates on PDFs already
+    on disk under HOA_DOCS_ROOT — no re-upload. Pre-flights against
+    DAILY_DOCAI_BUDGET_USD; refuses if over. On success, the loud-OCR
+    path clears any hidden_reason; on re-failure it sets it. Loop
+    client-side until `remaining` is 0.
+
+    `skip_extractable_true=True` (default) leaves the 71 text_extractable=True
+    docs alone — they failed via PyPDF, not OCR; bulk reingest won't
+    help them and they merit hand-investigation.
     """
     _require_admin(request)
     if limit < 1 or limit > 500:
@@ -3558,26 +3564,41 @@ def admin_reingest_failed(
     settings = load_settings()
     docs_root = Path(settings.docs_root)
 
+    te_filter = ""
+    if skip_extractable_true:
+        # text_extractable stored as 0/1/NULL — exclude only the explicit-True case
+        te_filter = "AND (d.text_extractable IS NULL OR d.text_extractable = 0)"
+
     with db.get_connection(settings.db_path) as conn:
         cur = conn.execute(
-            """
+            f"""
             SELECT
                 d.id, d.relative_path, d.page_count, d.category,
                 d.text_extractable, d.source_url, d.hidden_reason,
                 h.name AS hoa_name
             FROM documents d
             JOIN hoas h ON h.id = d.hoa_id
-            WHERE d.hidden_reason LIKE ? || '%'
+            LEFT JOIN chunks c ON c.document_id = d.id
+            WHERE 1=1 {te_filter}
+            GROUP BY d.id
+            HAVING COUNT(c.id) = 0
             ORDER BY d.id ASC
             LIMIT ?
             """,
-            (reason_prefix, limit),
+            (limit,),
         )
         rows = [dict(r) for r in cur.fetchall()]
-        # Total still-failed for the loop client
         remaining_total = conn.execute(
-            "SELECT COUNT(*) FROM documents WHERE hidden_reason LIKE ? || '%'",
-            (reason_prefix,),
+            f"""
+            SELECT COUNT(*) FROM (
+                SELECT d.id
+                FROM documents d
+                LEFT JOIN chunks c ON c.document_id = d.id
+                WHERE 1=1 {te_filter}
+                GROUP BY d.id
+                HAVING COUNT(c.id) = 0
+            )
+            """
         ).fetchone()[0]
 
     if not rows:
