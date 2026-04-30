@@ -3547,11 +3547,13 @@ def admin_reingest_failed(
     skip_extractable_true: bool = True,
 ):
     """One-shot recovery: re-attempt ingestion for documents that have 0
-    chunks (silent failures with hidden_reason=NULL pre-fix, plus newer
-    rows marked hidden_reason='ocr_failed:*'). Operates on PDFs already
-    on disk under HOA_DOCS_ROOT — no re-upload. Pre-flights against
-    DAILY_DOCAI_BUDGET_USD; refuses if over. On success, the loud-OCR
-    path clears any hidden_reason; on re-failure it sets it. Loop
+    chunks AND no prior loud-OCR failure marker. This catches the silent
+    pre-fix cohort (hidden_reason IS NULL, 0 chunks) on first pass; on
+    re-failure the loud path sets hidden_reason='ocr_failed:*' which the
+    selector then excludes — so persistent failures don't loop forever.
+
+    Operates on PDFs already on disk under HOA_DOCS_ROOT — no re-upload.
+    Pre-flights against DAILY_DOCAI_BUDGET_USD; refuses if over. Loop
     client-side until `remaining` is 0.
 
     `skip_extractable_true=True` (default) leaves the 71 text_extractable=True
@@ -3569,6 +3571,13 @@ def admin_reingest_failed(
         # text_extractable stored as 0/1/NULL — exclude only the explicit-True case
         te_filter = "AND (d.text_extractable IS NULL OR d.text_extractable = 0)"
 
+    # Exclude docs already marked failed by this run (loud-OCR path) so we don't
+    # retry permanent failures every call and starve out the unprocessed pool.
+    # Pre-fix silent failures (hidden_reason IS NULL) still get picked up.
+    failed_filter = (
+        "AND (d.hidden_reason IS NULL OR d.hidden_reason NOT LIKE 'ocr_failed:%')"
+    )
+
     with db.get_connection(settings.db_path) as conn:
         cur = conn.execute(
             f"""
@@ -3579,7 +3588,7 @@ def admin_reingest_failed(
             FROM documents d
             JOIN hoas h ON h.id = d.hoa_id
             LEFT JOIN chunks c ON c.document_id = d.id
-            WHERE 1=1 {te_filter}
+            WHERE 1=1 {te_filter} {failed_filter}
             GROUP BY d.id
             HAVING COUNT(c.id) = 0
             ORDER BY d.id ASC
@@ -3594,7 +3603,7 @@ def admin_reingest_failed(
                 SELECT d.id
                 FROM documents d
                 LEFT JOIN chunks c ON c.document_id = d.id
-                WHERE 1=1 {te_filter}
+                WHERE 1=1 {te_filter} {failed_filter}
                 GROUP BY d.id
                 HAVING COUNT(c.id) = 0
             )
