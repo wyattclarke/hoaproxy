@@ -142,6 +142,36 @@ Allow residents to sign in with their Google or Apple account instead of (or in 
 
 ---
 
+## Migrate to GCP — GCE VM + GCS for PDFs
+
+Replace Render with a GCE `e2-medium` VM in `us-west1` and move the PDF corpus to GCS. The FastAPI app keeps running the same Dockerfile; SQLite (with `sqlite-vec`) stays on a `pd-balanced` persistent disk attached to the VM. PDFs leave the VM disk entirely and live in `gs://hoaproxy-docs/`.
+
+**Why:** Render's persistent disk pricing ($0.25/GB-mo) is what made the corpus expensive — 100 GB on Render is $25/mo just for storage. GCS Standard is $0.020/GB-mo, and GCE persistent disk is $0.10/GB-mo for `pd-balanced`. Total drops from ~$50/mo to ~$21/mo (with sustained-use discount). Also consolidates with existing GCP usage (Document AI, GCS backups, `hoaware-ocr` service account).
+
+**What changes:**
+- *Compute:* GCE `e2-medium` (2 vCPU shared, 4 GB RAM) running the existing Docker image. Caddy in front for TLS. systemd unit for restart-on-failure.
+- *Storage:* `pd-balanced` mounted at `/var/data` for SQLite + WAL + ancillary. Sized ~30 GB (no longer holds PDFs).
+- *PDFs:* one-time migrator walks `hoa_docs/`, uploads each file to GCS, writes `gcs_path` to the `documents` table, deletes the local copy after verification. `/upload` writes new PDFs to GCS only. Re-OCR / re-extract paths fetch via the GCS client.
+- *Code:* one new column (`documents.gcs_path`) and a small `hoaware/storage.py` abstraction that wraps PDF reads/writes behind a `HOA_DOCS_BACKEND=local|gcs` flag. ~150–200 lines total.
+
+**Render's remaining role:** none. This is a full replacement. The Render service stays alive for ~1 week post-cutover purely as rollback insurance — DNS can be flipped back if something is wrong — then it's deleted along with its persistent disk.
+
+**Migration sequence:**
+1. Provision GCP infra (VM, persistent disk, GCS bucket, firewall, static IP). Terraform or `gcloud` scripts both fine.
+2. Ship the GCS-backed PDF storage code change behind a feature flag, tested locally against the bucket.
+3. Stand up the GCE host running the same image. Point a test DNS name at it. Smoke-test.
+4. Sync data: `rsync` Render's `/var/data` → GCE persistent disk; run the PDF migrator to move `hoa_docs/` to GCS.
+5. Cutover window: pause Render autoDeploy → final `rsync` of any drift → DNS A-record flip → verify `/healthz`, `/search`, `/upload`, `/qa`, `/proxies`.
+6. Hold Render suspended for one week as rollback insurance; then delete.
+
+**Effort:** ~2 focused days for someone who's done it before, 4 days otherwise.
+
+**What this does NOT do:** it does not move the SQLite DB to Cloud SQL. Embeddings keep living in `chunks.embedding` BLOBs with `sqlite-vec` for ANN search. That's only worth doing later (separate wishlist item) if the DB grows past ~50 GiB or vector search latency starts to degrade.
+
+**Cleanup before cutover:** remove the temporary `/admin/disk-usage`, `/admin/wal-checkpoint`, and `/admin/cleanup-qdrant-local` endpoints (one-shot helpers from the OOM recovery — should not survive the migration).
+
+---
+
 ## ~~Manual Legal Corpus: Missing States~~ (Resolved)
 
 All 51 jurisdictions now have official source URLs in the registry. The four previously missing states (OK, PA, SD, WY) were resolved by replacing dead aggregator URLs with official state sources:
