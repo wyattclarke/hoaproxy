@@ -3571,11 +3571,17 @@ def admin_reingest_failed(
         # text_extractable stored as 0/1/NULL — exclude only the explicit-True case
         te_filter = "AND (d.text_extractable IS NULL OR d.text_extractable = 0)"
 
-    # Exclude docs already marked failed by this run (loud-OCR path) so we don't
-    # retry permanent failures every call and starve out the unprocessed pool.
-    # Pre-fix silent failures (hidden_reason IS NULL) still get picked up.
+    # Exclude only TERMINAL failures from the pool. Transient failures
+    # (docai_failed = could be billing flap / Google flake; quota_exceeded =
+    # waits out the rolling window) get retried on the next pass — this
+    # makes the loop self-healing if billing/quota recovers mid-run.
+    # Terminal: file_missing, path_escape, not_configured, page_cap_exceeded.
+    terminal = (
+        "'ocr_failed:file_missing', 'ocr_failed:path_escape', "
+        "'ocr_failed:not_configured', 'ocr_failed:page_cap_exceeded'"
+    )
     failed_filter = (
-        "AND (d.hidden_reason IS NULL OR d.hidden_reason NOT LIKE 'ocr_failed:%')"
+        f"AND (d.hidden_reason IS NULL OR d.hidden_reason NOT IN ({terminal}))"
     )
 
     with db.get_connection(settings.db_path) as conn:
