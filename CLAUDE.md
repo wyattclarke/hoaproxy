@@ -73,6 +73,18 @@ Vanilla HTML/CSS/JS — no build step, no framework. Match existing style:
 
 For the one-time prod cleanup still pending after the migration, see `docs/ops-cleanup.md`.
 
+## Document Bank (decoupled discovery)
+
+`hoaware.bank` + `hoaware.discovery` form a write-only document sink on GCS, separate from the production ingest path. Discovery agents bank what they find; a future drain worker reads manifests back out and feeds `/upload`.
+
+- **Bucket:** `gs://hoaproxy-bank/` (override with `HOA_BANK_GCS_BUCKET`).
+- **Layout:** `v1/{STATE}/{county}/{hoa-slug}/manifest.json` + `doc-{sha[:12]}/original.pdf`.
+- **Probe a single lead:** `python -m hoaware.discovery probe --name "Foo HOA" --state VA --website https://...`
+- **Probe a batch:** `python -m hoaware.discovery probe-batch leads.jsonl` (one Lead JSON per line).
+- **Writing a new source:** produce `hoaware.discovery.Lead` instances and call `probe(lead)`. Don't write directly to GCS — `bank_hoa()` handles slug normalization, dedup, and parallel-writer merge.
+
+The bank is *not* the ingest pipeline. `/upload` still owns ingest; the bank is the upstream pool a drain worker will eventually feed from. Don't read `gs://hoaproxy-bank/` from `api/main.py`.
+
 ## Proxy Voting System
 See `docs/proxy-voting-plan.md` for full details.
 
