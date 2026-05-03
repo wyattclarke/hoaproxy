@@ -289,6 +289,19 @@ def model_queries(client: OpenAI, model: str, *, count: int, audit: Path) -> lis
         return []
 
 
+def load_queries_file(path: str | None) -> list[str]:
+    if not path:
+        return []
+    queries: list[str] = []
+    with open(path) as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            queries.append(line)
+    return queries
+
+
 def serper_search(query: str, *, num: int, page: int, audit: Path) -> list[SearchResult]:
     key = os.environ.get("SERPER_API_KEY")
     if not key:
@@ -832,9 +845,13 @@ def run_model(args: argparse.Namespace, model: str, run_dir: Path) -> dict[str, 
     client = _openrouter_client()
     started = time.time()
     generated = model_queries(client, model, count=max(0, args.model_queries), audit=audit)
+    file_queries = load_queries_file(args.queries_file)
     queries = []
     seen_q = set()
-    for q in generated + seed_queries():
+    source_queries = generated + file_queries
+    if not args.skip_seed_queries:
+        source_queries += seed_queries()
+    for q in source_queries:
         if q not in seen_q:
             queries.append(q)
             seen_q.add(q)
@@ -900,6 +917,8 @@ def main() -> int:
     ap.add_argument("--run-id", default=_now_id())
     ap.add_argument("--max-queries", type=int, default=20)
     ap.add_argument("--model-queries", type=int, default=10)
+    ap.add_argument("--queries-file", default=None, help="Optional newline-delimited queries to include")
+    ap.add_argument("--skip-seed-queries", action="store_true", help="Use only generated/file queries")
     ap.add_argument("--results-per-query", type=int, default=10)
     ap.add_argument("--pages-per-query", type=int, default=1)
     ap.add_argument("--max-results", type=int, default=80)

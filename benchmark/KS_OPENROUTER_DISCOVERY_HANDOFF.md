@@ -12,10 +12,10 @@ gs://hoaproxy-bank/v1/KS/...
 
 No new bucket is needed for new states. Use a different run id per experiment and let the bank layout separate states/counties/HOAs.
 
-Current cleaned KS manifest count after the 2026-05-03 runs plus the HA-KC deterministic pass:
+Current cleaned KS manifest count after the 2026-05-03 runs, HA-KC deterministic pass, and Wichita exact-name pass:
 
 ```text
-75
+77
 ```
 
 Useful current listing command:
@@ -52,10 +52,13 @@ benchmark/scrape_ks_hakc.py
 
 It scrapes the Homes Association of Kansas City Kansas association index, calls the public document endpoint (`/scripts/showdocuments.php?an={id}&dt={type}`), downloads Bylaws/Restrictions/Articles/Rules PDFs, and banks only associations with downloaded governing docs.
 
+The OpenRouter runner also supports exact-name lead searches with `--queries-file` and `--skip-seed-queries`; this was useful for turning the Wichita city HOA list into targeted searches.
+
 Important hardening now in the runner:
 
 - OpenRouter client has explicit timeout and no SDK retries.
 - Serper pagination is supported with `--pages-per-query`.
+- Exact query files are supported with `--queries-file`; use `--skip-seed-queries` for source-derived lead lists.
 - Accepted PDFs are banked after each triage batch, so a later timeout does not lose earlier wins.
 - HOA names are normalized before banking (`Homes Association` -> `HOA`, city/state suffix cleanup, generic-name rejection).
 - Model-supplied HOA names must have evidence in title/snippet/filename/PDF text/URL path or an HOA-like hostname.
@@ -85,11 +88,16 @@ HA-KC deterministic scraper   44 associations   29 with docs   85 PDFs banked/me
 
 benchmark/results/ks_hakc_full_2/summary.json
 HA-KC corrected rerun         43 associations   28 with docs   77 PDFs banked/merged
+
+benchmark/results/ks_openrouter_deepseek_ks_wichita_leads_1/summary.tsv
+Wichita exact-name queries    80 queries        31 candidates   5 accepted/banked
 ```
 
 The cleaned bank count is lower than raw accepted totals because duplicates and false positives were removed or merged.
 
 An attempted large OpenRouter scale run (`deepseek_ks_scale_1`) made 270 Serper calls and fetched 72 PDF candidates, but was stopped before triage because candidate collection waited too long before banking anything. Next improvement for broad search should be chunked candidate collection/triage, or smaller source-focused batches.
+
+The Wichita exact-name run found new docs, but only 5 banked docs from 80 queries. Use municipality HOA lists as lead inputs, but prioritize management-company document indexes when available.
 
 ## Cost/Quality Read
 
@@ -172,6 +180,25 @@ Example deterministic KS source command:
 ```bash
 source .venv/bin/activate
 python benchmark/scrape_ks_hakc.py --run-id full_1 --max-associations 500 --delay 0.05
+```
+
+Example source-derived exact-name command:
+
+```bash
+source .venv/bin/activate
+OPENROUTER_TIMEOUT_SECONDS=35 python benchmark/run_ks_openrouter_discovery.py \
+  --models deepseek/deepseek-v4-flash \
+  --run-id deepseek_ks_wichita_leads_1 \
+  --queries-file benchmark/results/ks_wichita_queries.txt \
+  --skip-seed-queries \
+  --model-queries 0 \
+  --max-queries 80 \
+  --results-per-query 10 \
+  --pages-per-query 1 \
+  --max-results 180 \
+  --max-pages 80 \
+  --max-pdfs 50 \
+  --triage-batch-size 4
 ```
 
 ## Files
