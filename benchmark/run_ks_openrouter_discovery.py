@@ -19,7 +19,7 @@ import time
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 from urllib.parse import urljoin, urlparse
 
 import requests
@@ -39,6 +39,7 @@ from hoaware.doc_classifier import ALL_CATEGORIES, VALID_CATEGORIES, classify_fr
 
 SERPER_ENDPOINT = "https://google.serper.dev/search"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+BANKABLE_CATEGORIES = {"amendment", "articles", "bylaws", "ccr", "resolution", "rules"}
 DEFAULT_USER_AGENT = (
     os.environ.get("HOA_DISCOVERY_USER_AGENT")
     or "HOAproxy public-document discovery (+https://hoaproxy.org; contact: hello@hoaproxy.org)"
@@ -56,7 +57,8 @@ GOVDOC_RE = re.compile(
 )
 JUNK_RE = re.compile(
     r"\b(apartments?|rental|lease|minutes|agenda|newsletter|coupon|pool pass|"
-    r"financial statement|budget|violation|directory|roster|court|lawsuit|irs|990)\b",
+    r"financial statement|budget|violation|directory|roster|court|lawsuit|irs|990|"
+    r"information|resources?|preferred properties|amazon s3|cdn|website files)\b",
     re.IGNORECASE,
 )
 COMMUNITY_TOKEN_RE = re.compile(
@@ -67,7 +69,12 @@ COMMUNITY_TOKEN_RE = re.compile(
 )
 GENERIC_NAME_RE = re.compile(
     r"^(homes association(?: of)?(?: kansas city)?|community|properties|developer|declarant|"
-    r"association|documents?|governing documents?)$",
+    r"association|documents?|governing documents?|homeowners association information|"
+    r"preferred properties kansas hoa|amazon s3 hoa|kansas hoa|hoa kansas city|original hoa)$",
+    re.IGNORECASE,
+)
+REJECT_RATIONALE_RE = re.compile(
+    r"\b(not\s+(?:a\s+)?kansas|not\s+in\s+kansas|missouri|florida|palm beach county|newsletter|meeting minutes)\b",
     re.IGNORECASE,
 )
 PRIVATE_RE = re.compile(
@@ -167,7 +174,12 @@ def _openrouter_client() -> OpenAI:
     if not key:
         raise RuntimeError("OPENROUTER_API_KEY or QA_API_KEY is required")
     timeout = float(os.environ.get("OPENROUTER_TIMEOUT_SECONDS", "45"))
-    return OpenAI(api_key=key, base_url=os.environ.get("OPENROUTER_BASE_URL", OPENROUTER_BASE_URL), timeout=timeout)
+    return OpenAI(
+        api_key=key,
+        base_url=os.environ.get("OPENROUTER_BASE_URL", OPENROUTER_BASE_URL),
+        timeout=timeout,
+        max_retries=0,
+    )
 
 
 def _chat_json(client: OpenAI, model: str, messages: list[dict[str, str]], *, max_tokens: int = 1200) -> tuple[Any, dict]:
@@ -205,6 +217,14 @@ def seed_queries() -> list[str]:
         '"Sedgwick County" Kansas HOA bylaws filetype:pdf',
         '"Kansas" "architectural guidelines" HOA filetype:pdf',
         '"Kansas" "declaration of restrictions" "homes association" filetype:pdf',
+        '"Kansas" "restrictive covenants" "homes association" filetype:pdf',
+        '"Kansas" "articles of incorporation" "homeowners association" filetype:pdf',
+        '"Kansas" "deed restrictions" "homes association" filetype:pdf',
+        'site:ha-kc.org/data/restrictions "Kansas" filetype:pdf',
+        'site:homesassociation.org/data/restrictions "Kansas" filetype:pdf',
+        'site:eneighbors.com "Homes Association Bylaws" "Kansas"',
+        'site:payhoa.com/uploads "Kansas" "bylaws" "HOA" filetype:pdf',
+        'site:hoaedge.com/file/document-page "Kansas" "bylaws"',
         'site:ks.gov "declaration of covenants" "homeowners association" pdf',
         'site:wycokck.org "declaration of covenants" "homeowners association" pdf',
     ]
@@ -399,7 +419,18 @@ def inspect_pdf(pdf_bytes: bytes, filename: str, hoa_hint: str = "") -> tuple[in
 def _clean_hoa_name(name: str) -> str:
     name = re.sub(r"(?i)^\s*\[?pdf\]?\s*", "", name)
     name = name.split("|", 1)[0]
+    name = re.sub(r"(?i)^\s*(by and between|between|for|the)\s+", "", name)
+    name = re.sub(r"(?i)\b(?:incorporated|inc\.?|llc|l\.l\.c\.)\b", "", name)
+    name = re.sub(
+        r"(?i)\s+to\s+(andover|wichita|olathe|overland park|shawnee|lenexa|lawrence|topeka|manhattan|kansas city)\b",
+        "",
+        name,
+    )
+    name = re.sub(r"(?i),?\s+(?:kansas|ks)\b(?=\s+HOA|\s*$)", "", name)
     name = re.sub(r"(?i)\b(bylaws?|declaration|covenants?|conditions|restrictions|cc&rs?|rules?|regulations?|amended|restated|unified|of|the)\b", " ", name)
+    name = re.sub(r"(?i)\bhome\s*owner'?s?\s+association\b", "HOA", name)
+    name = re.sub(r"(?i)\bhomes\s+association\b", "HOA", name)
+    name = re.sub(r"(?i)\bhomeowners?\s+association\b", "HOA", name)
     name = re.sub(r"[_/\\-]+", " ", name)
     name = re.sub(r"\s+", " ", name).strip(" .,-")
     if name and not re.search(r"(?i)\b(hoa|homeowners?|homes association|owners association|association)\b", name):
@@ -413,6 +444,8 @@ def _valid_inferred_name(name: str, *, allow_host: bool = False) -> bool:
     if GENERIC_NAME_RE.search(name):
         return False
     if JUNK_RE.search(name):
+        return False
+    if re.search(r"\b(s3|cdn|storage|document|file|upload|download|pdf)\b", name, re.IGNORECASE):
         return False
     if allow_host:
         return bool(COMMUNITY_TOKEN_RE.search(name))
@@ -499,6 +532,55 @@ def infer_hoa_name_from_reason(reason: str) -> str | None:
             continue
         cleaned = _clean_hoa_name(m.group(1))
         if _valid_inferred_name(cleaned):
+            return cleaned
+    return None
+
+
+EVIDENCE_STOPWORDS = {
+    "hoa", "home", "owner", "owners", "homeowner", "homeowners", "homes", "association",
+    "assn", "inc", "llc", "addition", "the", "of", "and", "to", "at", "in", "ks", "kansas",
+}
+
+
+def _evidence_tokens(name: str) -> list[str]:
+    tokens = re.findall(r"[a-z0-9]+", name.lower())
+    return [token for token in tokens if len(token) > 2 and token not in EVIDENCE_STOPWORDS]
+
+
+def _name_has_candidate_evidence(name: str, candidate: PdfCandidate) -> bool:
+    tokens = _evidence_tokens(name)
+    if not tokens:
+        return False
+    parsed = urlparse(candidate.pdf_url)
+    host_blob = parsed.netloc.lower() if re.search(r"hoa|home|association", parsed.netloc, re.IGNORECASE) else ""
+    evidence = " ".join([
+        candidate.title,
+        candidate.snippet,
+        candidate.filename,
+        candidate.snippet_text[:3000],
+        parsed.path,
+        host_blob,
+    ]).lower()
+    evidence = re.sub(r"[^a-z0-9]+", " ", evidence)
+    compact = evidence.replace(" ", "")
+    hits = sum(1 for token in tokens if token in evidence or token in compact)
+    required = 1 if len(tokens) == 1 else min(2, len(tokens))
+    return hits >= required
+
+
+def choose_hoa_name(raw_model_name: str, reason: str, candidate: PdfCandidate) -> str | None:
+    """Pick a bankable HOA name from model output, rationale, or local clues."""
+    sources = [
+        (raw_model_name, True),
+        (infer_hoa_name_from_reason(reason) or "", True),
+        (infer_hoa_name(candidate) or "", False),
+    ]
+    for raw, require_evidence in sources:
+        raw = str(raw or "").strip()
+        if not raw:
+            continue
+        cleaned = _clean_hoa_name(raw)
+        if _valid_inferred_name(cleaned) and (not require_evidence or _name_has_candidate_evidence(cleaned, candidate)):
             return cleaned
     return None
 
@@ -593,6 +675,7 @@ def model_triage(
     *,
     audit: Path,
     batch_size: int = 4,
+    on_batch_accepted: Callable[[list[AcceptedDoc]], None] | None = None,
 ) -> tuple[list[AcceptedDoc], list[dict[str, Any]]]:
     accepted: list[AcceptedDoc] = []
     rejected: list[dict[str, Any]] = []
@@ -601,6 +684,7 @@ def model_triage(
     categories = sorted(ALL_CATEGORIES)
     for start in range(0, len(candidates), batch_size):
         batch = candidates[start:start + batch_size]
+        batch_accepted: list[AcceptedDoc] = []
         prompt = {
             "task": "Decide which public PDFs are Kansas HOA governing documents suitable for HOAproxy.",
             "valid_categories": sorted(VALID_CATEGORIES),
@@ -609,6 +693,7 @@ def model_triage(
                 "Keep CC&Rs/declarations/covenants/bylaws/articles/rules/architectural guidelines/amendments/resolutions.",
                 "Reject meeting minutes, newsletters, budgets, directories, owner lists, filled ballots, violations, court/tax/government-only docs, and unrelated PDFs.",
                 "Require a plausible HOA or homes association name.",
+                "For every kept item, include hoa_name, category, confidence, and rationale.",
                 "Return only JSON with key decisions.",
             ],
             "candidates": _candidate_prompt_payload(batch),
@@ -644,20 +729,17 @@ def model_triage(
             keep_value = d.get("keep")
             keep = bool(keep_value) or decision in {"keep", "accept", "accepted", "yes", "true"}
             category = str(d.get("category") or "").strip().lower()
-            if not keep and not decision and category in VALID_CATEGORIES:
+            if not keep and not decision and category in BANKABLE_CATEGORIES:
                 keep = True
             confidence = _safe_float(d.get("confidence"), 0.0)
             rationale = str(d.get("rationale") or d.get("reason") or "").strip()[:300]
-            hoa_name = (
-                str(d.get("hoa_name") or "").strip()
-                or infer_hoa_name_from_reason(rationale)
-                or infer_hoa_name(candidate)
-                or ""
-            )
+            hoa_name = choose_hoa_name(str(d.get("hoa_name") or ""), rationale, candidate) or ""
+            if keep and REJECT_RATIONALE_RE.search(rationale):
+                keep = False
             if confidence <= 0.0 and keep:
                 confidence = candidate.deterministic_confidence or 0.65
-            if keep and category in VALID_CATEGORIES and hoa_name and confidence >= 0.55:
-                accepted.append(AcceptedDoc(
+            if keep and category in BANKABLE_CATEGORIES and hoa_name and confidence >= 0.55:
+                doc = AcceptedDoc(
                     model=model,
                     hoa_name=hoa_name,
                     city=str(d.get("city") or "").strip() or None,
@@ -666,7 +748,9 @@ def model_triage(
                     confidence=confidence,
                     rationale=rationale,
                     candidate=candidate,
-                ))
+                )
+                accepted.append(doc)
+                batch_accepted.append(doc)
             else:
                 rejected.append({
                     "url": candidate.pdf_url,
@@ -674,6 +758,8 @@ def model_triage(
                     "confidence": confidence,
                     "reason": rationale or "model_rejected",
                 })
+        if batch_accepted and on_batch_accepted:
+            on_batch_accepted(batch_accepted)
     return accepted, rejected
 
 
@@ -741,8 +827,14 @@ def run_model(args: argparse.Namespace, model: str, run_dir: Path) -> dict[str, 
     selected = select_results(all_results, args.max_results)
     _jsonl_write(audit, {"event": "selected_results", "count": len(selected), "links": [asdict(r) for r in selected[: args.max_results]]})
     candidates = collect_candidates(selected, max_pages=args.max_pages, max_pdfs=args.max_pdfs, audit=audit)
-    accepted, rejected = model_triage(client, model, candidates, audit=audit, batch_size=args.triage_batch_size)
-    bank_docs(accepted, bucket=args.bucket, model_slug=model_slug, audit=audit)
+    accepted, rejected = model_triage(
+        client,
+        model,
+        candidates,
+        audit=audit,
+        batch_size=args.triage_batch_size,
+        on_batch_accepted=lambda docs: bank_docs(docs, bucket=args.bucket, model_slug=model_slug, audit=audit),
+    )
     banked = [d for d in accepted if d.manifest_uri]
     summary = {
         "model": model,
