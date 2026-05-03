@@ -20,10 +20,12 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from dataclasses import asdict
 from typing import Iterator
 
 from .leads import Lead
 from .probe import probe
+from .sources.nc_aggregators import ALL_SOURCES, nc_leads
 
 
 def _print_result(lead: Lead, result, *, json_out: bool) -> None:
@@ -93,6 +95,29 @@ def cmd_probe_batch(args) -> int:
     return 1 if failures else 0
 
 
+def cmd_scrape_leads(args) -> int:
+    """Scrape leads from an aggregator source and emit JSONL."""
+    if args.region == "nc":
+        sources = args.source or None
+        leads = nc_leads(sources)
+    else:
+        print(f"Unknown region: {args.region}", file=sys.stderr)
+        return 2
+
+    out = open(args.output, "w") if args.output else sys.stdout
+    count = 0
+    try:
+        for lead in leads:
+            print(json.dumps(asdict(lead)), file=out)
+            count += 1
+    finally:
+        if args.output:
+            out.close()
+
+    print(f"Scraped {count} leads.", file=sys.stderr)
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="hoaware.discovery")
     p.add_argument("--bucket", default=None, help="Override default bank bucket")
@@ -113,6 +138,17 @@ def build_parser() -> argparse.ArgumentParser:
     pb.add_argument("path")
     pb.add_argument("--fail-fast", action="store_true")
     pb.set_defaults(func=cmd_probe_batch)
+
+    sl = sub.add_parser("scrape-leads", help="Scrape leads from an aggregator region")
+    sl.add_argument("region", choices=["nc"], help="Region to scrape")
+    sl.add_argument(
+        "--source",
+        action="append",
+        metavar="NAME",
+        help=f"Specific source(s) to include (repeatable). Choices: {', '.join(ALL_SOURCES)}",
+    )
+    sl.add_argument("--output", "-o", default=None, metavar="FILE", help="Write JSONL to file (default: stdout)")
+    sl.set_defaults(func=cmd_scrape_leads)
 
     return p
 

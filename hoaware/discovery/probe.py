@@ -248,6 +248,7 @@ def probe(
     http_session: requests.Session | None = None,
     bucket_name: str | None = None,
     max_pdfs: int = MAX_PDFS_PER_PROBE,
+    pre_discovered_pdf_urls: list[str] | None = None,
 ) -> ProbeResult:
     """Probe a single Lead end-to-end and return the bank manifest URI.
 
@@ -302,16 +303,24 @@ def probe(
 
     # ---- Step 3: harvest candidate PDF links from homepage HTML.
     # Also crawl 1 level deep into Documents/Library/Forms subpages.
+    # Pre-discovered URLs from aggregator scrapers are seeded in first.
     candidates: list[tuple[str, str]] = []
+    if pre_discovered_pdf_urls:
+        candidates = [(u, "") for u in pre_discovered_pdf_urls]
     if html and not is_walled:
-        candidates = _harvest_pdf_candidates(html, lead.website)
+        homepage_candidates = _harvest_pdf_candidates(html, lead.website)
         for sub_url in _harvest_doc_subpages(html, lead.website):
             sub_html = _fetch_homepage(session, sub_url)
             if sub_html:
                 for url, text in _harvest_pdf_candidates(sub_html, sub_url):
-                    if not any(url == c[0] for c in candidates):
-                        candidates.append((url, text))
-        candidates = candidates[:max_pdfs]
+                    if not any(url == c[0] for c in homepage_candidates):
+                        homepage_candidates.append((url, text))
+        # Merge, deduplicating against pre-discovered
+        pre_urls = {c[0] for c in candidates}
+        for url, text in homepage_candidates:
+            if url not in pre_urls:
+                candidates.append((url, text))
+    candidates = candidates[:max_pdfs]
 
     # ---- Step 4: fetch each PDF, build DocumentInput / skipped_documents.
     documents: list[DocumentInput] = []
