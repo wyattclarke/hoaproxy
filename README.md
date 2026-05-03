@@ -48,12 +48,16 @@ Open `http://127.0.0.1:8000`.
 
 | Variable | Description | Required |
 |---|---|---|
-| `OPENAI_API_KEY` | OpenAI API key for embeddings and Q&A | Required for search/QA |
+| `OPENAI_API_KEY` | OpenAI API key for embeddings | Required for search/QA retrieval |
+| `OPENROUTER_API_KEY` | OpenRouter key for OpenAI-compatible Q&A/classification | Optional |
+| `QA_API_BASE_URL`, `QA_API_KEY`, `QA_MODEL` | Chat completion endpoint/model | Optional |
+| `HOA_ENABLE_LLM_CLASSIFIER` | Enable cheap OpenAI-compatible classifier for ambiguous public document snippets | Optional (default: `0`) |
 | `JWT_SECRET` | Secret key for JWT auth tokens | Required |
 | `HOA_DOCS_ROOT` | Directory for HOA PDF uploads | Optional (default: `hoa_docs`) |
 | `HOA_DB_PATH` | SQLite database path | Optional (default: `data/hoa_index.db`) |
 | `QDRANT_URL` | Qdrant vector DB endpoint | Optional (default: embedded local) |
 | `HOA_ENABLE_DOCAI` | Enable Google Document AI OCR | Optional (default: `1`) |
+| `HOA_DISCOVERY_RESPECT_ROBOTS` | Respect `robots.txt` during public discovery probes | Optional (recommended: `1`) |
 | `EMAIL_PROVIDER` | Email backend: `stub`, `resend`, or `smtp` | Optional (default: `stub`) |
 
 See `settings.env.example` for the full list.

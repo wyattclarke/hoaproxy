@@ -41,6 +41,7 @@ import logging
 import os
 import re
 from pathlib import Path
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -142,6 +143,150 @@ The document is associated with: {hoa_name}
 
 Respond with ONLY a JSON object: {{"category": "<category>", "confidence": <0.0-1.0>}}
 Do not include any other text."""
+
+SNIPPET_CLASSIFY_SYSTEM = """You classify public HOA document candidates from metadata and short extracted snippets.
+Do not browse, fetch URLs, or infer facts not present in the provided fields.
+Return only a JSON object with keys: category, confidence, rationale."""
+
+SNIPPET_CLASSIFY_USER = """Classify this candidate into exactly one category.
+
+Categories:
+{categories}
+
+HOA name: {hoa_name}
+URL: {source_url}
+Title: {title}
+PDF filename: {filename}
+Nearby anchor text: {link_text}
+Extracted text snippet:
+{snippet}
+
+JSON only. The rationale must be under 20 words."""
+
+
+def _env_truthy(name: str, default: str = "0") -> bool:
+    return os.environ.get(name, default) in {"1", "true", "True"}
+
+
+def _classifier_api_key(explicit: str | None = None) -> str | None:
+    return (
+        explicit
+        or os.environ.get("HOA_CLASSIFIER_API_KEY")
+        or os.environ.get("QA_API_KEY")
+        or os.environ.get("OPENROUTER_API_KEY")
+    )
+
+
+def _classifier_api_base_url(explicit: str | None = None) -> str:
+    return (
+        explicit
+        or os.environ.get("HOA_CLASSIFIER_API_BASE_URL")
+        or os.environ.get("QA_API_BASE_URL")
+        or "https://openrouter.ai/api/v1"
+    )
+
+
+def _classifier_models(explicit: str | None = None, fallback: str | None = None) -> list[str]:
+    primary = explicit or os.environ.get("HOA_CLASSIFIER_MODEL") or "qwen/qwen3.5-flash-02-23"
+    fallback_model = fallback if fallback is not None else os.environ.get("HOA_CLASSIFIER_FALLBACK_MODEL")
+    return [m for m in (primary, fallback_model) if m]
+
+
+def _parse_json_object(text: str) -> dict[str, Any]:
+    text = text.strip()
+    if text.startswith("```"):
+        text = re.sub(r'^```(?:json)?\s*', '', text)
+        text = re.sub(r'\s*```$', '', text)
+    return json.loads(text)
+
+
+def _coerce_llm_result(payload: dict[str, Any], *, model: str) -> dict | None:
+    category = str(payload.get("category") or "").strip().lower()
+    if category not in ALL_CATEGORIES:
+        return None
+    try:
+        confidence = float(payload.get("confidence", 0.5))
+    except (TypeError, ValueError):
+        confidence = 0.5
+    confidence = max(0.0, min(1.0, confidence))
+    out = {
+        "category": category,
+        "confidence": confidence,
+        "method": "llm",
+        "model": model,
+    }
+    rationale = str(payload.get("rationale") or "").strip()
+    if rationale:
+        out["rationale"] = rationale[:240]
+    return out
+
+
+def classify_with_llm(
+    text: str,
+    hoa_name: str = "",
+    *,
+    source_url: str = "",
+    title: str = "",
+    filename: str = "",
+    link_text: str = "",
+    api_key: str | None = None,
+    api_base_url: str | None = None,
+    model: str | None = None,
+    fallback_model: str | None = None,
+    max_chars: int = 2000,
+) -> dict | None:
+    """Classify an ambiguous public document candidate via OpenAI-compatible chat.
+
+    This is intentionally snippet-only: callers should pass small public text
+    extracts and provenance fields, never credentials, cookies, private portal
+    content, or resident data.
+    """
+    key = _classifier_api_key(api_key)
+    if not key:
+        raise ValueError("HOA_CLASSIFIER_API_KEY, QA_API_KEY, or OPENROUTER_API_KEY is required")
+
+    from openai import OpenAI
+
+    client = OpenAI(api_key=key, base_url=_classifier_api_base_url(api_base_url))
+    snippet = (text or "").strip()[:max_chars]
+    messages = [
+        {"role": "system", "content": SNIPPET_CLASSIFY_SYSTEM},
+        {
+            "role": "user",
+            "content": SNIPPET_CLASSIFY_USER.format(
+                categories=CATEGORY_DESCRIPTIONS,
+                hoa_name=hoa_name,
+                source_url=source_url,
+                title=title,
+                filename=filename,
+                link_text=link_text,
+                snippet=snippet,
+            ),
+        },
+    ]
+
+    last_error: Exception | None = None
+    for candidate_model in _classifier_models(model, fallback_model):
+        try:
+            response = client.chat.completions.create(
+                model=candidate_model,
+                messages=messages,
+                temperature=0,
+                max_tokens=180,
+                response_format={"type": "json_object"},
+            )
+            content = response.choices[0].message.content or "{}"
+            parsed = _parse_json_object(content)
+            result = _coerce_llm_result(parsed, model=candidate_model)
+            if result:
+                return result
+        except Exception as exc:
+            last_error = exc
+            logger.info("LLM classification failed with %s: %s", candidate_model, exc)
+
+    if last_error:
+        raise last_error
+    return None
 
 
 def classify_from_text(text: str, hoa_name: str = "") -> dict:
@@ -318,6 +463,13 @@ def classify_pdf(pdf_path: Path, hoa_name: str = "", api_key: str | None = None)
     # For scanned PDFs or uncertain text: try filename before vision
     if result is None:
         result = classify_from_filename(pdf_path.name)
+
+    # Optional OpenAI-compatible snippet classifier for public documents.
+    if result is None and text and _env_truthy("HOA_ENABLE_LLM_CLASSIFIER"):
+        try:
+            result = classify_with_llm(text, hoa_name, filename=pdf_path.name)
+        except Exception as exc:
+            logger.info("LLM classification skipped for %s: %s", pdf_path, exc)
 
     # Last resort: vision classification
     if result is None:

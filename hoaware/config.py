@@ -59,6 +59,13 @@ class Settings:
     qa_api_base_url: str
     qa_api_key: str | None
     qa_model: str
+    # Public-document classifier (OpenAI-compatible). This is intentionally
+    # separate from embeddings so public scraping can use cheap routed models.
+    classifier_api_base_url: str
+    classifier_api_key: str | None
+    classifier_model: str
+    classifier_fallback_model: str | None
+    enable_llm_classifier: bool
 
 
 def load_settings() -> Settings:
@@ -100,8 +107,20 @@ def load_settings() -> Settings:
         google_client_id=os.environ.get("GOOGLE_CLIENT_ID"),
         google_client_secret=os.environ.get("GOOGLE_CLIENT_SECRET"),
         qa_api_base_url=os.environ.get("QA_API_BASE_URL", "https://api.groq.com/openai/v1"),
-        qa_api_key=os.environ.get("QA_API_KEY"),
+        qa_api_key=os.environ.get("QA_API_KEY") or os.environ.get("OPENROUTER_API_KEY"),
         qa_model=os.environ.get("QA_MODEL", "llama-3.3-70b-versatile"),
+        classifier_api_base_url=os.environ.get(
+            "HOA_CLASSIFIER_API_BASE_URL",
+            os.environ.get("QA_API_BASE_URL", "https://openrouter.ai/api/v1"),
+        ),
+        classifier_api_key=(
+            os.environ.get("HOA_CLASSIFIER_API_KEY")
+            or os.environ.get("QA_API_KEY")
+            or os.environ.get("OPENROUTER_API_KEY")
+        ),
+        classifier_model=os.environ.get("HOA_CLASSIFIER_MODEL", "qwen/qwen3.5-flash-02-23"),
+        classifier_fallback_model=os.environ.get("HOA_CLASSIFIER_FALLBACK_MODEL") or None,
+        enable_llm_classifier=os.environ.get("HOA_ENABLE_LLM_CLASSIFIER", "0") in {"1", "true", "True"},
     )
 
 

@@ -24,6 +24,7 @@ import argparse
 import hashlib
 import io
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -37,6 +38,7 @@ from hoaware.doc_classifier import (
     VALID_CATEGORIES,
     classify_from_filename,
     classify_from_text,
+    classify_with_llm,
 )
 
 
@@ -65,7 +67,13 @@ def _load_bytes(path_or_url: str) -> tuple[bytes, str]:
     return p.read_bytes(), str(p.resolve())
 
 
-def precheck(path_or_url: str, hoa_name: str = "") -> dict:
+def _use_llm_classifier(flag: bool | None) -> bool:
+    if flag is not None:
+        return flag
+    return os.environ.get("HOA_ENABLE_LLM_CLASSIFIER", "0") in {"1", "true", "True"}
+
+
+def precheck(path_or_url: str, hoa_name: str = "", use_llm: bool | None = None) -> dict:
     pdf_bytes, source = _load_bytes(path_or_url)
     sha256 = hashlib.sha256(pdf_bytes).hexdigest()
     file_size = len(pdf_bytes)
@@ -76,6 +84,9 @@ def precheck(path_or_url: str, hoa_name: str = "") -> dict:
     suggested_category: str | None = None
     method: str | None = None
     confidence: float | None = None
+    llm_rationale: str | None = None
+    llm_model: str | None = None
+    full_text = ""
 
     try:
         import pypdf
@@ -117,6 +128,25 @@ def precheck(path_or_url: str, hoa_name: str = "") -> dict:
             method = clf["method"]
             confidence = clf["confidence"]
 
+    # Optional cheap OpenAI-compatible classifier for ambiguous digital PDFs.
+    # The prompt receives only public provenance and a short text snippet.
+    if not suggested_category and full_text.strip() and _use_llm_classifier(use_llm):
+        try:
+            clf = classify_with_llm(
+                full_text,
+                hoa_name,
+                source_url=source if source.startswith(("http://", "https://")) else "",
+                filename=filename,
+            )
+            if clf:
+                suggested_category = clf["category"]
+                method = clf["method"]
+                confidence = clf["confidence"]
+                llm_model = clf.get("model")
+                llm_rationale = clf.get("rationale")
+        except Exception as exc:
+            llm_rationale = f"llm_classifier_failed:{type(exc).__name__}"
+
     is_valid = suggested_category in VALID_CATEGORIES
     is_pii = suggested_category in REJECT_PII
     is_junk = suggested_category in REJECT_JUNK
@@ -141,6 +171,8 @@ def precheck(path_or_url: str, hoa_name: str = "") -> dict:
         "suggested_category": suggested_category,
         "classification_method": method,
         "classification_confidence": confidence,
+        "classification_model": llm_model,
+        "classification_rationale": llm_rationale,
         "is_valid_governing_doc": is_valid,
         "is_pii_risk": is_pii,
         "is_junk": is_junk,
@@ -171,6 +203,10 @@ def _print_human(r: dict) -> None:
     print(f"  text:        {'extractable' if r['text_extractable'] else 'scanned (needs OCR)'}")
     print(f"  category:    {r.get('suggested_category')} "
           f"(via {r.get('classification_method')}, conf={r.get('classification_confidence')})")
+    if r.get("classification_model"):
+        print(f"  model:       {r.get('classification_model')}")
+    if r.get("classification_rationale"):
+        print(f"  rationale:   {r.get('classification_rationale')}")
     print(f"  est OCR:     {r['est_docai_pages']} pages → ${r['est_docai_cost_usd']:.4f}")
     print(f"  recommend:   {r['recommendation'].upper()}")
 
@@ -180,6 +216,11 @@ def main() -> int:
     ap.add_argument("pdf", nargs="?", help="Local PDF path")
     ap.add_argument("--url", help="Remote PDF URL (alternative to positional path)")
     ap.add_argument("--hoa", default="", help="HOA name for context")
+    ap.add_argument(
+        "--llm",
+        action="store_true",
+        help="Use configured OpenAI-compatible classifier for ambiguous digital PDFs",
+    )
     fmt = ap.add_mutually_exclusive_group()
     fmt.add_argument("--json", action="store_true", help="JSON output (default)")
     fmt.add_argument("--human", action="store_true", help="Human-readable summary")
@@ -190,7 +231,7 @@ def main() -> int:
         ap.error("provide a PDF path or --url")
 
     try:
-        result = precheck(target, hoa_name=args.hoa)
+        result = precheck(target, hoa_name=args.hoa, use_llm=args.llm or None)
     except Exception as exc:
         result = {"ok": False, "error": str(exc), "source": target}
 

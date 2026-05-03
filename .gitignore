@@ -9,6 +9,9 @@ data/
 # Local configs and secrets
 settings.env
 *.json
+!.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
 
 # docs (PDFs)
 hoa_docs/

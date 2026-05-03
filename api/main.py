@@ -58,6 +58,7 @@ from hoaware.doc_classifier import (
     REJECT_PII,
     classify_from_filename,
     classify_from_text,
+    classify_with_llm,
 )
 from hoaware.ingest import ingest_pdf_paths
 from hoaware.pdf_utils import detect_text_extractable
@@ -5404,6 +5405,7 @@ def agent_precheck(body: AgentPrecheckRequest) -> AgentPrecheckResponse:
     sha256: str | None = body.sha256
     text_extractable: bool | None = None
     suggested_category: str | None = None
+    full_text = ""
 
     if body.url:
         # Bounded download — refuse anything larger than 25 MB
@@ -5458,6 +5460,25 @@ def agent_precheck(body: AgentPrecheckRequest) -> AgentPrecheckResponse:
         if clf:
             suggested_category = clf["category"]
             notes.append(f"category via filename (conf={clf['confidence']:.2f})")
+
+    if (
+        not suggested_category
+        and full_text.strip()
+        and os.environ.get("HOA_ENABLE_LLM_CLASSIFIER", "0") in {"1", "true", "True"}
+    ):
+        try:
+            clf = classify_with_llm(
+                full_text,
+                body.hoa or "",
+                source_url=body.url or "",
+                filename=body.filename or "",
+            )
+            if clf:
+                suggested_category = clf["category"]
+                model_note = f" model={clf.get('model')}" if clf.get("model") else ""
+                notes.append(f"category via llm (conf={clf['confidence']:.2f}{model_note})")
+        except Exception as exc:
+            notes.append(f"llm classifier failed: {type(exc).__name__}")
 
     # Duplicate check
     duplicate_of: str | None = None

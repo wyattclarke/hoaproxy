@@ -16,10 +16,13 @@ Usage::
 from __future__ import annotations
 
 import logging
+import os
 import re
+import time
 from dataclasses import dataclass
 from typing import Iterable
 from urllib.parse import urljoin, urlparse
+from urllib.robotparser import RobotFileParser
 
 import requests
 from bs4 import BeautifulSoup
@@ -32,8 +35,8 @@ from .state_verify import verify_state
 log = logging.getLogger(__name__)
 
 USER_AGENT = (
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+    os.environ.get("HOA_DISCOVERY_USER_AGENT")
+    or "HOAproxy public-document discovery (+https://hoaproxy.org; contact: hello@hoaproxy.org)"
 )
 HTML_TIMEOUT = 20
 PDF_HEAD_TIMEOUT = 15
@@ -41,6 +44,10 @@ PDF_GET_TIMEOUT = 60
 MAX_PDF_BYTES = 50 * 1024 * 1024
 MAX_PDFS_PER_PROBE = 30
 PDF_MAGIC = b"%PDF-"
+ROBOTS_TIMEOUT = 10
+
+_LAST_REQUEST_BY_HOST: dict[str, float] = {}
+_ROBOTS_BY_ORIGIN: dict[str, RobotFileParser | None] = {}
 
 # URL or link-text patterns that signal a governing document
 _GOVDOC_KEYWORDS = re.compile(
@@ -92,8 +99,76 @@ def _make_session() -> requests.Session:
     return s
 
 
-def _fetch_homepage(session: requests.Session, url: str) -> str | None:
+def _env_bool(name: str, default: str = "0") -> bool:
+    return os.environ.get(name, default) in {"1", "true", "True"}
+
+
+def _request_delay_seconds() -> float:
+    raw = os.environ.get("HOA_DISCOVERY_REQUEST_DELAY_SECONDS", "0")
     try:
+        return max(0.0, float(raw))
+    except ValueError:
+        return 0.0
+
+
+def _origin(url: str) -> str:
+    parsed = urlparse(url)
+    return f"{parsed.scheme}://{parsed.netloc}"
+
+
+def _polite_wait(url: str) -> None:
+    delay = _request_delay_seconds()
+    if delay <= 0:
+        return
+    host = urlparse(url).netloc
+    last = _LAST_REQUEST_BY_HOST.get(host)
+    now = time.monotonic()
+    if last is not None:
+        sleep_for = delay - (now - last)
+        if sleep_for > 0:
+            time.sleep(sleep_for)
+    _LAST_REQUEST_BY_HOST[host] = time.monotonic()
+
+
+def _robots_parser(session: requests.Session, url: str) -> RobotFileParser | None:
+    origin = _origin(url)
+    if origin in _ROBOTS_BY_ORIGIN:
+        return _ROBOTS_BY_ORIGIN[origin]
+
+    robots_url = urljoin(origin + "/", "robots.txt")
+    parser = RobotFileParser(robots_url)
+    try:
+        _polite_wait(robots_url)
+        response = session.get(robots_url, timeout=ROBOTS_TIMEOUT, allow_redirects=True)
+        if response.status_code >= 400:
+            _ROBOTS_BY_ORIGIN[origin] = None
+            return None
+        parser.parse(response.text.splitlines())
+        _ROBOTS_BY_ORIGIN[origin] = parser
+        return parser
+    except requests.RequestException as exc:
+        log.info("robots.txt fetch failed %s: %s", robots_url, exc)
+        _ROBOTS_BY_ORIGIN[origin] = None
+        return None
+
+
+def _allowed_by_robots(session: requests.Session, url: str) -> bool:
+    if not _env_bool("HOA_DISCOVERY_RESPECT_ROBOTS", "0"):
+        return True
+    parser = _robots_parser(session, url)
+    if parser is None:
+        return True
+    allowed = parser.can_fetch(USER_AGENT, url)
+    if not allowed:
+        log.info("robots.txt disallows %s", url)
+    return allowed
+
+
+def _fetch_homepage(session: requests.Session, url: str) -> str | None:
+    if not _allowed_by_robots(session, url):
+        return None
+    try:
+        _polite_wait(url)
         r = session.get(url, timeout=HTML_TIMEOUT, allow_redirects=True)
         if r.status_code != 200:
             log.info("homepage %s returned %s", url, r.status_code)
@@ -188,7 +263,11 @@ class _PdfFetch:
 def _fetch_pdf(session: requests.Session, url: str, link_text: str) -> _PdfFetch:
     """HEAD-check then GET the URL; return bytes or skip reason."""
     fetch = _PdfFetch(url=url, link_text=link_text)
+    if not _allowed_by_robots(session, url):
+        fetch.skip_reason = "robots_disallowed"
+        return fetch
     try:
+        _polite_wait(url)
         head = session.head(url, timeout=PDF_HEAD_TIMEOUT, allow_redirects=True)
         if head.status_code >= 400:
             # Some servers don't support HEAD — fall through to GET
@@ -203,6 +282,7 @@ def _fetch_pdf(session: requests.Session, url: str, link_text: str) -> _PdfFetch
         pass  # HEAD often fails; fall through to GET
 
     try:
+        _polite_wait(url)
         r = session.get(url, timeout=PDF_GET_TIMEOUT, stream=True, allow_redirects=True)
     except requests.RequestException as exc:
         fetch.skip_reason = f"get_failed:{type(exc).__name__}"

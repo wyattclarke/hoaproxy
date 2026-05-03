@@ -117,6 +117,7 @@ def _inspect_pdf(pdf_bytes: bytes, filename: str, hoa_name: str) -> dict:
         VALID_CATEGORIES,
         classify_from_filename,
         classify_from_text,
+        classify_with_llm,
     )
 
     sha = hashlib.sha256(pdf_bytes).hexdigest()
@@ -125,7 +126,10 @@ def _inspect_pdf(pdf_bytes: bytes, filename: str, hoa_name: str) -> dict:
     suggested_category: str | None = None
     method: str | None = None
     confidence: float | None = None
+    rationale: str | None = None
+    model: str | None = None
     error: str | None = None
+    full_text = ""
 
     try:
         reader = pypdf.PdfReader(io.BytesIO(pdf_bytes))
@@ -140,7 +144,8 @@ def _inspect_pdf(pdf_bytes: bytes, filename: str, hoa_name: str) -> dict:
                         parts.append(reader.pages[i].extract_text() or "")
                     except Exception:
                         pass
-                clf = classify_from_text("\n".join(parts), hoa_name)
+                full_text = "\n".join(parts)
+                clf = classify_from_text(full_text, hoa_name)
                 if clf:
                     suggested_category = clf["category"]
                     method = clf["method"]
@@ -154,6 +159,22 @@ def _inspect_pdf(pdf_bytes: bytes, filename: str, hoa_name: str) -> dict:
             suggested_category = clf["category"]
             method = clf["method"]
             confidence = clf["confidence"]
+
+    if (
+        not suggested_category
+        and full_text.strip()
+        and os.environ.get("HOA_ENABLE_LLM_CLASSIFIER", "0") in {"1", "true", "True"}
+    ):
+        try:
+            clf = classify_with_llm(full_text, hoa_name, filename=filename)
+            if clf:
+                suggested_category = clf["category"]
+                method = clf["method"]
+                confidence = clf["confidence"]
+                rationale = clf.get("rationale")
+                model = clf.get("model")
+        except Exception as exc:
+            rationale = f"llm_classifier_failed:{type(exc).__name__}"
 
     is_valid = suggested_category in VALID_CATEGORIES
     is_pii = suggested_category in REJECT_PII
@@ -171,6 +192,8 @@ def _inspect_pdf(pdf_bytes: bytes, filename: str, hoa_name: str) -> dict:
         "suggested_category": suggested_category,
         "classification_method": method,
         "classification_confidence": confidence,
+        "classification_model": model,
+        "classification_rationale": rationale,
         "is_valid_governing_doc": is_valid,
         "is_pii_risk": is_pii,
         "is_junk": is_junk,

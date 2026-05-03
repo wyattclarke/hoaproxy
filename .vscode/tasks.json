@@ -1,0 +1,64 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Run API",
+      "type": "shell",
+      "command": "source .venv/bin/activate && uvicorn api.main:app --reload",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "Run tests",
+      "type": "shell",
+      "command": "source .venv/bin/activate && python -m pytest tests/ -q",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "Scrape NC leads",
+      "type": "shell",
+      "command": "source .venv/bin/activate && mkdir -p data/discovery && python -m hoaware.discovery scrape-leads nc -o data/discovery/nc_leads.jsonl",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Probe NC leads",
+      "type": "shell",
+      "command": "source .venv/bin/activate && python -m hoaware.discovery probe-batch data/discovery/nc_leads.jsonl --json",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Precheck public PDF",
+      "type": "shell",
+      "command": "source .venv/bin/activate && python scripts/hoa_precheck.py --url '${input:pdfUrl}' --hoa '${input:hoaName}' --llm --human",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    }
+  ],
+  "inputs": [
+    {
+      "id": "pdfUrl",
+      "type": "promptString",
+      "description": "Public PDF URL"
+    },
+    {
+      "id": "hoaName",
+      "type": "promptString",
+      "description": "HOA name"
+    }
+  ]
+}
