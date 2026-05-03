@@ -207,6 +207,15 @@ def seed_queries() -> list[str]:
     cities = [
         "Overland Park", "Olathe", "Lenexa", "Shawnee KS", "Wichita", "Lawrence KS",
         "Topeka", "Manhattan KS", "Kansas City KS", "Leawood", "Prairie Village",
+        "Derby KS", "Andover KS", "Haysville KS", "Emporia KS", "Hutchinson KS",
+        "Newton KS", "Gardner KS", "De Soto KS", "Mission KS", "Roeland Park KS",
+        "Merriam KS", "Lansing KS", "Leavenworth KS", "Basehor KS", "Pittsburg KS",
+    ]
+    counties = [
+        "Johnson County", "Sedgwick County", "Wyandotte County", "Shawnee County",
+        "Douglas County", "Riley County", "Leavenworth County", "Butler County",
+        "Reno County", "Harvey County", "Miami County", "Pottawatomie County",
+        "Cowley County", "Saline County", "Crawford County", "Finney County",
     ]
     base = [
         '"Kansas" "declaration of covenants" HOA filetype:pdf',
@@ -225,6 +234,16 @@ def seed_queries() -> list[str]:
         'site:eneighbors.com "Homes Association Bylaws" "Kansas"',
         'site:payhoa.com/uploads "Kansas" "bylaws" "HOA" filetype:pdf',
         'site:hoaedge.com/file/document-page "Kansas" "bylaws"',
+        'site:ha-kc.org/data/bylaws "Kansas" filetype:pdf',
+        'site:ha-kc.org/data/restrictions "Declaration" "Restrictions" filetype:pdf',
+        'site:homesassociation.org/data/bylaws "Kansas" filetype:pdf',
+        'site:homesassociation.org/data/restrictions "Declaration" filetype:pdf',
+        'site:mccurdy.com/files "Homeowners Association" "Kansas" filetype:pdf',
+        'site:mccurdy.com/files "Bylaws" "Sedgwick County" filetype:pdf',
+        'site:langere.com/wp-content/uploads "Covenants" "Kansas" filetype:pdf',
+        'site:wordpress.com "Kansas" "HOA" "bylaws" filetype:pdf',
+        'site:wp-content/uploads "Kansas" "Homeowners Association" "Bylaws" filetype:pdf',
+        'site:file/document "Kansas" "Homeowners Association" "Bylaws"',
         'site:ks.gov "declaration of covenants" "homeowners association" pdf',
         'site:wycokck.org "declaration of covenants" "homeowners association" pdf',
     ]
@@ -233,6 +252,12 @@ def seed_queries() -> list[str]:
             f'"{city}" "HOA" "bylaws" filetype:pdf',
             f'"{city}" "homes association" "covenants" filetype:pdf',
             f'"{city}" "declaration of covenants" filetype:pdf',
+        ])
+    for county in counties:
+        base.extend([
+            f'"{county}" Kansas "homes association" "restrictions" filetype:pdf',
+            f'"{county}" Kansas HOA "bylaws" filetype:pdf',
+            f'"{county}" Kansas "declaration of restrictions" filetype:pdf',
         ])
     return base
 
@@ -264,17 +289,17 @@ def model_queries(client: OpenAI, model: str, *, count: int, audit: Path) -> lis
         return []
 
 
-def serper_search(query: str, *, num: int, audit: Path) -> list[SearchResult]:
+def serper_search(query: str, *, num: int, page: int, audit: Path) -> list[SearchResult]:
     key = os.environ.get("SERPER_API_KEY")
     if not key:
         raise RuntimeError("SERPER_API_KEY is required")
     headers = {"X-API-KEY": key, "Content-Type": "application/json"}
-    payload = {"q": query, "num": num, "gl": "us", "hl": "en"}
+    payload = {"q": query, "num": num, "page": page, "gl": "us", "hl": "en"}
     resp = requests.post(SERPER_ENDPOINT, headers=headers, json=payload, timeout=REQUEST_TIMEOUT)
     if resp.status_code >= 400:
         raise RuntimeError(f"Serper {resp.status_code}: {resp.text[:300]}")
     data = resp.json()
-    _jsonl_write(audit, {"event": "serper", "query": query, "organic_count": len(data.get("organic", []))})
+    _jsonl_write(audit, {"event": "serper", "query": query, "page": page, "organic_count": len(data.get("organic", []))})
     out = []
     for row in data.get("organic", []):
         link = str(row.get("link") or "").strip()
@@ -817,12 +842,15 @@ def run_model(args: argparse.Namespace, model: str, run_dir: Path) -> dict[str, 
             break
 
     all_results: list[SearchResult] = []
+    search_calls = 0
     for q in queries:
-        try:
-            all_results.extend(serper_search(q, num=args.results_per_query, audit=audit))
-        except Exception as exc:
-            _jsonl_write(audit, {"event": "serper_failed", "query": q, "error": str(exc)})
-        time.sleep(args.search_delay)
+        for page in range(1, args.pages_per_query + 1):
+            try:
+                all_results.extend(serper_search(q, num=args.results_per_query, page=page, audit=audit))
+                search_calls += 1
+            except Exception as exc:
+                _jsonl_write(audit, {"event": "serper_failed", "query": q, "page": page, "error": str(exc)})
+            time.sleep(args.search_delay)
 
     selected = select_results(all_results, args.max_results)
     _jsonl_write(audit, {"event": "selected_results", "count": len(selected), "links": [asdict(r) for r in selected[: args.max_results]]})
@@ -839,7 +867,8 @@ def run_model(args: argparse.Namespace, model: str, run_dir: Path) -> dict[str, 
     summary = {
         "model": model,
         "queries": len(queries),
-        "serper_est_cost_usd": round(len(queries) * COST_SERPER_PER_QUERY, 6),
+        "search_calls": search_calls,
+        "serper_est_cost_usd": round(search_calls * COST_SERPER_PER_QUERY, 6),
         "search_results": len(all_results),
         "selected_results": len(selected),
         "pdf_candidates": len(candidates),
@@ -872,6 +901,7 @@ def main() -> int:
     ap.add_argument("--max-queries", type=int, default=20)
     ap.add_argument("--model-queries", type=int, default=10)
     ap.add_argument("--results-per-query", type=int, default=10)
+    ap.add_argument("--pages-per-query", type=int, default=1)
     ap.add_argument("--max-results", type=int, default=80)
     ap.add_argument("--max-pages", type=int, default=40)
     ap.add_argument("--max-pdfs", type=int, default=30)

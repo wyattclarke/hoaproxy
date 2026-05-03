@@ -12,10 +12,10 @@ gs://hoaproxy-bank/v1/KS/...
 
 No new bucket is needed for new states. Use a different run id per experiment and let the bank layout separate states/counties/HOAs.
 
-Current cleaned KS manifest count after the 2026-05-03 runs:
+Current cleaned KS manifest count after the 2026-05-03 runs plus the HA-KC deterministic pass:
 
 ```text
-49
+75
 ```
 
 Useful current listing command:
@@ -44,9 +44,18 @@ It:
 6. Uses OpenRouter model triage on small candidate payloads.
 7. Banks accepted docs through `hoaware.bank.bank_hoa()`.
 
+High-yield deterministic source scraper:
+
+```bash
+benchmark/scrape_ks_hakc.py
+```
+
+It scrapes the Homes Association of Kansas City Kansas association index, calls the public document endpoint (`/scripts/showdocuments.php?an={id}&dt={type}`), downloads Bylaws/Restrictions/Articles/Rules PDFs, and banks only associations with downloaded governing docs.
+
 Important hardening now in the runner:
 
 - OpenRouter client has explicit timeout and no SDK retries.
+- Serper pagination is supported with `--pages-per-query`.
 - Accepted PDFs are banked after each triage batch, so a later timeout does not lose earlier wins.
 - HOA names are normalized before banking (`Homes Association` -> `HOA`, city/state suffix cleanup, generic-name rejection).
 - Model-supplied HOA names must have evidence in title/snippet/filename/PDF text/URL path or an HOA-like hostname.
@@ -70,18 +79,27 @@ deepseek/deepseek-v4-flash 35 queries   40 candidates   27 accepted/banked
 
 benchmark/results/ks_openrouter_deepseek_ks_expanded_1/summary.tsv
 deepseek/deepseek-v4-flash 58 queries   60 candidates   46 accepted/banked
+
+benchmark/results/ks_hakc_full_1/summary.json
+HA-KC deterministic scraper   44 associations   29 with docs   85 PDFs banked/merged
+
+benchmark/results/ks_hakc_full_2/summary.json
+HA-KC corrected rerun         43 associations   28 with docs   77 PDFs banked/merged
 ```
 
 The cleaned bank count is lower than raw accepted totals because duplicates and false positives were removed or merged.
 
+An attempted large OpenRouter scale run (`deepseek_ks_scale_1`) made 270 Serper calls and fetched 72 PDF candidates, but was stopped before triage because candidate collection waited too long before banking anything. Next improvement for broad search should be chunked candidate collection/triage, or smaller source-focused batches.
+
 ## Cost/Quality Read
 
-Best current choice: `deepseek/deepseek-v4-flash` through OpenRouter.
+Best current mix: deterministic source scrapers first, then `deepseek/deepseek-v4-flash` through OpenRouter for long-tail source discovery and ambiguous triage.
 
 Why:
 
-- It produced better triage reasons and names than Qwen in this task.
-- It stayed cheap enough that Serper was a more visible line item than model tokens.
+- HA-KC deterministic scraping added more unique KS HOAs than the broad LLM/search pass.
+- DeepSeek produced better triage reasons and names than Qwen in this task.
+- DeepSeek stayed cheap enough that Serper was a more visible line item than model tokens.
 - The architecture is the main cost lever: code searches/fetches/extracts, the model only classifies small JSON batches.
 
 Rough Serper spend in these named runs is about:
@@ -123,12 +141,14 @@ For other states, run parallel state-specific versions of this harness rather th
 
 Recommended approach:
 
-1. Use deterministic query packs first: state name, state abbreviation, major counties/cities, `declaration of covenants`, `restrictive covenants`, `deed restrictions`, `bylaws`, `articles of incorporation`, and local terms like `homes association` or `property owners association`.
-2. Add a small number of model-generated queries per state (`--model-queries 5-10`) to discover local wording and high-yield hosts.
-3. Keep DeepSeek V4 Flash as the default triage model.
-4. Use a stronger model only for review queues: scanned PDFs with no text, generic hostnames, or conflicting state evidence.
-5. Run states as separate processes with separate run ids.
-6. After each state, inspect manifest names and remove/merge obvious generic or duplicate prefixes before draining into the app.
+1. Identify aggregator/management-company indexes first. This is how NC gets to 1000+; blind search alone will not.
+2. Build deterministic source scrapers for high-yield hosts before spending LLM tokens.
+3. Use deterministic query packs next: state name, state abbreviation, major counties/cities, `declaration of covenants`, `restrictive covenants`, `deed restrictions`, `bylaws`, `articles of incorporation`, and local terms like `homes association` or `property owners association`.
+4. Add a small number of model-generated queries per state (`--model-queries 5-10`) to discover local wording and high-yield hosts.
+5. Keep DeepSeek V4 Flash as the default triage model.
+6. Use a stronger model only for review queues: scanned PDFs with no text, generic hostnames, or conflicting state evidence.
+7. Run states as separate processes with separate run ids.
+8. After each state, inspect manifest names and remove/merge obvious generic or duplicate prefixes before draining into the app.
 
 Example KS command:
 
@@ -136,14 +156,22 @@ Example KS command:
 source .venv/bin/activate
 OPENROUTER_TIMEOUT_SECONDS=35 python benchmark/run_ks_openrouter_discovery.py \
   --models deepseek/deepseek-v4-flash \
-  --run-id deepseek_ks_expanded_1 \
+  --run-id deepseek_ks_source_batch \
   --model-queries 8 \
-  --max-queries 58 \
+  --max-queries 60 \
   --results-per-query 10 \
-  --max-results 220 \
-  --max-pages 80 \
-  --max-pdfs 60 \
+  --pages-per-query 2 \
+  --max-results 300 \
+  --max-pages 100 \
+  --max-pdfs 80 \
   --triage-batch-size 4
+```
+
+Example deterministic KS source command:
+
+```bash
+source .venv/bin/activate
+python benchmark/scrape_ks_hakc.py --run-id full_1 --max-associations 500 --delay 0.05
 ```
 
 ## Files
@@ -151,11 +179,13 @@ OPENROUTER_TIMEOUT_SECONDS=35 python benchmark/run_ks_openrouter_discovery.py \
 Committed code/docs to preserve:
 
 - `benchmark/run_ks_openrouter_discovery.py`
+- `benchmark/scrape_ks_hakc.py`
 - `benchmark/KS_OPENROUTER_DISCOVERY_HANDOFF.md`
 
 Untracked local results to preserve if useful:
 
 - `benchmark/results/ks_openrouter_*`
+- `benchmark/results/ks_hakc_*`
 
 Pre-existing untracked Claude benchmark files are unrelated:
 

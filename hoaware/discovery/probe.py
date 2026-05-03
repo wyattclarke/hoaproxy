@@ -53,14 +53,14 @@ _ROBOTS_BY_ORIGIN: dict[str, RobotFileParser | None] = {}
 _GOVDOC_KEYWORDS = re.compile(
     r"\b(declaration|covenants?|cc&?rs?|c\.c\.&r\.s?|bylaws?|by-laws?|"
     r"articles?(?:\s+of\s+(?:incorporation|organization))?|charter|"
-    r"rules?(?:\s+(?:&|and)\s+regulations?)?|regulations?|guidelines?|"
+    r"restrictions?|rules?(?:\s+(?:&|and)\s+regulations?)?|regulations?|guidelines?|"
     r"resolutions?|amendments?|policies|policy)\b",
     re.IGNORECASE,
 )
 # URL path / link text indicating a documents/library subpage worth crawling 1 level deep
 _DOCSPAGE_KEYWORDS = re.compile(
     r"\b(documents?|governing|government|library|downloads?|forms?|"
-    r"resources?|files?|publications?|rules|policies|covenants?)\b",
+    r"resources?|files?|publications?|rules|policies|covenants?|restrictions?)\b",
     re.IGNORECASE,
 )
 MAX_DOC_SUBPAGES = 5
