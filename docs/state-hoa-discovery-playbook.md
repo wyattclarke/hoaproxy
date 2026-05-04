@@ -163,6 +163,16 @@ site:cobaltreks.com/hoa-management "Declaration" "HOA"
 site:cobaltreks.com/hoa-management "Kansas" "Homeowners Association"
 ```
 
+For independent community domains after a productive metro is found:
+
+```text
+"Kansas" "HOA documents" "bylaws" -eneighbors
+"Kansas" "governing documents" "homeowners association" -eneighbors
+"Overland Park" "HOA documents" -eneighbors
+"Leawood" "homes association" documents -eneighbors
+"Wichita" "homeowners association" "documents" -eneighbors
+```
+
 Always dedupe against previous validated/probed URLs before validation. A cheap local dedupe step saved model spend in Kansas once eNeighbors started returning repeats.
 
 ## OpenRouter Lead Validation
@@ -238,6 +248,7 @@ High-yield:
 
 - Host-focused expansion after the first hit. eNeighbors was much better than continuing low-density county sweeps.
 - eNeighbors public-document URLs and `/p/{community}` pages. Many direct public-document URLs bank exactly one PDF; community pages can bank multiple PDFs.
+- Independent community domains found with `-eneighbors` searches after eNeighbors flattened. This found many Johnson County sites and some Sedgwick/Butler/Leavenworth sites.
 - Municipal document centers that serve PDF bytes from non-`.pdf` URLs, especially `DocumentCenter/View` and archive URLs.
 - County/city focused queries for finding the first productive hosts.
 - Public community websites with pages named documents, governing documents, bylaws, restrictions, deed restrictions, HOA documents.
