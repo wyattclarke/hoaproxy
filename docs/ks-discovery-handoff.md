@@ -7,7 +7,7 @@ User instruction: continue autonomously for KS. Do not stop at checkpoints. Comm
 ## Current State
 
 - Bank prefix: `gs://hoaproxy-bank/v1/KS/`
-- Current count: 506 manifests, 1,230 PDFs
+- Current count: 508 manifests, 1,236 PDFs
 - OpenRouter credits: about `$9.61 / $10` used, about `$0.39` remaining
 - Active KS work: none at last process check.
 - An unrelated NC benchmark process may be running; leave it alone.
@@ -39,6 +39,7 @@ Highest-yield source families:
 - County-by-county searching is helpful for focus, but lower-density generic county sweeps are noisy unless paired with source/legal phrases. Recent strict county passes found useful hand-selected documents for Mill Creek Meadows, Westwood Hills Townhomes, Bella Sera at the Preserve, West Glen, and Falcon Lakes; Riley, Butler, and broad Miami/Leavenworth results were mostly duplicates, legal noise, real estate pages, minutes, or public planning documents.
 - GoDaddy download URLs and HOA Express-style `/file/document-page/` URLs remain useful in small doses. Recent source-family searches added or enriched Battle Creek, Canyon Creek Villas, Edgewood, Arlington Estates, and Holly Ridge. Search results are low-volume but high-signal when constrained by `Kansas`, county names, and formal document phrases.
 - Deep legal-phrase searches remain productive when manually selected. The latest pass used 4 pages per query over `ks_statewide_legal_phrase_2_queries.txt` and added or enriched Berkshire Villas, Greystone Estates South, Dover Estates, Pepper Tree Park, Villas of Asbury, Timber Creek Estates, Willo-Esque, Clearwater Creek, Symphony Hills, Eagles Landing, Cottages at Woodridge, Lee Mill Village, Auburn Hills 13th, Canyon Lakes, Villas of St. Andrews, Mesa Verde, Harwycke, and Meadows Place.
+- A second manual pass over the same deep legal results added or enriched Highlands Creek, Village at Deer Creek, Tuscany Reserve, Fairway Hills, Greens of Chapel Creek, Boulder Creek Villas, Sycamore Village, Chapel Hill, and Blue Valley Riding. Many were existing communities, so this increased PDF count more than manifest count.
 
 Lower-yield or avoid:
 
