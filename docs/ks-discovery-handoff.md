@@ -7,7 +7,7 @@ User instruction: continue autonomously for KS. Do not stop at checkpoints. Comm
 ## Current State
 
 - Bank prefix: `gs://hoaproxy-bank/v1/KS/`
-- Current count: 523 manifests, 1,252 PDFs
+- Current count: 527 manifests, 1,257 PDFs
 - OpenRouter credits: about `$9.61 / $10` used, about `$0.39` remaining
 - Active KS work: none at last process check.
 - An unrelated NC benchmark process may be running; leave it alone.
@@ -43,6 +43,7 @@ Highest-yield source families:
 - Source-family expansion on BuilderCloud/S3, WebsiteFiles CDN, real-estate CDN PDFs, McCurdy files, and Rackcdn added another Johnson/Sedgwick-heavy wave: Parkside Reserve, Arbor Woods, Stonebridge Park, Cottages at Dayton Creek, East Village Villas, Southern Meadows, Regents Park Villas, Dayton Creek, Wolf Creek, Century Farms, Ashbriar Estates, Springdale Lakes, Amarado Estates, and Cedar Brook. Oakleaf Ridge and Farm at Garnet Hill created manifests but their PDFs were skipped by state verification.
 - A formal legal-phrase pass over underrepresented counties was mostly dry: only Lee Mill Village and Springdale Lakes appeared, both already banked. Smaller counties likely need source-specific discovery or local HOA/domain discovery, not just county names with `Kansas non-profit corporation`.
 - HOA Express page-searches for `/p/Legal-Documents`, `/p/Governing-Documents`, and `/p/Documents` were mostly dry. Some public pages are indexable but do not expose PDF URLs in static HTML, so they are lower priority than direct `/file/document-page/` URL searches.
+- WordPress/static upload searches are productive but noisy. The latest pass added Windmill Creek, Tyler's Landing, The Moorings 10th, and Oak Cliff. It also surfaced many duplicates and out-of-state hits; inspect PDF text for state before banking.
 
 Lower-yield or avoid:
 
