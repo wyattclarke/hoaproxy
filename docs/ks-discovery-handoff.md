@@ -7,7 +7,7 @@ User instruction: continue autonomously for KS. Do not stop at checkpoints. Comm
 ## Current State
 
 - Bank prefix: `gs://hoaproxy-bank/v1/KS/`
-- Current count: 557 manifests, 1,335 PDFs
+- Current count: 560 manifests, 1,346 PDFs
 - OpenRouter credits: about `$9.61 / $10` used, about `$0.39` remaining
 - Active KS work: none at last process check.
 - An unrelated NC benchmark process may be running; leave it alone.
@@ -53,6 +53,7 @@ Highest-yield source families:
 - Public ZIP archives can be high-yield when clearly labeled. Pheasant Run Condominiums exposed `DeclarationBylaws.zip`; after verifying robots and inspecting the archive in `/tmp`, bank only the amendment, articles, bylaws, and declaration PDFs, skipping management agreements and summaries. This added 21 PDFs in one clean pass.
 - Owned-domain search with governing-document phrases added or enriched Nottingham Downs Homes, Ridge at Pinewood, Irvine Acres, Moorings First, and Pepper Tree Park. Shannon Valley, Lancaster, and Kennett Place exposed good-looking PDF links but their `editor_upload` paths are robots-disallowed, so leave them skipped unless another allowed source appears.
 - Cobalt-managed HOA pages are a strong source family. Direct Cobalt PDFs added or enriched Westbank Townhomes, Nelsons Ridge, Vanesta, Williamsburg Townhome, and Grand Mere; Kimball links were dead/404. Continue with `site:cobaltreks.com/hoa/` and `site:cobaltreks.com/wp-content/uploads filetype:pdf` searches for Riley/Pottawatomie-style communities.
+- The Cobalt HOA index at `https://cobaltreks.com/hoa-management/` is better than search alone. A direct index pass added or enriched Brittnay Ridge, Brianna Court, Solheim, Westwood Village Condominium, and additional Nelsons Ridge docs. Continue by enumerating manager indexes/sitemaps wherever a source family proves productive.
 
 Lower-yield or avoid:
 
