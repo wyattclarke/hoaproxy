@@ -118,15 +118,20 @@ def validate_batch(
     batch: list[dict[str, Any]],
     *,
     state: str,
-    county: str,
+    county: str | None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    scope_rule = (
+        "For this run, require evidence that the lead is in the county focus or one of its cities. Reject generic Kansas leads and leads that are probably from another county."
+        if county
+        else "For this statewide run, require evidence that the lead is in Kansas. Reject leads that are probably from another state."
+    )
     prompt = {
         "task": "Validate noisy public-web leads before probing/banking HOA governing documents.",
         "state": state,
         "county_focus": county,
         "rules": [
             "Keep only plausible HOA, homes association, homeowners association, condo/townhome association, or property owners association leads in Kansas.",
-            "For this run, require evidence that the lead is in the county focus or one of its cities. Reject generic Kansas leads and leads that are probably from another county.",
+            scope_rule,
             "Reject generic legal-info pages, social posts, management-company marketing pages without a specific community, government pages, and malformed names.",
             "Reject nonprofit tax filings, ProPublica/IRS pages, real estate listings, law firm pages, newspaper articles, court/case-law pages, and generic HOA explainer pages.",
             "If the name is malformed but the URL/title clearly identifies a community, repair it.",
@@ -158,7 +163,8 @@ def validate_batch(
             continue
         row["name"] = repaired[:120]
         row["state"] = state
-        row["county"] = county
+        if county:
+            row["county"] = county
         row["source"] = row.get("source") or f"openrouter-{model}-validated"
         row["validation"] = {
             "model": model,
@@ -259,7 +265,7 @@ def main() -> int:
     validate.add_argument("--output", required=True)
     validate.add_argument("--audit", required=True)
     validate.add_argument("--state", default="KS")
-    validate.add_argument("--county", required=True)
+    validate.add_argument("--county")
     validate.add_argument("--model", default=DEFAULT_MODEL)
     validate.add_argument("--fallback-model", default=FALLBACK_MODEL)
     validate.add_argument("--batch-size", type=int, default=20)
