@@ -77,8 +77,9 @@ BLOCKED_HOST_RE = re.compile(
     r"propublica|justanswer|justia|quora|reddit|instagram|yelp|kansascity|kcur|"
     r"npr|findlaw|caselaw|trellis|studicata|uslegalforms|martinpringle|"
     r"kcrealestatelawyer|realestatepaperpushers|consumer(?:affairs)?|"
-    r"civicweb|civicplus|granicus|ecode360|hellogravel|archive|pdfcoffee|"
-    r"yumpu|dokumen|casemine|indeed"
+    r"civicweb|civicplus|granicus|ecode360|agendasuite|hellogravel|archive|"
+    r"pdfcoffee|issuu|yumpu|dokumen|casemine|indeed|salinahomes|salina-tv|"
+    r"websiteexpert|dpattersonelectric|pflbas"
     r")\.",
     re.IGNORECASE,
 )
