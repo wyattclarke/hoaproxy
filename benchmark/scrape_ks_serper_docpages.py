@@ -73,6 +73,7 @@ BLOCKED_HOST_RE = re.compile(
     r"tharealty|konradlorenz|centrodeservicios|matchhoa|homeadvisor|"
     r"drbrianjonesrealtor|askarealtor|c21community|countyhomecosts|"
     r"resourceks|prospeo|propfusion|best-us-lawyers|home4rent|"
+    r"homeownersassociationdirectory|hoa-community|communitypay|zoominfo|"
     r"propublica|justanswer|quora|reddit|instagram|yelp|kansascity|kcur|"
     r"npr|findlaw|caselaw|trellis|studicata|uslegalforms|martinpringle|"
     r"kcrealestatelawyer|realestatepaperpushers|consumer(?:affairs)?|"
