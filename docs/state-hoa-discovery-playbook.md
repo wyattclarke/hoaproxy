@@ -163,6 +163,17 @@ site:cobaltreks.com/hoa-management "Declaration" "HOA"
 site:cobaltreks.com/hoa-management "Kansas" "Homeowners Association"
 ```
 
+For host-pattern expansion after direct-PDF hits:
+
+```text
+site:gogladly.com/connect/document "Kansas" "homeowners association" bylaws
+site:pmtechsol.sfo2.cdn.digitaloceanspaces.com/hmsft-documents "deed restrictions" "Kansas"
+inurl:hmsft-doc "Kansas" "homes association" "deed restrictions"
+inurl:/file/document/ "Kansas" "homeowners association" covenants
+inurl:/wp-content/uploads/ "Kansas" "homeowners association" bylaws
+inurl:/wp-content/uploads/ "Kansas" "homes association" restrictions
+```
+
 For independent community domains after a productive metro is found:
 
 ```text
@@ -263,6 +274,7 @@ High-yield:
 - County/city focused queries for finding the first productive hosts.
 - Public community websites with pages named documents, governing documents, bylaws, restrictions, deed restrictions, HOA documents.
 - Direct `filetype:pdf` city searches once they are cleaned before probing. Good pattern: search finds the PDF, the probe crawls the same HOA-owned host and banks the rest of the public document library.
+- Host-pattern searches for public document systems, especially `gogladly.com/connect/document`, `hmsft-doc`, `/file/document/`, communitysite file URLs, and HOA WordPress uploads.
 - Deterministic management/association directories when available.
 - OpenRouter validation before probing noisy candidates.
 
