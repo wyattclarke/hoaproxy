@@ -7,7 +7,7 @@ User instruction: continue autonomously for KS. Do not stop at checkpoints. Comm
 ## Current State
 
 - Bank prefix: `gs://hoaproxy-bank/v1/KS/`
-- Current count: 546 manifests, 1,281 PDFs
+- Current count: 547 manifests, 1,286 PDFs
 - OpenRouter credits: about `$9.61 / $10` used, about `$0.39` remaining
 - Active KS work: none at last process check.
 - An unrelated NC benchmark process may be running; leave it alone.
@@ -49,6 +49,7 @@ Highest-yield source families:
 - A deeper hmsft/pmtech pass is still worthwhile, but it is now mostly enriching existing communities rather than adding many new manifests. The latest selected pass added or enriched Gramercy Park, Villas at Southpointe, Prairie Point, Preserve at Clear Creek, Foxwood Ranch, Deer Valley, Seven Hills, Copper Creek, Willowbrooke Villas, Melrose Reserve, Southwood, Foxborough, Montrachet, Nottington Creek, Nottingham Downs Duplex, London Park, and Persimmon Pointe. Some `hmsft-doc` URLs on community domains can show as PDF results in search but return 403 from the fetcher; do not force them unless a direct storage URL is available.
 - A Sedgwick owned-site pass added or enriched Cambridge-Lexington, Evergreen, Casa Bella, Reflection Ridge, Wyndham Creek, and Forest Oaks. Important correction: do not run broad `probe(lead)` on document-rich HOA websites unless you are ready to clean the result, because the current harvester banks every linked PDF, including newsletters, minutes, forms, budgets, and pool/rental documents. Prefer preflighting links and passing only whitelisted direct PDF URLs for bylaws, declarations, covenants, articles, restrictions, rules, regulations, amendments, and architectural guidelines. This pass was cleaned in GCS after overharvesting.
 - A safer whitelisted owned-site pass over county lead leftovers added or enriched Westwood Hills, Woods on 19th, West Glen, Wyndham Hill, and Timber Creek III. The count increase was modest because several were already present, but the method is good: preflight candidate sites, whitelist direct governing PDFs, then run direct-only probes. Falcon Lakes exposed many high-value direct PDFs, but its `editor_upload` path is robots-disallowed, so leave it skipped.
+- A follow-up whitelisted pass added or enriched Tatarrax Hills, Parkway Village, and Ginger Creek. This reinforces that county-by-county owned-site mining is now better than broad search: many useful PDFs are on ordinary HOA websites, but the page must be link-preflighted so only governing PDFs are sent to the bank.
 
 Lower-yield or avoid:
 
