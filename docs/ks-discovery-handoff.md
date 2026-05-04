@@ -42,6 +42,7 @@ Highest-yield source families:
 - A second manual pass over the same deep legal results added or enriched Highlands Creek, Village at Deer Creek, Tuscany Reserve, Fairway Hills, Greens of Chapel Creek, Boulder Creek Villas, Sycamore Village, Chapel Hill, and Blue Valley Riding. Many were existing communities, so this increased PDF count more than manifest count.
 - Source-family expansion on BuilderCloud/S3, WebsiteFiles CDN, real-estate CDN PDFs, McCurdy files, and Rackcdn added another Johnson/Sedgwick-heavy wave: Parkside Reserve, Arbor Woods, Stonebridge Park, Cottages at Dayton Creek, East Village Villas, Southern Meadows, Regents Park Villas, Dayton Creek, Wolf Creek, Century Farms, Ashbriar Estates, Springdale Lakes, Amarado Estates, and Cedar Brook. Oakleaf Ridge and Farm at Garnet Hill created manifests but their PDFs were skipped by state verification.
 - A formal legal-phrase pass over underrepresented counties was mostly dry: only Lee Mill Village and Springdale Lakes appeared, both already banked. Smaller counties likely need source-specific discovery or local HOA/domain discovery, not just county names with `Kansas non-profit corporation`.
+- HOA Express page-searches for `/p/Legal-Documents`, `/p/Governing-Documents`, and `/p/Documents` were mostly dry. Some public pages are indexable but do not expose PDF URLs in static HTML, so they are lower priority than direct `/file/document-page/` URL searches.
 
 Lower-yield or avoid:
 
