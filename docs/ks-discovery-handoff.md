@@ -7,7 +7,7 @@ User instruction: continue autonomously for KS. Do not stop at checkpoints. Comm
 ## Current State
 
 - Bank prefix: `gs://hoaproxy-bank/v1/KS/`
-- Current count: 529 manifests, 1,259 PDFs
+- Current count: 531 manifests, 1,261 PDFs
 - OpenRouter credits: about `$9.61 / $10` used, about `$0.39` remaining
 - Active KS work: none at last process check.
 - An unrelated NC benchmark process may be running; leave it alone.
@@ -45,6 +45,7 @@ Highest-yield source families:
 - HOA Express page-searches for `/p/Legal-Documents`, `/p/Governing-Documents`, and `/p/Documents` were mostly dry. Some public pages are indexable but do not expose PDF URLs in static HTML, so they are lower priority than direct `/file/document-page/` URL searches.
 - WordPress/static upload searches are productive but noisy. The latest pass added Windmill Creek, Tyler's Landing, The Moorings 10th, and Oak Cliff. It also surfaced many duplicates and out-of-state hits; inspect PDF text for state before banking.
 - GoGladly source search is low-volume but still useful. It added Southcrest Addition and a cleaner Douglas County Meadows Place declaration. Skip Longwood reminder/history PDFs and estate-sale forms even when they mention Kansas.
+- Broad Kansas-owned/WordPress domain searching added Willow Springs and Prairie Lake Estates, but most results were duplicates or non-governing PDFs. Use it only after source-family searches and inspect page text for out-of-state or newsletter/minutes hits.
 
 Lower-yield or avoid:
 
