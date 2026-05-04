@@ -284,6 +284,8 @@ For high-signal `filetype:pdf` search runs, a cheaper deterministic variant can 
 
 This worked well in Kansas for public HOA document libraries such as Meadows at Shawnee, Montclair, Deer Valley, Reflection Ridge, Shadow Rock, and Andover Forest. It avoided spending OpenRouter tokens on obvious direct PDF hits while still keeping bad generic names out of the bank.
 
+For owned HOA websites with many PDFs, preflight the links before probing. The current page probe banks every linked PDF, so sites with newsletters, minutes, budgets, forms, pool documents, or rental documents can pollute the bank. For these sites, scrape the page links first, whitelist only governing-document URLs, and pass those URLs as `pre_discovered_pdf_urls` instead of letting `probe(lead)` crawl the whole page.
+
 ## Current Kansas Lessons
 
 High-yield:

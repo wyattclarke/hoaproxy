@@ -7,7 +7,7 @@ User instruction: continue autonomously for KS. Do not stop at checkpoints. Comm
 ## Current State
 
 - Bank prefix: `gs://hoaproxy-bank/v1/KS/`
-- Current count: 539 manifests, 1,274 PDFs
+- Current count: 544 manifests, 1,276 PDFs
 - OpenRouter credits: about `$9.61 / $10` used, about `$0.39` remaining
 - Active KS work: none at last process check.
 - An unrelated NC benchmark process may be running; leave it alone.
@@ -47,6 +47,7 @@ Highest-yield source families:
 - GoGladly source search is low-volume but still useful. It added Southcrest Addition and a cleaner Douglas County Meadows Place declaration. Skip Longwood reminder/history PDFs and estate-sale forms even when they mention Kansas.
 - Broad Kansas-owned/WordPress domain searching added Willow Springs and Prairie Lake Estates, but most results were duplicates or non-governing PDFs. Use it only after source-family searches and inspect page text for out-of-state or newsletter/minutes hits.
 - A deeper hmsft/pmtech pass is still worthwhile, but it is now mostly enriching existing communities rather than adding many new manifests. The latest selected pass added or enriched Gramercy Park, Villas at Southpointe, Prairie Point, Preserve at Clear Creek, Foxwood Ranch, Deer Valley, Seven Hills, Copper Creek, Willowbrooke Villas, Melrose Reserve, Southwood, Foxborough, Montrachet, Nottington Creek, Nottingham Downs Duplex, London Park, and Persimmon Pointe. Some `hmsft-doc` URLs on community domains can show as PDF results in search but return 403 from the fetcher; do not force them unless a direct storage URL is available.
+- A Sedgwick owned-site pass added or enriched Cambridge-Lexington, Evergreen, Casa Bella, Reflection Ridge, Wyndham Creek, and Forest Oaks. Important correction: do not run broad `probe(lead)` on document-rich HOA websites unless you are ready to clean the result, because the current harvester banks every linked PDF, including newsletters, minutes, forms, budgets, and pool/rental documents. Prefer preflighting links and passing only whitelisted direct PDF URLs for bylaws, declarations, covenants, articles, restrictions, rules, regulations, amendments, and architectural guidelines. This pass was cleaned in GCS after overharvesting.
 
 Lower-yield or avoid:
 
