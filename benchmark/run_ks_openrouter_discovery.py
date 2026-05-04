@@ -756,10 +756,10 @@ def model_triage(
             decisions = data.get("decisions", [])
         else:
             decisions = []
-        for d in decisions:
+        for decision_pos, d in enumerate(decisions):
             if not isinstance(d, dict):
                 continue
-            idx = int(d.get("index", -1))
+            idx = int(d.get("index", decision_pos if isinstance(data, list) else -1))
             if idx < 0 or idx >= len(batch):
                 continue
             candidate = batch[idx]
