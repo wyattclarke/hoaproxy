@@ -65,7 +65,13 @@ BLOCKED_HOST_RE = re.compile(
     r"(^|\.)("
     r"facebook|hopb|hoamanagement|steadily|doorloop|nolo|rocketlawyer|avvo|"
     r"hoa-usa|runhoa|maxfieldhoa|fairwaykansas|kslegislature|kscourts|"
-    r"sedgwickcounty|jocogov|wycokck"
+    r"sedgwickcounty|jocogov|wycokck|homes|zillow|redfin|realtor|trulia|"
+    r"coldwellbanker|estately|remax|nexthomeprofessionals|innovationskc|"
+    r"gadwoodgroup|huffgroupkc|wardellholmes|lynchresidential|"
+    r"propublica|justanswer|quora|reddit|instagram|yelp|kansascity|kcur|"
+    r"npr|findlaw|caselaw|trellis|studicata|uslegalforms|martinpringle|"
+    r"kcrealestatelawyer|realestatepaperpushers|consumer(?:affairs)?|"
+    r"civicweb|granicus|ecode360"
     r")\.",
     re.IGNORECASE,
 )
@@ -76,7 +82,9 @@ OUT_OF_SCOPE_RE = re.compile(
 )
 JUNK_RE = re.compile(
     r"\b(minutes?|agenda|newsletter|budget|financial|rental|apartments?|lease|"
-    r"job|court|lawsuit|coupon|pool pass|directory|roster)\b",
+    r"job|court|lawsuit|coupon|pool pass|directory|roster|for sale|sold|"
+    r"realtor|real estate|transaction coordinator|earnest money|listing|"
+    r"city council|planning commission|case law|tax filing|form 990)\b",
     re.IGNORECASE,
 )
 COMMUNITY_HOST_RE = re.compile(
