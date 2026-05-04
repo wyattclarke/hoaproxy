@@ -134,7 +134,12 @@ def validate_batch(
         "candidates": [_compact_candidate(row, idx) for idx, row in enumerate(batch)],
     }
     data, usage = chat_json(orc, model, prompt, max_tokens=2200)
-    decisions = data.get("decisions", data if isinstance(data, list) else [])
+    if isinstance(data, list):
+        decisions = data
+    elif isinstance(data, dict):
+        decisions = data.get("decisions", [])
+    else:
+        decisions = []
     kept: list[dict[str, Any]] = []
     for decision in decisions:
         if not isinstance(decision, dict) or not decision.get("keep"):
@@ -174,11 +179,20 @@ def cmd_validate_leads(args: argparse.Namespace) -> int:
             kept, info = validate_batch(orc, model, batch, state=args.state, county=args.county)
         except Exception as exc:
             if args.fallback_model and args.fallback_model != model:
-                kept, info = validate_batch(orc, args.fallback_model, batch, state=args.state, county=args.county)
-                info["fallback_from"] = model
-                info["model"] = args.fallback_model
+                try:
+                    kept, info = validate_batch(orc, args.fallback_model, batch, state=args.state, county=args.county)
+                    info["fallback_from"] = model
+                    info["model"] = args.fallback_model
+                except Exception as fallback_exc:
+                    kept = []
+                    info = {
+                        "error": str(exc),
+                        "fallback_model": args.fallback_model,
+                        "fallback_error": str(fallback_exc),
+                    }
             else:
-                raise
+                kept = []
+                info = {"error": str(exc)}
         kept_all.extend(kept)
         audit.append({"start": start, "count": len(batch), "kept": len(kept), **info})
     seen: set[tuple[str, str]] = set()
