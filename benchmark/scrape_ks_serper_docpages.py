@@ -63,7 +63,7 @@ PRIVATE_RE = re.compile(
 )
 BLOCKED_HOST_RE = re.compile(
     r"(^|\.)("
-    r"facebook|hopb|hoamanagement|steadily|doorloop|nolo|rocketlawyer|avvo|"
+    r"facebook|tiktok|hopb|hoamanagement|steadily|doorloop|nolo|rocketlawyer|avvo|"
     r"hoa-usa|runhoa|maxfieldhoa|fairwaykansas|kslegislature|kscourts|"
     r"sedgwickcounty|jocogov|wycokck|homes|zillow|redfin|realtor|trulia|"
     r"coldwellbanker|estately|remax|nexthomeprofessionals|innovationskc|"
@@ -71,6 +71,8 @@ BLOCKED_HOST_RE = re.compile(
     r"rabbu|whitetailproperties|permitsguide|activerain|lightslocal|"
     r"urbancoolhomes|homefrontflinthills|cali|encodeplus|sec|nepis|"
     r"tharealty|konradlorenz|centrodeservicios|matchhoa|homeadvisor|"
+    r"bashkc|reecenichols|integrityfloridarealty|locatekc|yourkwoffice|"
+    r"kirkhomeandland|55places|rayhomeskc|century21|compass|"
     r"drbrianjonesrealtor|askarealtor|c21community|countyhomecosts|"
     r"resourceks|prospeo|propfusion|best-us-lawyers|home4rent|"
     r"homeownersassociationdirectory|hoa-community|communitypay|zoominfo|"
@@ -78,8 +80,9 @@ BLOCKED_HOST_RE = re.compile(
     r"npr|findlaw|caselaw|trellis|studicata|uslegalforms|martinpringle|"
     r"kcrealestatelawyer|realestatepaperpushers|consumer(?:affairs)?|"
     r"civicweb|civicplus|granicus|ecode360|agendasuite|hellogravel|archive|"
-    r"pdfcoffee|issuu|yumpu|dokumen|casemine|indeed|salinahomes|salina-tv|"
-    r"websiteexpert|dpattersonelectric|pflbas"
+    r"pdfcoffee|scribd|fliphtml5|publizr|issuu|yumpu|dokumen|casemine|indeed|"
+    r"salinahomes|salina-tv|websiteexpert|dpattersonelectric|pflbas|"
+    r"bankrupt|legalbeagle|city-data|kansaspublicradio|nationalnotary"
     r")\.",
     re.IGNORECASE,
 )
