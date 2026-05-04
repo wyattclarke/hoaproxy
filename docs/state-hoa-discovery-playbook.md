@@ -174,6 +174,18 @@ inurl:/wp-content/uploads/ "Kansas" "homeowners association" bylaws
 inurl:/wp-content/uploads/ "Kansas" "homes association" restrictions
 ```
 
+For recorded governing-document phrase searches:
+
+```text
+filetype:pdf "Kansas not-for-profit corporation" "Homeowners Association"
+filetype:pdf "Kansas non-profit corporation" "Homes Association"
+filetype:pdf "Register of Deeds" "Johnson County, Kansas" "Homes Association"
+filetype:pdf "Sedgwick County, Kansas" "Declaration of Covenants" "Homeowners Association"
+filetype:pdf "Johnson County, Kansas" "Declaration of Restrictions" "Homes Association"
+```
+
+This is high precision because bylaws, declarations, and amendments often contain formal corporation language and county recording language. For another state, translate the corporation phrase and swap in the target state/county names.
+
 For independent community domains after a productive metro is found:
 
 ```text
@@ -275,6 +287,7 @@ High-yield:
 - Public community websites with pages named documents, governing documents, bylaws, restrictions, deed restrictions, HOA documents.
 - Direct `filetype:pdf` city searches once they are cleaned before probing. Good pattern: search finds the PDF, the probe crawls the same HOA-owned host and banks the rest of the public document library.
 - Host-pattern searches for public document systems, especially `gogladly.com/connect/document`, `hmsft-doc`, `/file/document/`, communitysite file URLs, and HOA WordPress uploads.
+- Legal/county phrase searches over recorded documents. In Kansas, `Kansas not-for-profit corporation`, `Kansas non-profit corporation`, `Register of Deeds`, and county-specific `Declaration of Restrictions` searches were the cleanest late-stage expansion source.
 - Deterministic management/association directories when available.
 - OpenRouter validation before probing noisy candidates.
 

@@ -7,9 +7,9 @@ User instruction: continue autonomously for KS. Do not stop at checkpoints. Comm
 ## Current State
 
 - Bank prefix: `gs://hoaproxy-bank/v1/KS/`
-- Current count: 420 manifests, 1,023 PDFs
+- Current count: 447 manifests, 1,132 PDFs
 - OpenRouter credits: `$7.14 / $10` used, about `$2.86` remaining
-- Active KS work: `ks_serper_docpages_host_patterns_2_2p_1` may be running. It is a deterministic Serper expansion over two result pages for high-yield host patterns (`gogladly`, `eneighbors`, `hmsft-doc`, `/file/document/`, and WordPress uploads).
+- Active KS work: none at last process check.
 - An unrelated NC benchmark process may be running; leave it alone.
 - Do not commit `benchmark/results/`, `benchmark/run_benchmark.sh`, or `benchmark/task.txt`.
 - `hoaware/discovery/__main__.py` was already dirty and should not be touched unless specifically needed.
@@ -31,6 +31,8 @@ Highest-yield source families:
 - County-strict independent-domain passes for Sedgwick, Douglas, Riley/Pottawatomie, Leavenworth, Butler.
 - Direct `filetype:pdf` city searches for large Kansas HOA cities, followed by manual cleanup and grouped probes. The first cleaned batch banked Willowbrooke Villas, Amber Meadows, Meadows at Shawnee, Equestrian Estates, Foxfire Addition, Avenbury Lakes, Montclair, Andover Forest, Deer Valley, Battle Creek, Sycamore Village, Reflection Ridge, Shadow Rock, and Prairie Creek 6th.
 - Host-pattern searches with `inurl:/file/document/`, `inurl:hmsft-doc`, `inurl:/wp-content/uploads/`, `site:gogladly.com/connect/document`, and `site:pmtechsol.sfo2.cdn.digitaloceanspaces.com/hmsft-documents`. This banked Maple Crest, Crescent Lakes, Primrose, Hallbrook East Village, Falcon Ridge, Woodland Park, Southwood, Lake Kahola, Wyndham Heights, Wildcat Woods, Cedar Ridge, Sterling East, Quivira Falls, Brooks Farm, Holly Ridge, Willow Ridge, Ryan's Run, and Milburn Fields.
+- Legal-phrase PDF searches with `Kansas not-for-profit corporation`, `Kansas non-profit corporation`, `Register of Deeds`, and county names. This banked high-quality Johnson/Sedgwick/secondary-city documents including Seven Hills, Arlington Estates, St. Andrews Place, Walnut Creek Estates, Oak Hill, Wycliff, Normandy Place, Homestead Woods, Park Glen Estates, The Cedars, Kensington Valley, Tanglewood Lake, Copper Creek, Falcon Valley Villas, Foxfield Village, and Red Oak Hills.
+- Secondary-city direct PDF search can still work when constrained by host/document phrases. Lansing Ridge II and Bel-Aire Estates were high-yield crawls; broad secondary-city search without those constraints remains noisy.
 
 Lower-yield or avoid:
 
@@ -71,7 +73,7 @@ ps -fA | rg 'hoaware.discovery|run_ks_openrouter_discovery|scrape_ks_serper|open
   - Douglas/Lawrence produced very high PDF yield from Westwood Hills.
   - Riley/Manhattan produced Nelson's Ridge and Parkway Village.
 - Use manual deterministic selection when raw host list has only a few obvious HOA-owned domains; skip OpenRouter in that case.
-- Inspect the host distribution for `host_patterns_2_2p_1`, dedupe against obvious already-banked slugs, then repeat the cleaned JSONL + isolated probe pattern for strong HOA-owned hosts. Avoid newsletters, forms, out-of-state hits, and generic `homesassociation.org` records unless the specific HOA identity is clear.
+- Next good branch: continue legal-phrase/county-phrase expansion before broad county sweeps. Try more county names and phrases like `Declaration of Restrictions`, `Homes Association Declaration`, `Register of Deeds`, and `Kansas not-for-profit corporation`. Avoid newsletters, forms, out-of-state hits, and generic `homesassociation.org` records unless the specific HOA identity is clear.
 
 ## Autonomy Reminder
 
