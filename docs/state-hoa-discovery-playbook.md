@@ -259,6 +259,7 @@ Low-yield or risky:
 
 - Broad statewide search.
 - Broad county sweeps after the main metro counties are exhausted. Several Kansas counties produced candidates but zero validated leads.
+- HA-KC pages as currently probed. They create many plausible HOA manifests but mostly expose skipped/non-PDF links; use them as lead discovery unless a custom parser is added.
 - Exact HOA-name search from city lists without document-page hints.
 - Raw direct-PDF search without strong name evidence.
 - Generic legal-info sites and government packets.
