@@ -299,3 +299,26 @@ Useful result inspection:
 ```bash
 find benchmark/results -maxdepth 2 -name summary.json -o -name '*_audit.json'
 ```
+
+## Autonomy Failure Mode
+
+Do not treat the assistant turn boundary as a blocker. A final response stops the current execution turn; it is not itself a valid reason to stop autonomous scraping.
+
+If the user has asked for autonomous scraping, only send a final response when there is a real blocker, the explicit budget is exhausted, or the user asks for status. Otherwise:
+
+1. Check for active scrape/probe/model processes.
+2. Record any useful handoff state in committed docs or small source changes.
+3. Launch the next concrete scrape/probe/validation step.
+4. Use short commentary updates while work continues.
+
+Bad pattern:
+
+```text
+Blocked by the turn boundary.
+```
+
+Correct pattern:
+
+```text
+No real blocker; continue with the next county, host family, or probe batch.
+```
