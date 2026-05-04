@@ -7,7 +7,7 @@ User instruction: continue autonomously for KS. Do not stop at checkpoints. Comm
 ## Current State
 
 - Bank prefix: `gs://hoaproxy-bank/v1/KS/`
-- Current count: 531 manifests, 1,261 PDFs
+- Current count: 539 manifests, 1,274 PDFs
 - OpenRouter credits: about `$9.61 / $10` used, about `$0.39` remaining
 - Active KS work: none at last process check.
 - An unrelated NC benchmark process may be running; leave it alone.
@@ -46,6 +46,7 @@ Highest-yield source families:
 - WordPress/static upload searches are productive but noisy. The latest pass added Windmill Creek, Tyler's Landing, The Moorings 10th, and Oak Cliff. It also surfaced many duplicates and out-of-state hits; inspect PDF text for state before banking.
 - GoGladly source search is low-volume but still useful. It added Southcrest Addition and a cleaner Douglas County Meadows Place declaration. Skip Longwood reminder/history PDFs and estate-sale forms even when they mention Kansas.
 - Broad Kansas-owned/WordPress domain searching added Willow Springs and Prairie Lake Estates, but most results were duplicates or non-governing PDFs. Use it only after source-family searches and inspect page text for out-of-state or newsletter/minutes hits.
+- A deeper hmsft/pmtech pass is still worthwhile, but it is now mostly enriching existing communities rather than adding many new manifests. The latest selected pass added or enriched Gramercy Park, Villas at Southpointe, Prairie Point, Preserve at Clear Creek, Foxwood Ranch, Deer Valley, Seven Hills, Copper Creek, Willowbrooke Villas, Melrose Reserve, Southwood, Foxborough, Montrachet, Nottington Creek, Nottingham Downs Duplex, London Park, and Persimmon Pointe. Some `hmsft-doc` URLs on community domains can show as PDF results in search but return 403 from the fetcher; do not force them unless a direct storage URL is available.
 
 Lower-yield or avoid:
 
