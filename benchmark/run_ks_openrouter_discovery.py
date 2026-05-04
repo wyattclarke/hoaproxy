@@ -74,7 +74,9 @@ GENERIC_NAME_RE = re.compile(
     re.IGNORECASE,
 )
 REJECT_RATIONALE_RE = re.compile(
-    r"\b(not\s+(?:a\s+)?kansas|not\s+in\s+kansas|missouri|florida|palm beach county|newsletter|meeting minutes)\b",
+    r"\b(not\s+(?:a\s+)?kansas|not\s+in\s+kansas|missouri|florida|palm beach county|"
+    r"newsletter|meeting minutes|court|opinion|government|real estate|title commitment|"
+    r"financial|brokerage|license|fair housing notice)\b",
     re.IGNORECASE,
 )
 PRIVATE_RE = re.compile(
@@ -756,14 +758,15 @@ def model_triage(
             decisions = data.get("decisions", [])
         else:
             decisions = []
+        ordered_decisions = isinstance(data, list) and len(decisions) == len(batch)
         for decision_pos, d in enumerate(decisions):
             if not isinstance(d, dict):
                 continue
-            idx = int(d.get("index", decision_pos if isinstance(data, list) else -1))
+            idx = int(d.get("index", decision_pos if ordered_decisions else -1))
             if idx < 0 or idx >= len(batch):
                 continue
             candidate = batch[idx]
-            decision = str(d.get("decision") or "").strip().lower()
+            decision = str(d.get("decision") or d.get("action") or d.get("status") or "").strip().lower()
             keep_value = d.get("keep")
             keep = bool(keep_value) or decision in {"keep", "accept", "accepted", "yes", "true"}
             category = str(d.get("category") or "").strip().lower()
