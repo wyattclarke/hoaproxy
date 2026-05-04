@@ -161,6 +161,36 @@ def test_probe_tries_validated_docpage_url_as_pdf(monkeypatch, stub_server):
     assert calls[0]["documents"][0].source_url.endswith("/DocumentCenter/View/123/Declaration")
 
 
+def test_probe_gets_pdf_when_head_404(monkeypatch, stub_server):
+    base_url, set_routes = stub_server
+    set_routes({
+        "/DocumentCenter/View/404-head": (200, "application/pdf", _MINIMAL_PDF),
+    })
+    orig_do_head = StubHandler.do_HEAD
+
+    def patched_head(self):
+        if self.path == "/DocumentCenter/View/404-head":
+            self.send_error(404)
+        else:
+            orig_do_head(self)
+
+    StubHandler.do_HEAD = patched_head
+    try:
+        calls = _patch_bank(monkeypatch)
+        lead = Lead(
+            name="Test HOA",
+            state="VA",
+            website=base_url + "/DocumentCenter/View/404-head",
+            source="search-serper-ks-docpages",
+            source_url="x",
+        )
+        result = probe(lead)
+        assert result.documents_banked == 1
+        assert calls[0]["documents"][0].source_url.endswith("/DocumentCenter/View/404-head")
+    finally:
+        StubHandler.do_HEAD = orig_do_head
+
+
 def test_probe_html_disguised_as_pdf_recorded_as_skipped(monkeypatch, stub_server):
     base_url, set_routes = stub_server
     set_routes({

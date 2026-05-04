@@ -287,7 +287,7 @@ def _fetch_pdf(session: requests.Session, url: str, link_text: str) -> _PdfFetch
         head = session.head(url, timeout=PDF_HEAD_TIMEOUT, allow_redirects=True)
         if head.status_code >= 400:
             # Some servers don't support HEAD — fall through to GET
-            if head.status_code not in (403, 405, 501):
+            if head.status_code not in (403, 404, 405, 501):
                 fetch.skip_reason = f"head_status_{head.status_code}"
                 return fetch
         size = int(head.headers.get("Content-Length") or 0)
