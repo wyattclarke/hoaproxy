@@ -7,7 +7,7 @@ User instruction: continue autonomously for KS. Do not stop at checkpoints. Comm
 ## Current State
 
 - Bank prefix: `gs://hoaproxy-bank/v1/KS/`
-- Current count: 474 manifests, 1,178 PDFs
+- Current count: 478 manifests, 1,183 PDFs
 - OpenRouter credits: `$7.14 / $10` used, about `$2.86` remaining
 - Active KS work: none at last process check.
 - An unrelated NC benchmark process may be running; leave it alone.
@@ -34,6 +34,7 @@ Highest-yield source families:
 - Legal-phrase PDF searches with `Kansas not-for-profit corporation`, `Kansas non-profit corporation`, `Register of Deeds`, and county names. This banked high-quality Johnson/Sedgwick/secondary-city documents including Seven Hills, Arlington Estates, St. Andrews Place, Walnut Creek Estates, Oak Hill, Wycliff, Normandy Place, Homestead Woods, Park Glen Estates, The Cedars, Kensington Valley, Tanglewood Lake, Copper Creek, Falcon Valley Villas, Foxfield Village, and Red Oak Hills.
 - Secondary-city direct PDF search can still work when constrained by host/document phrases. Lansing Ridge II and Bel-Aire Estates were high-yield crawls; broad secondary-city search without those constraints remains noisy.
 - Broader legal/amendment phrase searches continued to add coverage after the first legal pass. Useful phrases included `Homes Association Declaration`, `Articles of Incorporation`, `Amendment to Declaration`, `Restated Bylaws`, `Supplemental Declaration`, and county-specific `Register of Deeds` wording. These added Summerfield Farm, Rock Creek Estates, Homestead Creek, Avignon Villa, Foxborough, Timber Creek III, Hawthorne Valley, Comotara, Gleason Glen, Pheasant Run, Grand Mere, Woodland Ridge, Rockwood Estates, Tamarind, Hampton Place, High Point, Wilderness, Wilshire, The Oaks, West Ridge, Boulder Hills, Melrose Reserve, Falcon Lakes, and Running Horse.
+- A small OpenRouter/Gemini county-query pass for Wyandotte was noisy but found useful Kansas-side leads after manual cleanup: WestLake, Erika's Place, and Riverview Bluffs banked PDFs; Prairie Oaks and Country Side created manifests but did not produce usable PDFs from the probed pages.
 
 Lower-yield or avoid:
 
@@ -74,7 +75,7 @@ ps -fA | rg 'hoaware.discovery|run_ks_openrouter_discovery|scrape_ks_serper|open
   - Douglas/Lawrence produced very high PDF yield from Westwood Hills.
   - Riley/Manhattan produced Nelson's Ridge and Parkway Village.
 - Use manual deterministic selection when raw host list has only a few obvious HOA-owned domains; skip OpenRouter in that case.
-- Next good branch: continue legal-phrase/county-phrase expansion before broad county sweeps, but expect more repeats after the articles/amendments page-two pass. Good next pivots are source-specific searches on `eneighbors.com` public-document IDs with formal legal phrases, and county-specific searches for underrepresented counties. Avoid newsletters, forms, out-of-state hits, and generic `homesassociation.org` records unless the specific HOA identity is clear.
+- Next good branch: deterministic source-specific searches are still safer than more OpenRouter. OpenRouter usage was about `$8.33 / $10` at the last check, possibly including unrelated benchmark activity. Good next pivots are underrepresented county phrase searches and targeted source hosts found from successful probes. Avoid newsletters, forms, out-of-state hits, and generic `homesassociation.org` records unless the specific HOA identity is clear.
 
 ## Autonomy Reminder
 
