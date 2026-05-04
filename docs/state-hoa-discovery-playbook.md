@@ -242,6 +242,16 @@ OPENROUTER_TIMEOUT_SECONDS=80 python benchmark/run_ks_openrouter_discovery.py \
 
 Use this only after page discovery flattens, because it is more likely to infer names from PDFs and needs stricter triage.
 
+For high-signal `filetype:pdf` search runs, a cheaper deterministic variant can beat LLM triage:
+
+1. Run Serper with `--include-direct-pdfs`.
+2. Inspect host distribution and only keep HOA-owned or clearly community-specific hosts.
+3. Manually clean malformed names and group multiple PDFs under one `Lead`.
+4. Probe grouped leads one at a time with a subprocess timeout.
+5. If a host times out while crawling its homepage, retry with the same `pre_discovered_pdf_urls` and `website=null` so the probe fetches only the known PDFs.
+
+This worked well in Kansas for public HOA document libraries such as Meadows at Shawnee, Montclair, Deer Valley, Reflection Ridge, Shadow Rock, and Andover Forest. It avoided spending OpenRouter tokens on obvious direct PDF hits while still keeping bad generic names out of the bank.
+
 ## Current Kansas Lessons
 
 High-yield:
@@ -252,6 +262,7 @@ High-yield:
 - Municipal document centers that serve PDF bytes from non-`.pdf` URLs, especially `DocumentCenter/View` and archive URLs.
 - County/city focused queries for finding the first productive hosts.
 - Public community websites with pages named documents, governing documents, bylaws, restrictions, deed restrictions, HOA documents.
+- Direct `filetype:pdf` city searches once they are cleaned before probing. Good pattern: search finds the PDF, the probe crawls the same HOA-owned host and banks the rest of the public document library.
 - Deterministic management/association directories when available.
 - OpenRouter validation before probing noisy candidates.
 
@@ -262,6 +273,7 @@ Low-yield or risky:
 - HA-KC pages as currently probed. They create many plausible HOA manifests but mostly expose skipped/non-PDF links; use them as lead discovery unless a custom parser is added.
 - Exact HOA-name search from city lists without document-page hints.
 - Raw direct-PDF search without strong name evidence.
+- Raw direct-PDF search without name cleanup. The search hit may contain the right PDF but the inferred HOA name can be generic or malformed.
 - Generic legal-info sites and government packets.
 - Querying too much with cheap models that produce bloated completions.
 
