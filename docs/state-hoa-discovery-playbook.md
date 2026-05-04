@@ -26,7 +26,7 @@ Key files:
 
 ## Recommended Workflow For A New State
 
-Start county by county. Statewide queries are too noisy and often find legal-info pages, news articles, government PDFs, and neighboring-state HOAs.
+Start county by county, then pivot into host-focused search once a productive host appears. Statewide queries are too noisy when they are broad, but statewide searches constrained to a high-signal host pattern can be very productive.
 
 Recommended first counties are the highest HOA-density counties, usually suburbs around the largest metros.
 
@@ -38,6 +38,14 @@ For each county:
 4. Probe only validated leads.
 5. If page probes do not find PDFs, run direct-PDF OpenRouter triage for that county.
 6. Record yield and move to the next county.
+
+After the first productive counties, switch from county sweeps to source-family expansion:
+
+1. Identify hosts that actually banked documents.
+2. Search those hosts directly with city/state/document terms.
+3. Deduplicate already-seen URLs before validation.
+4. Validate the new candidates with OpenRouter.
+5. Probe one lead at a time with a timeout if the host sometimes hangs.
 
 ## Environment
 
@@ -121,6 +129,42 @@ benchmark/results/ks_serper_docpages_{run-id}/summary.json
 
 This file is noisy by design. Do not blindly probe it. It can include legal-info pages, news, government pages, malformed HOA names, and out-of-state pages.
 
+## Host-Focused Expansion
+
+When a source family starts yielding, focus on it directly. This was the biggest Kansas improvement.
+
+For eNeighbors-style public pages:
+
+```text
+site:eneighbors.com Kansas HOA documents covenants
+site:eneighbors.com Kansas "Homeowners Association" "documents"
+site:eneighbors.com/!h_ "public-document" "Kansas" "Homeowners Association"
+site:eneighbors.com/p/ "Overland Park" HOA
+site:eneighbors.com/p/ "Olathe" HOA
+site:eneighbors.com/p/ "Leawood" HOA
+```
+
+For municipal document centers:
+
+```text
+site:.gov/DocumentCenter/View Kansas "Homeowners Association" "Declaration"
+site:.gov/DocumentCenter/View Kansas "Declaration of Restrictions" subdivision
+site:.gov/AgendaCenter/ViewFile Kansas "Homeowners Association" "Declaration"
+site:bucoks.gov/DocumentCenter/View "Declaration" "Association"
+site:manhattanks.gov/DocumentCenter/View "Homeowners Association"
+site:wichita.gov/Archive.aspx "Homeowners Association"
+```
+
+For management-company community pages:
+
+```text
+site:cobaltreks.com/hoa-management "HOA" "Covenants"
+site:cobaltreks.com/hoa-management "Declaration" "HOA"
+site:cobaltreks.com/hoa-management "Kansas" "Homeowners Association"
+```
+
+Always dedupe against previous validated/probed URLs before validation. A cheap local dedupe step saved model spend in Kansas once eNeighbors started returning repeats.
+
 ## OpenRouter Lead Validation
 
 Validate noisy candidates before banking:
@@ -153,6 +197,8 @@ Probe only the validated lead file:
 python -m hoaware.discovery --json probe-batch \
   benchmark/results/ks_sedgwick_gemini_validated_1.jsonl
 ```
+
+For hosts that can hang, probe one lead at a time with a subprocess timeout. eNeighbors and some WordPress sites can otherwise stop a long batch on one URL.
 
 Count current bank coverage:
 
@@ -190,7 +236,10 @@ Use this only after page discovery flattens, because it is more likely to infer 
 
 High-yield:
 
-- County/city focused queries.
+- Host-focused expansion after the first hit. eNeighbors was much better than continuing low-density county sweeps.
+- eNeighbors public-document URLs and `/p/{community}` pages. Many direct public-document URLs bank exactly one PDF; community pages can bank multiple PDFs.
+- Municipal document centers that serve PDF bytes from non-`.pdf` URLs, especially `DocumentCenter/View` and archive URLs.
+- County/city focused queries for finding the first productive hosts.
 - Public community websites with pages named documents, governing documents, bylaws, restrictions, deed restrictions, HOA documents.
 - Deterministic management/association directories when available.
 - OpenRouter validation before probing noisy candidates.
@@ -198,6 +247,7 @@ High-yield:
 Low-yield or risky:
 
 - Broad statewide search.
+- Broad county sweeps after the main metro counties are exhausted. Several Kansas counties produced candidates but zero validated leads.
 - Exact HOA-name search from city lists without document-page hints.
 - Raw direct-PDF search without strong name evidence.
 - Generic legal-info sites and government packets.
@@ -237,4 +287,3 @@ Useful result inspection:
 ```bash
 find benchmark/results -maxdepth 2 -name summary.json -o -name '*_audit.json'
 ```
-
