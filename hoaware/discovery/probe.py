@@ -206,6 +206,22 @@ def _looks_like_govdoc(url: str, link_text: str) -> bool:
     return bool(_GOVDOC_KEYWORDS.search(url) or _GOVDOC_KEYWORDS.search(link_text or ""))
 
 
+def _should_try_lead_url_as_pdf(lead: Lead, html: str | None, is_walled: bool) -> bool:
+    """Validated discovery leads sometimes point directly at a PDF-serving URL.
+
+    Some public document-center URLs do not end in .pdf, so harvesting HTML
+    misses them. Trying the lead URL as a PDF is cheap because _fetch_pdf()
+    verifies PDF magic bytes before banking anything.
+    """
+    if not lead.website or is_walled or _SKIP_URL_PATTERNS.search(lead.website):
+        return False
+    if _looks_like_pdf_url(lead.website) or _looks_like_govdoc(lead.website, lead.name):
+        return True
+    if html is None and "docpages" in (lead.source or "").lower():
+        return True
+    return False
+
+
 def _harvest_pdf_candidates(html: str, base_url: str) -> list[tuple[str, str]]:
     """Return list of (absolute_url, link_text) for PDF candidates."""
     soup = BeautifulSoup(html, "html.parser")
@@ -387,6 +403,8 @@ def probe(
     candidates: list[tuple[str, str]] = []
     if pre_discovered_pdf_urls:
         candidates = [(u, "") for u in pre_discovered_pdf_urls]
+    if _should_try_lead_url_as_pdf(lead, html, is_walled):
+        candidates.append((lead.website, lead.name))
     if html and not is_walled:
         homepage_candidates = _harvest_pdf_candidates(html, lead.website)
         for sub_url in _harvest_doc_subpages(html, lead.website):

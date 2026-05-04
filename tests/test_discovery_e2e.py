@@ -142,6 +142,25 @@ def test_probe_finds_pdf_and_invokes_bank(monkeypatch, stub_server):
     assert calls[0]["documents"][0].source_url.endswith("/declaration.pdf")
 
 
+def test_probe_tries_validated_docpage_url_as_pdf(monkeypatch, stub_server):
+    base_url, set_routes = stub_server
+    set_routes({
+        "/DocumentCenter/View/123/Declaration": (200, "application/pdf", _MINIMAL_PDF),
+    })
+    calls = _patch_bank(monkeypatch)
+    lead = Lead(
+        name="Test HOA",
+        state="VA",
+        website=base_url + "/DocumentCenter/View/123/Declaration",
+        source="search-serper-ks-docpages",
+        source_url="x",
+    )
+    result = probe(lead)
+    assert result.homepage_fetched is False
+    assert result.documents_banked == 1
+    assert calls[0]["documents"][0].source_url.endswith("/DocumentCenter/View/123/Declaration")
+
+
 def test_probe_html_disguised_as_pdf_recorded_as_skipped(monkeypatch, stub_server):
     base_url, set_routes = stub_server
     set_routes({
