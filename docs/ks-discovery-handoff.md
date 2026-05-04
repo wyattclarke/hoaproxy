@@ -7,7 +7,7 @@ User instruction: continue autonomously for KS. Do not stop at checkpoints. Comm
 ## Current State
 
 - Bank prefix: `gs://hoaproxy-bank/v1/KS/`
-- Current count: 547 manifests, 1,286 PDFs
+- Current count: 548 manifests, 1,307 PDFs
 - OpenRouter credits: about `$9.61 / $10` used, about `$0.39` remaining
 - Active KS work: none at last process check.
 - An unrelated NC benchmark process may be running; leave it alone.
@@ -50,6 +50,7 @@ Highest-yield source families:
 - A Sedgwick owned-site pass added or enriched Cambridge-Lexington, Evergreen, Casa Bella, Reflection Ridge, Wyndham Creek, and Forest Oaks. Important correction: do not run broad `probe(lead)` on document-rich HOA websites unless you are ready to clean the result, because the current harvester banks every linked PDF, including newsletters, minutes, forms, budgets, and pool/rental documents. Prefer preflighting links and passing only whitelisted direct PDF URLs for bylaws, declarations, covenants, articles, restrictions, rules, regulations, amendments, and architectural guidelines. This pass was cleaned in GCS after overharvesting.
 - A safer whitelisted owned-site pass over county lead leftovers added or enriched Westwood Hills, Woods on 19th, West Glen, Wyndham Hill, and Timber Creek III. The count increase was modest because several were already present, but the method is good: preflight candidate sites, whitelist direct governing PDFs, then run direct-only probes. Falcon Lakes exposed many high-value direct PDFs, but its `editor_upload` path is robots-disallowed, so leave it skipped.
 - A follow-up whitelisted pass added or enriched Tatarrax Hills, Parkway Village, and Ginger Creek. This reinforces that county-by-county owned-site mining is now better than broad search: many useful PDFs are on ordinary HOA websites, but the page must be link-preflighted so only governing PDFs are sent to the bank.
+- Public ZIP archives can be high-yield when clearly labeled. Pheasant Run Condominiums exposed `DeclarationBylaws.zip`; after verifying robots and inspecting the archive in `/tmp`, bank only the amendment, articles, bylaws, and declaration PDFs, skipping management agreements and summaries. This added 21 PDFs in one clean pass.
 
 Lower-yield or avoid:
 
