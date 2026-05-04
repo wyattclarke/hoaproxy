@@ -186,6 +186,15 @@ filetype:pdf "Johnson County, Kansas" "Declaration of Restrictions" "Homes Assoc
 
 This is high precision because bylaws, declarations, and amendments often contain formal corporation language and county recording language. For another state, translate the corporation phrase and swap in the target state/county names.
 
+For late-stage expansion, add amendment/article variants:
+
+```text
+filetype:pdf "Articles of Incorporation" "{County} County, {STATE}" "Homeowners Association"
+filetype:pdf "Amendment to Declaration" "{County} County, {STATE}" "Homes Association"
+filetype:pdf "Restated Bylaws" "{STATE}" "Homeowners Association"
+filetype:pdf "Supplemental Declaration" "{STATE}" "Homes Association"
+```
+
 For independent community domains after a productive metro is found:
 
 ```text
@@ -288,6 +297,7 @@ High-yield:
 - Direct `filetype:pdf` city searches once they are cleaned before probing. Good pattern: search finds the PDF, the probe crawls the same HOA-owned host and banks the rest of the public document library.
 - Host-pattern searches for public document systems, especially `gogladly.com/connect/document`, `hmsft-doc`, `/file/document/`, communitysite file URLs, and HOA WordPress uploads.
 - Legal/county phrase searches over recorded documents. In Kansas, `Kansas not-for-profit corporation`, `Kansas non-profit corporation`, `Register of Deeds`, and county-specific `Declaration of Restrictions` searches were the cleanest late-stage expansion source.
+- Articles/amendments/restatement phrases are lower volume but still useful after the main recorded-declaration phrases flatten.
 - Deterministic management/association directories when available.
 - OpenRouter validation before probing noisy candidates.
 
