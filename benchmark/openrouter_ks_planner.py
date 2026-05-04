@@ -126,7 +126,9 @@ def validate_batch(
         "county_focus": county,
         "rules": [
             "Keep only plausible HOA, homes association, homeowners association, condo/townhome association, or property owners association leads in Kansas.",
+            "For this run, require evidence that the lead is in the county focus or one of its cities. Reject generic Kansas leads and leads that are probably from another county.",
             "Reject generic legal-info pages, social posts, management-company marketing pages without a specific community, government pages, and malformed names.",
+            "Reject nonprofit tax filings, ProPublica/IRS pages, real estate listings, law firm pages, newspaper articles, court/case-law pages, and generic HOA explainer pages.",
             "If the name is malformed but the URL/title clearly identifies a community, repair it.",
             "Prefer community document/governing-doc pages over generic home pages.",
             "Return decisions with index, keep, repaired_name, confidence 0-1, reason.",
