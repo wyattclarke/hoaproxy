@@ -7,7 +7,7 @@ User instruction: continue autonomously for KS. Do not stop at checkpoints. Comm
 ## Current State
 
 - Bank prefix: `gs://hoaproxy-bank/v1/KS/`
-- Current count: 707 manifests, 1,587 PDFs
+- Current count: 710 manifests, 1,595 PDFs
 - OpenRouter credits: about `$10.73 / $20` used, about `$9.27` remaining
 - Active KS work: continuing deterministic source-family scraping; no Gemini.
 - An unrelated NC benchmark process may be running; leave it alone.
@@ -80,6 +80,7 @@ Highest-yield source families:
 - `CC&R` / `CCRs` terminology is noisy but worth one pass. It raised KS to 703 manifests and 1,577 PDFs by adding or enriching Tyler's Landing, Lake Chaparral, Stone Canyon, Four Colonies, Lake Elbo, and Station 1. Skip case law, newsletters, sales disclosures, generic manuals, and out-of-state CC&R packets.
 - `Restrictive Covenants` / `Protective Covenants` terminology raised KS to 705 manifests and 1,580 PDFs after cleanup. It added or enriched Wycliff, Vista Oaks, Deerfield Village, and Oak Cliff. A scanned Pottawatomie County protective-covenants packet was removed because the HOA/subdivision name could not be recovered from extractable text or filename; do not keep generic county-named manifests.
 - `Articles of Incorporation`, `By-Laws`, and amended/restated bylaws variants raised KS to 707 manifests and 1,587 PDFs. It added or enriched Rockwood Estates, Ryan's Run, Brookhill, Huntington Place, Foxborough, Crestwood Village, Bel Air Heights, Maple Crest, and Quivira Falls. Lakepointe failed validation and its empty manifest was removed.
+- Amendment-specific queries (`Amendment to Declaration`, `Supplemental Declaration`, `First/Second/Third Amendment`) raised KS to 710 manifests and 1,595 PDFs. They added or enriched Tyler's Landing, Montrachet, Kensington at St. Andrews, Running Horse, Bella Sera, Red Oak Hills, Falcon Ridge Estates, and Cedar Creek. The raw `ksa` slug was repaired to `kensington-at-st-andrews` after checking the site title; keep repairing abbreviated host-derived names before counting them as clean.
 
 Lower-yield or avoid:
 
