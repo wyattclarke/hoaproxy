@@ -142,10 +142,27 @@ deep-legal-1 work: 37 moved to the right county, 11 collisions
 (would have overwritten an existing manifest at the destination),
 276 still unrouted. Bank now at 86 county prefixes.
 
+## Final Run Stats (2026-05-05)
+
+After all passes (initial county sweep, host-family per-county over top
+40 metros, deep legal-phrase #1 + #2, county/city .gov + resort sweep,
+find-owned rounds 2 + 3, owned-domain depth, three backfill passes):
+
+- **770 manifests / 1461 PDFs / 87 county prefixes**
+- ~1.90 PDFs / HOA average (vs. NC=4.05, TN=1.13, KS=2.40)
+- ~$0.30 OpenRouter spent during this run (running total $11.06 of
+  the $20 cap — leaves ~$8.94 for the next state).
+- ~296 manifests still under `_unknown-county/` (mostly malformed
+  legal-phrase-extracted names that the heuristic backfill can't pin
+  to a county; safe per the breadth-over-polish stance).
+- 35 backfill collision cases (same HOA banked under both a clean
+  slug and a malformed legal-phrase slug) need a manual merge pass.
+
 ## Useful Next Branches
 
-- Walk the 11 backfill-2 collision cases by hand: they're the same HOA banked under two slightly different names (one with a clean slug, one with a malformed legal-phrase slug). Merge the two manifests rather than picking one.
-- Run `find_owned_website` again with `--max-pdfs-already 4` to enrich HOAs that we previously enriched once but might still grow.
-- Run `find_owned_website` against the still-unknown county manifests using the HOA name only (no county hint) — sometimes the search nudges Google in a useful direction even without a county.
-- Owned-domain whitelist preflight: walk every banked manifest with `website` set and only one PDF; preflight the documents page and bank only governing-doc URLs. We tried this and it was low-ROI on the current bank because most websites we already crawled, but a second pass after find-owned added new websites might be worthwhile.
-- Second-pass backfill that also reads the PDF text and uses the model only when heuristics fail (cheap, finite scope) — for the remaining ~276 unrouted GA manifests.
+- **Manual merge of backfill collisions** (35 cases now): take the clean-slug manifest as canonical, copy any missing PDFs from the malformed-slug version, then delete the malformed copy. Each is a 2-minute manual diff.
+- **Cobalt-managed HOA index direct fetch** of `https://cobaltreks.com/hoa-management/` (worked well in KS).
+- **Owned-domain whitelist preflight** of the manifests find-owned just enriched — they got new `website` set during the probe; a focused crawl with whitelisted PDF URLs should add depth without polluting with newsletters/forms.
+- **Statewide eNeighbors public-document URL pass** focused on `/p/` community pages rather than search.
+- **PDF-text + model county lookup** for the 296 remaining `_unknown-county/` manifests (would cost ~$0.50 of OpenRouter spend).
+- **Per-HOA Serper search for missing website** for the 510 manifests with no website set at all (the find_owned pass already used HOA name + county, but a second pass without the county hint sometimes finds owned domains the county-restricted search missed).
