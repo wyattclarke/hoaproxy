@@ -1,0 +1,68 @@
+# GA deep legal-phrase pass #2. Different angles to find HOAs we missed.
+
+# --- "Restated Declaration" / "Master Deed" / "Easements" ---
+filetype:pdf "Georgia" "Restated Declaration" "Homeowners Association"
+filetype:pdf "Georgia" "Restated Declaration" "Property Owners Association"
+filetype:pdf "Georgia" "Master Deed" "Condominium" "Georgia"
+filetype:pdf "Georgia" "Easements, Covenants, Conditions" "Homeowners Association"
+filetype:pdf "Georgia" "Reciprocal Easement" "Homeowners Association"
+
+# --- Specific incorporation phrases ---
+filetype:pdf "Georgia" "Articles of Incorporation" "Property Owners"
+filetype:pdf "Georgia" "Restated Articles" "Homeowners Association"
+filetype:pdf "Georgia" "incorporated under the laws of the State of Georgia"
+filetype:pdf "Georgia" "in accordance with the Georgia Property Owners' Association Act"
+filetype:pdf "Georgia" "in accordance with the Georgia Nonprofit Corporation Code" "Homeowners"
+
+# --- More community type suffixes ---
+filetype:pdf "Georgia" "Pointe at" "Homeowners Association" "Declaration"
+filetype:pdf "Georgia" "Villas at" "Homeowners Association" "Declaration"
+filetype:pdf "Georgia" "Club at" "Homeowners Association" "Declaration"
+filetype:pdf "Georgia" "Heights" "Homeowners Association" "Declaration"
+filetype:pdf "Georgia" "Mill" "Homeowners Association" "Declaration"
+filetype:pdf "Georgia" "Run" "Homeowners Association" "Declaration"
+filetype:pdf "Georgia" "Trail" "Homeowners Association" "Declaration"
+filetype:pdf "Georgia" "Bend" "Homeowners Association" "Declaration"
+filetype:pdf "Georgia" "Hollow" "Homeowners Association" "Declaration"
+filetype:pdf "Georgia" "Springs" "Homeowners Association" "Bylaws"
+filetype:pdf "Georgia" "Crossing" "Homeowners Association" "Bylaws"
+filetype:pdf "Georgia" "Ridge" "Homeowners Association" "Bylaws"
+filetype:pdf "Georgia" "Pointe" "Homeowners Association" "Bylaws"
+
+# --- Recorded "Declaration of" ---
+filetype:pdf "Georgia" "Declaration of Building Restrictions"
+filetype:pdf "Georgia" "Declaration of Restrictive Covenants" "Homeowners"
+filetype:pdf "Georgia" "Declaration of Conditions"
+filetype:pdf "Georgia" "Restrictions and Easements" "Homeowners Association"
+
+# --- Specific Architectural / Design / ARC phrases ---
+filetype:pdf "Georgia" "Architectural Review Board" "Homeowners Association"
+filetype:pdf "Georgia" "Architectural Standards" "Homeowners Association"
+filetype:pdf "Georgia" "Design Review Committee" "Homeowners Association"
+filetype:pdf "Georgia" "ARC Application" "Homeowners Association"
+filetype:pdf "Georgia" "Modification Standards" "Homeowners Association"
+
+# --- Per-county more ---
+filetype:pdf "Walton County, Georgia" "Declaration of Covenants"
+filetype:pdf "Newton County, Georgia" "Declaration of Covenants"
+filetype:pdf "Carroll County, Georgia" "Declaration of Covenants"
+filetype:pdf "Bartow County, Georgia" "Declaration of Covenants"
+filetype:pdf "Floyd County, Georgia" "Declaration of Covenants"
+filetype:pdf "Lowndes County, Georgia" "Declaration of Covenants"
+filetype:pdf "Bryan County, Georgia" "Declaration of Covenants"
+filetype:pdf "Effingham County, Georgia" "Declaration of Covenants"
+filetype:pdf "Whitfield County, Georgia" "Declaration of Covenants"
+filetype:pdf "Glynn County, Georgia" "Declaration of Covenants"
+filetype:pdf "Camden County, Georgia" "Declaration of Covenants"
+filetype:pdf "Liberty County, Georgia" "Declaration of Covenants"
+filetype:pdf "Bulloch County, Georgia" "Declaration of Covenants"
+filetype:pdf "Tift County, Georgia" "Declaration of Covenants"
+filetype:pdf "Thomas County, Georgia" "Declaration of Covenants"
+filetype:pdf "Muscogee County, Georgia" "Declaration of Covenants"
+filetype:pdf "Dougherty County, Georgia" "Declaration of Covenants"
+filetype:pdf "Spalding County, Georgia" "Declaration of Covenants"
+filetype:pdf "Troup County, Georgia" "Declaration of Covenants"
+filetype:pdf "Walker County, Georgia" "Declaration of Covenants"
+filetype:pdf "Jackson County, Georgia" "Declaration of Covenants"
+filetype:pdf "Barrow County, Georgia" "Declaration of Covenants"
+filetype:pdf "Rockdale County, Georgia" "Declaration of Covenants"

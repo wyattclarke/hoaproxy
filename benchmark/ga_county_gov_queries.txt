@@ -1,0 +1,88 @@
+# GA county/city .gov sites — many post HOA covenants in their planning
+# / public records / DocumentCenter sections.
+
+site:.gov "Georgia" "Homeowners Association" "Declaration" filetype:pdf
+site:.gov "Georgia" "Homeowners Association" "Bylaws" filetype:pdf
+site:.gov "Georgia" "subdivision" "covenants" filetype:pdf
+site:.gov/DocumentCenter/View "Georgia" "Homeowners Association"
+site:.gov/AgendaCenter/ViewFile "Georgia" "Homeowners Association"
+site:.gov/Archive.aspx "Georgia" "Homeowners Association"
+site:.gov "Georgia" "Property Owners Association" "covenants" filetype:pdf
+
+# Specific county/city .gov sites
+site:fultoncountyga.gov "Homeowners Association" filetype:pdf
+site:fultoncountyga.gov "Declaration" "covenants" filetype:pdf
+site:gwinnettcounty.com "Homeowners Association" filetype:pdf
+site:cobbcounty.org "Homeowners Association" filetype:pdf
+site:dekalbcountyga.gov "Homeowners Association" filetype:pdf
+site:cherokeega.com "Homeowners Association" filetype:pdf
+site:henrycounty-ga.com "Homeowners Association" filetype:pdf
+site:fayettecountyga.gov "Homeowners Association" filetype:pdf
+site:cowetacounty.com "Homeowners Association" filetype:pdf
+site:douglascountyga.gov "Homeowners Association" filetype:pdf
+site:paulding.gov "Homeowners Association" filetype:pdf
+site:forsythco.com "Homeowners Association" filetype:pdf
+site:claytoncountyga.gov "Homeowners Association" filetype:pdf
+site:hallcounty.org "Homeowners Association" filetype:pdf
+site:chathamcounty.org "Homeowners Association" filetype:pdf
+site:augustaga.gov "Homeowners Association" filetype:pdf
+site:columbiacountyga.gov "Homeowners Association" filetype:pdf
+site:bibb.us "Homeowners Association" filetype:pdf
+site:houstoncountyga.org "Homeowners Association" filetype:pdf
+site:newtoncountyga.gov "Homeowners Association" filetype:pdf
+site:cityofatlanta.com "Homeowners Association" filetype:pdf
+site:cityofatlanta.gov "Homeowners Association" filetype:pdf
+site:sandyspringsga.gov "Homeowners Association" filetype:pdf
+site:roswellgov.com "Homeowners Association" filetype:pdf
+site:alpharetta.ga.us "Homeowners Association" filetype:pdf
+site:johnscreekga.gov "Homeowners Association" filetype:pdf
+site:miltonga.gov "Homeowners Association" filetype:pdf
+site:cityofduluth.net "Homeowners Association" filetype:pdf
+site:lawrencevillega.org "Homeowners Association" filetype:pdf
+site:suwanee.com "Homeowners Association" filetype:pdf
+site:peachtreecornersga.gov "Homeowners Association" filetype:pdf
+site:cityofsmyrna.org "Homeowners Association" filetype:pdf
+site:mariettaga.gov "Homeowners Association" filetype:pdf
+site:kennesaw-ga.gov "Homeowners Association" filetype:pdf
+site:cityofdunwoody.com "Homeowners Association" filetype:pdf
+site:brookhavenga.gov "Homeowners Association" filetype:pdf
+site:tuckerga.gov "Homeowners Association" filetype:pdf
+site:woodstockga.gov "Homeowners Association" filetype:pdf
+site:cantonga.gov "Homeowners Association" filetype:pdf
+site:stockbridge-ga.gov "Homeowners Association" filetype:pdf
+site:cityofnewnan.org "Homeowners Association" filetype:pdf
+site:peachtree-city.org "Homeowners Association" filetype:pdf
+site:savannahga.gov "Homeowners Association" filetype:pdf
+site:poolerga.gov "Homeowners Association" filetype:pdf
+site:maconbibb.us "Homeowners Association" filetype:pdf
+site:warnerrobinsga.gov "Homeowners Association" filetype:pdf
+
+# Misc .gov-ish GA
+site:atlantaga.gov "Homeowners Association" filetype:pdf
+site:state.ga.us "Homeowners Association" filetype:pdf
+
+# Vacation / resort / mountain communities
+"Big Canoe" "Property Owners Association" "Declaration" filetype:pdf
+"Lake Burton" "Property Owners Association" "Bylaws" filetype:pdf
+"Lake Rabun" "Property Owners Association" "Declaration" filetype:pdf
+"Lake Lanier" "Homeowners Association" "Declaration" filetype:pdf
+"Lake Oconee" "Homeowners Association" "Declaration" filetype:pdf
+"Reynolds Lake Oconee" "Property Owners Association"
+"Stanley Park" "Georgia" "Property Owners Association" filetype:pdf
+"Bear Lake" "Georgia" "Property Owners Association" filetype:pdf
+"Sky Valley" "Georgia" "Property Owners Association" filetype:pdf
+"Sea Island" "Georgia" "Property Owners Association" filetype:pdf
+"St. Simons" "Georgia" "Property Owners Association" filetype:pdf
+"Skidaway" "Georgia" "Property Owners Association" filetype:pdf
+"Wilmington Island" "Georgia" "Property Owners Association" filetype:pdf
+"Tybee Island" "Georgia" "Homeowners Association" filetype:pdf
+"Ford Plantation" "Georgia" filetype:pdf
+"Reynolds Plantation" "Georgia" filetype:pdf
+"Cuscowilla" "Georgia" filetype:pdf
+
+# Senior / age-restricted communities
+"Georgia" "Active Adult Community" "Homeowners Association" filetype:pdf
+"Georgia" "55 and over" "Homeowners Association" filetype:pdf
+"Sun City Peachtree" "Georgia" filetype:pdf
+"Cresswind" "Georgia" "Homeowners Association" filetype:pdf
+"Del Webb" "Georgia" "Homeowners Association" filetype:pdf
