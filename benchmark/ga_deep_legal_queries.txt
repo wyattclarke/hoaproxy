@@ -1,0 +1,60 @@
+# GA deep legal-phrase pass (statewide). Goes to _unknown-county/
+# initially; backfill will route afterward.
+
+# --- Specific recorded-doc phrases ---
+filetype:pdf "Georgia non-profit corporation" "Property Owners Association"
+filetype:pdf "Georgia non-profit corporation" "Townhome Association"
+filetype:pdf "Georgia non-profit corporation" "Condominium Association"
+filetype:pdf "Georgia non-profit corporation" "Subdivision"
+filetype:pdf "Georgia non-profit corporation" "Community Association"
+filetype:pdf "Georgia nonprofit corporation" "Property Owners Association"
+filetype:pdf "Georgia nonprofit corporation" "Subdivision"
+filetype:pdf "Georgia nonprofit corporation" "Community Association"
+
+# --- "to be known as" / "the corporation shall be" ---
+filetype:pdf "Georgia" "to be known as" "Homeowners Association"
+filetype:pdf "Georgia" "the corporation shall be" "Homeowners Association"
+filetype:pdf "Georgia" "the name of this corporation shall be" "Homeowners Association"
+
+# --- More phrasings of declarations + amendments ---
+filetype:pdf "Georgia" "Master Deed" "Condominium Association"
+filetype:pdf "Georgia" "Declarant" "Homeowners Association" "covenants"
+filetype:pdf "Georgia" "Master Declaration" "Homeowners Association"
+filetype:pdf "Georgia" "Amended and Restated Declaration" "Homeowners Association"
+filetype:pdf "Georgia" "Amended Restated" "Bylaws" "Homeowners Association"
+filetype:pdf "Georgia" "First Amendment to Declaration" "Homeowners Association"
+filetype:pdf "Georgia" "Second Amendment to Declaration" "Homeowners Association"
+filetype:pdf "Georgia" "Third Amendment to Declaration" "Homeowners Association"
+
+# --- Specific community types ---
+filetype:pdf "Georgia" "Townhomes" "Declaration of Covenants"
+filetype:pdf "Georgia" "Lake" "Homeowners Association" "Declaration of Covenants"
+filetype:pdf "Georgia" "Plantation" "Homeowners Association" "Declaration"
+filetype:pdf "Georgia" "Subdivision" "Property Owners Association" "Declaration"
+filetype:pdf "Georgia" "Estates" "Homeowners Association" "Bylaws"
+filetype:pdf "Georgia" "Reserve" "Homeowners Association" "Declaration"
+filetype:pdf "Georgia" "Park" "Homeowners Association" "Bylaws"
+filetype:pdf "Georgia" "Crossing" "Homeowners Association" "Declaration"
+filetype:pdf "Georgia" "Springs" "Homeowners Association" "Declaration"
+filetype:pdf "Georgia" "Trace" "Homeowners Association" "Declaration"
+filetype:pdf "Georgia" "Manor" "Homeowners Association" "Declaration"
+filetype:pdf "Georgia" "Glen" "Homeowners Association" "Declaration"
+filetype:pdf "Georgia" "Ridge" "Homeowners Association" "Declaration"
+filetype:pdf "Georgia" "Walk" "Homeowners Association" "Declaration"
+filetype:pdf "Georgia" "Pointe" "Homeowners Association" "Declaration"
+filetype:pdf "Georgia" "Trails" "Homeowners Association" "Declaration"
+filetype:pdf "Georgia" "Landing" "Homeowners Association" "Declaration"
+filetype:pdf "Georgia" "Crossing" "Homeowners Association" "Declaration"
+filetype:pdf "Georgia" "Reserve" "Homeowners Association" "Bylaws"
+filetype:pdf "Georgia" "Farms" "Homeowners Association" "Declaration"
+filetype:pdf "Georgia" "Meadows" "Homeowners Association" "Declaration"
+filetype:pdf "Georgia" "Lakes" "Homeowners Association" "Declaration"
+filetype:pdf "Georgia" "Cove" "Homeowners Association" "Declaration"
+filetype:pdf "Georgia" "Place" "Homeowners Association" "Declaration"
+filetype:pdf "Georgia" "Ranch" "Homeowners Association" "Declaration"
+
+# --- Owned-domain "/governing-documents" / "/documents" indices ---
+inurl:hoa "Georgia" "governing-documents"
+inurl:.org "Georgia" "Homeowners Association" "documents"
+inurl:.com "Georgia" "Homeowners Association" "documents"
+inurl:.net "Georgia" "Homeowners Association" "documents"
