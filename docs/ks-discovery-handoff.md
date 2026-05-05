@@ -7,7 +7,7 @@ User instruction: continue autonomously for KS. Do not stop at checkpoints. Comm
 ## Current State
 
 - Bank prefix: `gs://hoaproxy-bank/v1/KS/`
-- Current count: 686 manifests, 1,543 PDFs
+- Current count: 687 manifests, 1,545 PDFs
 - OpenRouter credits: about `$10.73 / $20` used, about `$9.27` remaining
 - Active KS work: continuing deterministic source-family scraping; no Gemini.
 - An unrelated NC benchmark process may be running; leave it alone.
@@ -69,6 +69,7 @@ Highest-yield source families:
 - A CommunitySite-specific direct-file pass raised KS to 684 manifests and 1,539 PDFs by adding Brooks Farm. The source is low-volume; most remaining CommunitySite hits were dues notices, meeting notices, ARC request forms, or law/reference PDFs.
 - A GoGladly leftovers pass raised KS to 685 manifests and 1,541 PDFs by adding or enriching Meadows Place and Southcrest Addition. Continue to skip Longwood reminders/history and Hawthorne Place estate-sale forms.
 - A cheap DeepSeek/OpenRouter Wyandotte county-query call used 434 total tokens and produced a focused query file. The resulting deterministic Serper/manual pass raised KS to 686 manifests and 1,543 PDFs by adding Westlake and Persimmon Hill. The planner was cheap and auditable, but the output was generic; the value came from deterministic preflight and direct-PDF selection, not model browsing.
+- A Wix/UGD pass raised KS to 687 manifests and 1,545 PDFs by adding Autumn Glen Owners Association in Newton. Wix pages often hide direct `filesusr.com/ugd/...pdf` links behind HTML subpages; preflight the subpage and extract direct PDFs. Skip scanned candidates if the state/community cannot be verified from text or surrounding page context.
 
 Lower-yield or avoid:
 
