@@ -1,0 +1,100 @@
+# Georgia HOA governing-document discovery: initial broad metro pass.
+# Generated 2026-05-04 for the GA discovery handoff.
+
+# --- Statewide phrases ---
+"Georgia" "HOA documents" bylaws
+"Georgia" "homeowners association" "declaration of covenants" filetype:pdf
+"Georgia" "homeowners association" "covenants" filetype:pdf
+"Georgia" "homeowners association" "bylaws" filetype:pdf
+"Georgia" "homeowners association" "governing documents"
+"Georgia" "homeowners association" "architectural guidelines" filetype:pdf
+"Georgia" "non-profit corporation" "Homeowners Association" filetype:pdf
+"Georgia" "nonprofit corporation" "Homeowners Association" filetype:pdf
+
+# --- Fulton / Atlanta metro ---
+"Fulton County" "Georgia" "Homeowners Association" "Declaration"
+"Atlanta" "Georgia" "homeowners association" "covenants" filetype:pdf
+"Sandy Springs" "homeowners association" documents filetype:pdf
+"Alpharetta" "homeowners association" "covenants" filetype:pdf
+"Johns Creek" "homeowners association" documents filetype:pdf
+"Milton" "Georgia" "homeowners association" documents filetype:pdf
+"Roswell" "homeowners association" "covenants" filetype:pdf
+
+# --- Gwinnett ---
+"Gwinnett County" "Georgia" "Homeowners Association" "Declaration"
+"Lawrenceville" "homeowners association" "covenants" filetype:pdf
+"Duluth" "Georgia" "homeowners association" documents filetype:pdf
+"Suwanee" "homeowners association" "covenants" filetype:pdf
+"Snellville" "homeowners association" documents filetype:pdf
+"Peachtree Corners" "homeowners association" documents filetype:pdf
+
+# --- Cobb ---
+"Cobb County" "Georgia" "Homeowners Association" "Declaration"
+"Marietta" "Georgia" "homeowners association" "covenants" filetype:pdf
+"Smyrna" "Georgia" "homeowners association" documents filetype:pdf
+"Kennesaw" "homeowners association" documents filetype:pdf
+"Acworth" "homeowners association" "covenants" filetype:pdf
+"Powder Springs" "homeowners association" documents filetype:pdf
+
+# --- DeKalb ---
+"DeKalb County" "Georgia" "Homeowners Association" "Declaration"
+"Decatur" "Georgia" "homeowners association" "covenants" filetype:pdf
+"Dunwoody" "homeowners association" documents filetype:pdf
+"Brookhaven" "Georgia" "homeowners association" "covenants" filetype:pdf
+"Tucker" "homeowners association" documents filetype:pdf
+"Stone Mountain" "homeowners association" "covenants" filetype:pdf
+
+# --- Cherokee ---
+"Cherokee County" "Georgia" "Homeowners Association" "Declaration"
+"Woodstock" "Georgia" "homeowners association" documents filetype:pdf
+"Canton" "Georgia" "homeowners association" "covenants" filetype:pdf
+"Holly Springs" "homeowners association" documents filetype:pdf
+
+# --- Henry / Fayette / Coweta / Douglas / Paulding / Forsyth ---
+"Henry County" "Georgia" "Homeowners Association" "Declaration"
+"McDonough" "homeowners association" "covenants" filetype:pdf
+"Stockbridge" "homeowners association" documents filetype:pdf
+"Locust Grove" "homeowners association" "covenants" filetype:pdf
+"Fayette County" "Georgia" "Homeowners Association" "Declaration"
+"Peachtree City" "homeowners association" documents filetype:pdf
+"Fayetteville" "Georgia" "homeowners association" "covenants" filetype:pdf
+"Coweta County" "Georgia" "Homeowners Association" "Declaration"
+"Newnan" "Georgia" "homeowners association" "covenants" filetype:pdf
+"Senoia" "homeowners association" documents filetype:pdf
+"Douglas County" "Georgia" "Homeowners Association" "Declaration"
+"Douglasville" "homeowners association" "covenants" filetype:pdf
+"Paulding County" "Georgia" "Homeowners Association" "Declaration"
+"Dallas" "Georgia" "homeowners association" "covenants" filetype:pdf
+"Hiram" "Georgia" "homeowners association" "covenants" filetype:pdf
+"Forsyth County" "Georgia" "Homeowners Association" "Declaration"
+"Cumming" "Georgia" "homeowners association" documents filetype:pdf
+
+# --- Clayton / Hall / Chatham / Bibb / Richmond / Houston ---
+"Clayton County" "Georgia" "Homeowners Association" "Declaration"
+"Jonesboro" "Georgia" "homeowners association" "covenants" filetype:pdf
+"Hall County" "Georgia" "Homeowners Association" "Declaration"
+"Gainesville" "Georgia" "homeowners association" "covenants" filetype:pdf
+"Flowery Branch" "homeowners association" documents filetype:pdf
+"Chatham County" "Georgia" "Homeowners Association" "Declaration"
+"Savannah" "Georgia" "homeowners association" "covenants" filetype:pdf
+"Pooler" "Georgia" "homeowners association" documents filetype:pdf
+"Richmond County" "Georgia" "Homeowners Association" "Declaration"
+"Augusta" "Georgia" "homeowners association" "covenants" filetype:pdf
+"Columbia County" "Georgia" "Homeowners Association" "Declaration"
+"Evans" "Georgia" "homeowners association" "covenants" filetype:pdf
+"Martinez" "Georgia" "homeowners association" "covenants" filetype:pdf
+"Bibb County" "Georgia" "Homeowners Association" "Declaration"
+"Macon" "Georgia" "homeowners association" "covenants" filetype:pdf
+"Houston County" "Georgia" "Homeowners Association" "Declaration"
+"Warner Robins" "homeowners association" "covenants" filetype:pdf
+
+# --- Source-family seeds (apply later if productive) ---
+site:eneighbors.com "Georgia" "Homeowners Association" "documents"
+site:eneighbors.com/p/ "Georgia" HOA documents
+site:cobaltreks.com Georgia "Homeowners Association"
+site:gogladly.com/connect/document "Georgia" "homeowners association"
+site:pmtechsol.sfo2.cdn.digitaloceanspaces.com/hmsft-documents "Georgia"
+inurl:hmsft-doc "Georgia" "homeowners association"
+inurl:/file/document/ "Georgia" "homeowners association" covenants
+inurl:/wp-content/uploads/ "Georgia" "homeowners association" bylaws
+site:.gov/DocumentCenter/View "Georgia" "Homeowners Association" "Declaration"

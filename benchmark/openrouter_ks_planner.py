@@ -158,16 +158,16 @@ def validate_batch(
     county: str | None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     scope_rule = (
-        "For this run, require evidence that the lead is in the county focus or one of its cities. Reject generic Kansas leads and leads that are probably from another county."
+        f"For this run, require evidence that the lead is in {county} County or one of its cities. Reject generic {state} leads and leads that are probably from another county."
         if county
-        else "For this statewide run, require evidence that the lead is in Kansas. Reject leads that are probably from another state."
+        else f"For this statewide run, require evidence that the lead is in {state}. Reject leads that are probably from another state."
     )
     prompt = {
         "task": "Validate noisy public-web leads before probing/banking HOA governing documents.",
         "state": state,
         "county_focus": county,
         "rules": [
-            "Keep only plausible HOA, homes association, homeowners association, condo/townhome association, or property owners association leads in Kansas.",
+            f"Keep only plausible HOA, homes association, homeowners association, condo/townhome association, or property owners association leads in {state}.",
             scope_rule,
             "Reject generic legal-info pages, social posts, management-company marketing pages without a specific community, government pages, and malformed names.",
             "Reject nonprofit tax filings, ProPublica/IRS pages, real estate listings, law firm pages, newspaper articles, court/case-law pages, and generic HOA explainer pages.",

@@ -1,0 +1,62 @@
+# GA recorded-document / legal-phrase searches.
+# Use after county+host-family passes to mine recorded declarations,
+# articles of incorporation, restated bylaws, and amendments filed with
+# Georgia clerks of superior court.
+
+# --- Statewide nonprofit corporation phrases ---
+filetype:pdf "Georgia non-profit corporation" "Homeowners Association"
+filetype:pdf "Georgia nonprofit corporation" "Homeowners Association"
+filetype:pdf "Georgia non-profit corporation" "Property Owners Association"
+filetype:pdf "Georgia nonprofit corporation" "Property Owners Association"
+filetype:pdf "Georgia non-profit corporation" "Townhome Association"
+filetype:pdf "Georgia nonprofit corporation" "Condominium Association"
+
+# --- Articles / restated bylaws / amendments ---
+filetype:pdf "Articles of Incorporation" "Georgia" "Homeowners Association"
+filetype:pdf "Restated Articles of Incorporation" "Georgia" "Homeowners Association"
+filetype:pdf "Restated Bylaws" "Georgia" "Homeowners Association"
+filetype:pdf "Amendment to Declaration" "Georgia" "Homeowners Association"
+filetype:pdf "Amended Declaration" "Georgia" "Homeowners Association"
+filetype:pdf "Supplemental Declaration" "Georgia" "Homeowners Association"
+filetype:pdf "Declaration of Covenants, Conditions and Restrictions" "Georgia" "Homeowners Association"
+filetype:pdf "Declaration of Covenants, Conditions, and Restrictions" "Georgia" "Homeowners Association"
+filetype:pdf "Declaration of Protective Covenants" "Georgia" "Homeowners Association"
+filetype:pdf "Declaration of Easements, Covenants and Restrictions" "Georgia"
+
+# --- Per-county recorded-doc phrases (top metros) ---
+filetype:pdf "Fulton County, Georgia" "Declaration of Covenants" "Homeowners Association"
+filetype:pdf "Fulton County, Georgia" "Articles of Incorporation" "Homeowners Association"
+filetype:pdf "Gwinnett County, Georgia" "Declaration of Covenants" "Homeowners Association"
+filetype:pdf "Gwinnett County, Georgia" "Articles of Incorporation" "Homeowners Association"
+filetype:pdf "Cobb County, Georgia" "Declaration of Covenants" "Homeowners Association"
+filetype:pdf "Cobb County, Georgia" "Articles of Incorporation" "Homeowners Association"
+filetype:pdf "DeKalb County, Georgia" "Declaration of Covenants" "Homeowners Association"
+filetype:pdf "DeKalb County, Georgia" "Articles of Incorporation" "Homeowners Association"
+filetype:pdf "Cherokee County, Georgia" "Declaration of Covenants" "Homeowners Association"
+filetype:pdf "Forsyth County, Georgia" "Declaration of Covenants" "Homeowners Association"
+filetype:pdf "Henry County, Georgia" "Declaration of Covenants" "Homeowners Association"
+filetype:pdf "Fayette County, Georgia" "Declaration of Covenants" "Homeowners Association"
+filetype:pdf "Coweta County, Georgia" "Declaration of Covenants" "Homeowners Association"
+filetype:pdf "Douglas County, Georgia" "Declaration of Covenants" "Homeowners Association"
+filetype:pdf "Paulding County, Georgia" "Declaration of Covenants" "Homeowners Association"
+filetype:pdf "Hall County, Georgia" "Declaration of Covenants" "Homeowners Association"
+filetype:pdf "Chatham County, Georgia" "Declaration of Covenants" "Homeowners Association"
+filetype:pdf "Richmond County, Georgia" "Declaration of Covenants" "Homeowners Association"
+filetype:pdf "Columbia County, Georgia" "Declaration of Covenants" "Homeowners Association"
+filetype:pdf "Bibb County, Georgia" "Declaration of Covenants" "Homeowners Association"
+filetype:pdf "Houston County, Georgia" "Declaration of Covenants" "Homeowners Association"
+
+# --- Clerk of Superior Court (GA-specific recording office) ---
+filetype:pdf "Clerk of Superior Court" "Fulton County" "Declaration"
+filetype:pdf "Clerk of Superior Court" "Gwinnett County" "Declaration"
+filetype:pdf "Clerk of Superior Court" "Cobb County" "Declaration"
+filetype:pdf "Clerk of Superior Court" "DeKalb County" "Declaration"
+filetype:pdf "Clerk of Superior Court" "Cherokee County" "Declaration"
+filetype:pdf "Clerk of Superior Court" "Forsyth County" "Declaration"
+filetype:pdf "Recorded in" "Georgia" "Declaration of Covenants" "Homeowners Association"
+
+# --- Architectural / design guidelines ---
+filetype:pdf "Architectural Guidelines" "Georgia" "Homeowners Association"
+filetype:pdf "Architectural Review" "Georgia" "Homeowners Association"
+filetype:pdf "Design Guidelines" "Georgia" "Homeowners Association"
+filetype:pdf "Rules and Regulations" "Georgia" "Homeowners Association"

@@ -1,0 +1,86 @@
+# GA HOA host-family expansion. Run after initial county sweep.
+# Source families that proved productive in KS / TN; we test them in GA.
+
+# --- eNeighbors ---
+site:eneighbors.com "Georgia" HOA documents covenants
+site:eneighbors.com "Georgia" "Homeowners Association" "documents"
+site:eneighbors.com/!h_ "public-document" "Georgia"
+site:eneighbors.com/p/ "Atlanta" HOA
+site:eneighbors.com/p/ "Marietta" HOA
+site:eneighbors.com/p/ "Alpharetta" HOA
+site:eneighbors.com/p/ "Roswell" HOA
+site:eneighbors.com/p/ "Lawrenceville" HOA
+site:eneighbors.com/p/ "Duluth" HOA
+site:eneighbors.com/p/ "Suwanee" HOA
+site:eneighbors.com/p/ "Cumming" HOA
+site:eneighbors.com/p/ "Savannah" HOA
+site:eneighbors.com/p/ "Augusta" HOA
+
+# --- Cobalt ---
+site:cobaltreks.com Georgia "Homeowners Association"
+site:cobaltreks.com/wp-content/uploads "Georgia" filetype:pdf
+site:cobaltreks.com "Atlanta" HOA filetype:pdf
+site:cobaltreks.com "Marietta" HOA filetype:pdf
+
+# --- HOAMsoft / hmsft-doc ---
+site:pmtechsol.sfo2.cdn.digitaloceanspaces.com/hmsft-documents "Georgia"
+inurl:hmsft-doc "Georgia" "homeowners association"
+inurl:hmsft-doc "Georgia" "Declaration"
+inurl:hmsft-doc "Georgia" "Bylaws"
+inurl:hmsft-doc "Atlanta" "covenants"
+inurl:hmsft-doc "Marietta" "covenants"
+
+# --- HOA Express ---
+site:gogladly.com/connect/document "Georgia" "homeowners association"
+site:gogladly.com/connect/document "Georgia" bylaws
+inurl:/file/document/ "Georgia" "homeowners association" covenants
+inurl:/file/document-page/ "Georgia" "homeowners association"
+
+# --- WordPress uploads ---
+inurl:/wp-content/uploads/ "Georgia" "homeowners association" bylaws filetype:pdf
+inurl:/wp-content/uploads/ "Georgia" "homeowners association" covenants filetype:pdf
+inurl:/wp-content/uploads/ "Georgia" "homeowners association" declaration filetype:pdf
+inurl:/wp-content/uploads/ "Georgia" "homeowners association" "architectural" filetype:pdf
+inurl:/wp-content/uploads/ "Atlanta" "homeowners association" bylaws filetype:pdf
+inurl:/wp-content/uploads/ "Marietta" "homeowners association" covenants filetype:pdf
+inurl:/wp-content/uploads/ "Alpharetta" "homeowners association" filetype:pdf
+
+# --- BuilderCloud / WSImg / S3 / Squarespace / CDN PDFs ---
+"Georgia" "homeowners association" site:img1.wsimg.com filetype:pdf
+"Georgia" "homeowners association" site:nebula.wsimg.com filetype:pdf
+"Georgia" "homeowners association" site:cdn.buildercloud.io filetype:pdf
+"Georgia" "homeowners association" site:s3.amazonaws.com filetype:pdf
+"Georgia" "homeowners association" site:static1.squarespace.com filetype:pdf
+"Georgia" "homeowners association" site:websitefiles.com filetype:pdf
+"Georgia" "homeowners association" site:rackcdn.com filetype:pdf
+
+# --- Municipal DocumentCenter ---
+site:.gov/DocumentCenter/View "Georgia" "Homeowners Association" "Declaration"
+site:.gov/DocumentCenter/View "Georgia" "Declaration of Covenants"
+site:.gov/AgendaCenter/ViewFile "Georgia" "Homeowners Association"
+
+# --- Recorded documents / clerk of superior court (GA recording office) ---
+filetype:pdf "Georgia" "non-profit corporation" "Homeowners Association"
+filetype:pdf "Georgia" "nonprofit corporation" "Homeowners Association"
+filetype:pdf "Clerk of Superior Court" "Georgia" "Homeowners Association"
+filetype:pdf "Articles of Incorporation" "Georgia" "Homeowners Association"
+filetype:pdf "Amendment to Declaration" "Georgia" "Homeowners Association"
+filetype:pdf "Restated Bylaws" "Georgia" "Homeowners Association"
+filetype:pdf "Supplemental Declaration" "Georgia" "Homeowners Association"
+filetype:pdf "Fulton County, Georgia" "Declaration of Covenants"
+filetype:pdf "Gwinnett County, Georgia" "Declaration of Covenants"
+filetype:pdf "Cobb County, Georgia" "Declaration of Covenants"
+filetype:pdf "DeKalb County, Georgia" "Declaration of Covenants"
+filetype:pdf "Cherokee County, Georgia" "Declaration of Covenants"
+filetype:pdf "Forsyth County, Georgia" "Declaration of Covenants"
+filetype:pdf "Henry County, Georgia" "Declaration of Covenants"
+filetype:pdf "Fayette County, Georgia" "Declaration of Covenants"
+
+# --- Independent community domains after eNeighbors flattens ---
+"Georgia" "HOA documents" "bylaws" -eneighbors
+"Georgia" "governing documents" "homeowners association" -eneighbors
+"Atlanta" "HOA documents" -eneighbors
+"Alpharetta" "homeowners association" documents -eneighbors
+"Marietta" "homeowners association" documents -eneighbors
+"Roswell" "homeowners association" documents -eneighbors
+"Suwanee" "homeowners association" documents -eneighbors
