@@ -27,11 +27,12 @@ load_dotenv(ROOT / "settings.env", override=False)
 load_dotenv(ROOT / ".env", override=False)
 
 from hoaware.discovery.leads import Lead  # noqa: E402
+from hoaware.model_usage import CallTimer, log_llm_call  # noqa: E402
 
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-DEFAULT_MODEL = "google/gemini-3.1-pro-preview"
-FALLBACK_MODEL = "deepseek/deepseek-v4-pro"
+DEFAULT_MODEL = "deepseek/deepseek-v4-flash"
+FALLBACK_MODEL = "moonshotai/kimi-k2.6"
 TIMEOUT_SECONDS = 60
 
 
@@ -61,17 +62,52 @@ def parse_json(text: str) -> Any:
         raise
 
 
-def chat_json(orc: OpenAI, model: str, prompt: dict[str, Any], *, max_tokens: int = 3000) -> tuple[Any, dict[str, Any]]:
-    response = orc.chat.completions.create(
+def chat_json(
+    orc: OpenAI,
+    model: str,
+    prompt: dict[str, Any],
+    *,
+    max_tokens: int = 3000,
+    operation: str = "openrouter_ks_planner.chat_json",
+) -> tuple[Any, dict[str, Any]]:
+    base_url = os.environ.get("OPENROUTER_BASE_URL", OPENROUTER_BASE_URL)
+    timer = CallTimer()
+    log_metadata = {
+        "task": prompt.get("task"),
+        "state": prompt.get("state"),
+        "county_focus": prompt.get("county_focus") or prompt.get("county"),
+        "candidate_count": len(prompt.get("candidates", [])) if isinstance(prompt.get("candidates"), list) else None,
+    }
+    try:
+        response = orc.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": "Return valid JSON only. Be strict and concise."},
+                {"role": "user", "content": json.dumps(prompt, sort_keys=True)},
+            ],
+            temperature=0.1,
+            max_tokens=max_tokens,
+            response_format={"type": "json_object"},
+            extra_body={"include_reasoning": False},
+        )
+    except Exception as exc:
+        log_llm_call(
+            operation=operation,
+            model=model,
+            api_base_url=base_url,
+            status="error",
+            error=str(exc),
+            elapsed_ms=timer.elapsed_ms(),
+            metadata=log_metadata,
+        )
+        raise
+    log_llm_call(
+        operation=operation,
         model=model,
-        messages=[
-            {"role": "system", "content": "Return valid JSON only. Be strict and concise."},
-            {"role": "user", "content": json.dumps(prompt, sort_keys=True)},
-        ],
-        temperature=0.1,
-        max_tokens=max_tokens,
-        response_format={"type": "json_object"},
-        extra_body={"include_reasoning": False},
+        api_base_url=base_url,
+        response=response,
+        elapsed_ms=timer.elapsed_ms(),
+        metadata=log_metadata,
     )
     usage = getattr(response, "usage", None)
     usage_payload = {}
@@ -140,7 +176,7 @@ def validate_batch(
         ],
         "candidates": [_compact_candidate(row, idx) for idx, row in enumerate(batch)],
     }
-    data, usage = chat_json(orc, model, prompt, max_tokens=2200)
+    data, usage = chat_json(orc, model, prompt, max_tokens=2200, operation="openrouter_ks_planner.validate_leads")
     if isinstance(data, list):
         decisions = data
     elif isinstance(data, dict):
@@ -244,12 +280,12 @@ def cmd_county_queries(args: argparse.Namespace) -> int:
     }
     model = args.model
     try:
-        data, usage = chat_json(orc, model, prompt, max_tokens=3200)
+        data, usage = chat_json(orc, model, prompt, max_tokens=3200, operation="openrouter_ks_planner.county_queries")
     except Exception:
         if not args.fallback_model or args.fallback_model == model:
             raise
         model = args.fallback_model
-        data, usage = chat_json(orc, model, prompt, max_tokens=3200)
+        data, usage = chat_json(orc, model, prompt, max_tokens=3200, operation="openrouter_ks_planner.county_queries")
     queries = [str(q).strip() for q in data.get("queries", []) if str(q).strip()]
     Path(args.output).write_text("\n".join(queries[: args.count]) + "\n")
     print(json.dumps({"model": model, "queries": len(queries[: args.count]), "output": args.output, "usage": usage}))

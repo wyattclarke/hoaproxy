@@ -35,6 +35,7 @@ load_dotenv(ROOT / ".env", override=False)
 from hoaware.bank import DocumentInput, bank_hoa  # noqa: E402
 from hoaware.cost_tracker import COST_SERPER_PER_QUERY  # noqa: E402
 from hoaware.doc_classifier import ALL_CATEGORIES, VALID_CATEGORIES, classify_from_filename, classify_from_text  # noqa: E402
+from hoaware.model_usage import CallTimer, log_llm_call  # noqa: E402
 
 
 SERPER_ENDPOINT = "https://google.serper.dev/search"
@@ -184,14 +185,44 @@ def _openrouter_client() -> OpenAI:
     )
 
 
-def _chat_json(client: OpenAI, model: str, messages: list[dict[str, str]], *, max_tokens: int = 1200) -> tuple[Any, dict]:
-    resp = client.chat.completions.create(
+def _chat_json(
+    client: OpenAI,
+    model: str,
+    messages: list[dict[str, str]],
+    *,
+    max_tokens: int = 1200,
+    operation: str,
+    metadata: dict[str, Any] | None = None,
+) -> tuple[Any, dict]:
+    base_url = os.environ.get("OPENROUTER_BASE_URL", OPENROUTER_BASE_URL)
+    timer = CallTimer()
+    try:
+        resp = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            temperature=0.2,
+            max_tokens=max_tokens,
+            response_format={"type": "json_object"},
+            extra_body={"include_reasoning": False},
+        )
+    except Exception as exc:
+        log_llm_call(
+            operation=operation,
+            model=model,
+            api_base_url=base_url,
+            status="error",
+            error=str(exc),
+            elapsed_ms=timer.elapsed_ms(),
+            metadata=metadata,
+        )
+        raise
+    log_llm_call(
+        operation=operation,
         model=model,
-        messages=messages,
-        temperature=0.2,
-        max_tokens=max_tokens,
-        response_format={"type": "json_object"},
-        extra_body={"include_reasoning": False},
+        api_base_url=base_url,
+        response=resp,
+        elapsed_ms=timer.elapsed_ms(),
+        metadata=metadata,
     )
     usage = getattr(resp, "usage", None)
     usage_payload = {}
@@ -282,6 +313,8 @@ def model_queries(client: OpenAI, model: str, *, count: int, audit: Path) -> lis
                 {"role": "user", "content": prompt},
             ],
             max_tokens=900,
+            operation="ks_openrouter_discovery.query_generation",
+            metadata={"requested_queries": count},
         )
         _jsonl_write(audit, {"event": "query_generation", "model": model, "usage": usage, "data": data})
         queries = [str(q).strip() for q in data.get("queries", []) if str(q).strip()]
@@ -747,6 +780,12 @@ def model_triage(
                     {"role": "user", "content": json.dumps(prompt)},
                 ],
                 max_tokens=1600,
+                operation="ks_openrouter_discovery.pdf_triage",
+                metadata={
+                    "batch_start": start,
+                    "batch_size": len(batch),
+                    "candidate_urls": [c.pdf_url for c in batch],
+                },
             )
             _jsonl_write(audit, {"event": "triage", "model": model, "usage": usage, "data": data})
         except Exception as exc:
@@ -915,7 +954,7 @@ def run_model(args: argparse.Namespace, model: str, run_dir: Path) -> dict[str, 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Run KS zero-lead OpenRouter/Serper HOA discovery")
-    ap.add_argument("--models", nargs="+", default=["qwen/qwen3.5-flash-02-23"], help="OpenRouter model ids")
+    ap.add_argument("--models", nargs="+", default=["deepseek/deepseek-v4-flash"], help="OpenRouter model ids")
     ap.add_argument("--bucket", default=os.environ.get("HOA_BANK_GCS_BUCKET", "hoaproxy-bank"))
     ap.add_argument("--run-id", default=_now_id())
     ap.add_argument("--max-queries", type=int, default=20)

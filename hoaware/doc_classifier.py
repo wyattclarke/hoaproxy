@@ -45,6 +45,8 @@ from typing import Any
 
 from dotenv import load_dotenv
 
+from .model_usage import CallTimer, log_llm_call
+
 logger = logging.getLogger(__name__)
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -59,6 +61,9 @@ REJECT_JUNK = {"court", "tax", "government", "real_estate", "unrelated"}
 REJECT_PII = {"membership_list", "ballot", "violation"}
 
 ALL_CATEGORIES = VALID_CATEGORIES | REJECT_JUNK | REJECT_PII
+
+DEFAULT_CLASSIFIER_MODEL = "deepseek/deepseek-v4-flash"
+DEFAULT_CLASSIFIER_BLOCKLIST = "qwen/qwen3.5-flash,qwen/qwen3.6-flash"
 
 CATEGORY_DESCRIPTIONS = """
 VALID categories (documents to keep):
@@ -192,10 +197,32 @@ def _classifier_api_base_url(explicit: str | None = None) -> str:
     )
 
 
+def _blocked_classifier_models() -> list[str]:
+    raw = os.environ.get("HOA_CLASSIFIER_BLOCKLIST", DEFAULT_CLASSIFIER_BLOCKLIST)
+    return [item.strip().lower() for item in raw.split(",") if item.strip()]
+
+
+def _classifier_model_allowed(model: str) -> bool:
+    if _env_truthy("HOA_ALLOW_BLOCKLISTED_CLASSIFIER_MODELS"):
+        return True
+    model_lower = model.lower()
+    return not any(blocked in model_lower for blocked in _blocked_classifier_models())
+
+
 def _classifier_models(explicit: str | None = None, fallback: str | None = None) -> list[str]:
-    primary = explicit or os.environ.get("HOA_CLASSIFIER_MODEL") or "qwen/qwen3.5-flash-02-23"
+    primary = explicit or os.environ.get("HOA_CLASSIFIER_MODEL") or DEFAULT_CLASSIFIER_MODEL
     fallback_model = fallback if fallback is not None else os.environ.get("HOA_CLASSIFIER_FALLBACK_MODEL")
-    return [m for m in (primary, fallback_model) if m]
+    models = [m for m in (primary, fallback_model) if m]
+    allowed: list[str] = []
+    for candidate in models:
+        if _classifier_model_allowed(candidate):
+            allowed.append(candidate)
+        else:
+            logger.warning(
+                "Skipping blocklisted classifier model %s; set HOA_ALLOW_BLOCKLISTED_CLASSIFIER_MODELS=1 to override",
+                candidate,
+            )
+    return allowed
 
 
 def _parse_json_object(text: str) -> dict[str, Any]:
@@ -253,7 +280,8 @@ def classify_with_llm(
 
     from openai import OpenAI
 
-    client = OpenAI(api_key=key, base_url=_classifier_api_base_url(api_base_url))
+    base_url = _classifier_api_base_url(api_base_url)
+    client = OpenAI(api_key=key, base_url=base_url)
     snippet = (text or "").strip()[:max_chars]
     messages = [
         {"role": "system", "content": SNIPPET_CLASSIFY_SYSTEM},
@@ -271,15 +299,41 @@ def classify_with_llm(
         },
     ]
 
+    models = _classifier_models(model, fallback_model)
+    if not models:
+        raise ValueError("No allowed classifier models configured after applying HOA_CLASSIFIER_BLOCKLIST")
+
     last_error: Exception | None = None
-    for candidate_model in _classifier_models(model, fallback_model):
+    for candidate_model in models:
+        timer = CallTimer()
         try:
+            kwargs: dict[str, Any] = {
+                "model": candidate_model,
+                "messages": messages,
+                "temperature": 0,
+                "max_tokens": 180,
+                "response_format": {"type": "json_object"},
+            }
+            if "openrouter.ai" in base_url:
+                kwargs["extra_body"] = {"include_reasoning": False}
             response = client.chat.completions.create(
+                **kwargs,
+            )
+            log_llm_call(
+                operation="doc_classifier.classify_with_llm",
                 model=candidate_model,
-                messages=messages,
-                temperature=0,
-                max_tokens=180,
-                response_format={"type": "json_object"},
+                api_base_url=base_url,
+                api_key=key,
+                response=response,
+                elapsed_ms=timer.elapsed_ms(),
+                metadata={
+                    "hoa_name": hoa_name,
+                    "source_url": source_url,
+                    "title": title[:160],
+                    "filename": filename,
+                    "link_text": link_text[:160],
+                    "max_chars": max_chars,
+                },
             )
             content = response.choices[0].message.content or "{}"
             parsed = _parse_json_object(content)
@@ -289,6 +343,23 @@ def classify_with_llm(
         except Exception as exc:
             last_error = exc
             logger.info("LLM classification failed with %s: %s", candidate_model, exc)
+            log_llm_call(
+                operation="doc_classifier.classify_with_llm",
+                model=candidate_model,
+                api_base_url=base_url,
+                api_key=key,
+                status="error",
+                error=str(exc),
+                elapsed_ms=timer.elapsed_ms(),
+                metadata={
+                    "hoa_name": hoa_name,
+                    "source_url": source_url,
+                    "title": title[:160],
+                    "filename": filename,
+                    "link_text": link_text[:160],
+                    "max_chars": max_chars,
+                },
+            )
 
     if last_error:
         raise last_error

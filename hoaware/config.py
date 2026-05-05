@@ -118,7 +118,7 @@ def load_settings() -> Settings:
             or os.environ.get("QA_API_KEY")
             or os.environ.get("OPENROUTER_API_KEY")
         ),
-        classifier_model=os.environ.get("HOA_CLASSIFIER_MODEL", "qwen/qwen3.5-flash-02-23"),
+        classifier_model=os.environ.get("HOA_CLASSIFIER_MODEL", "deepseek/deepseek-v4-flash"),
         classifier_fallback_model=os.environ.get("HOA_CLASSIFIER_FALLBACK_MODEL") or None,
         enable_llm_classifier=os.environ.get("HOA_ENABLE_LLM_CLASSIFIER", "0") in {"1", "true", "True"},
     )

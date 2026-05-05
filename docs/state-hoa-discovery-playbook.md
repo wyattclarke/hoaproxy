@@ -71,25 +71,31 @@ Use OpenRouter for compact judgment tasks, not browsing.
 
 Current recommended models:
 
-- Strategy/query generation: `google/gemini-3.1-pro-preview`.
-- Strict lead validation: `google/gemini-3.1-pro-preview`, fallback to `moonshotai/kimi-k2.6`.
-- Cheap direct PDF triage: `deepseek/deepseek-v4-flash` or `deepseek/deepseek-v4-pro` when not rate-limited.
+- Default cheap triage/classification: `deepseek/deepseek-v4-flash`.
+- Strategy/query generation: start with `deepseek/deepseek-v4-flash`; escalate to `google/gemini-3.1-pro-preview` only for small, hard strategy batches.
+- Strict lead validation fallback: `moonshotai/kimi-k2.6` when DeepSeek is rate-limited or malformed.
+- Avoid bulk classifier use of `qwen/qwen3.5-flash` and `qwen/qwen3.6-flash`; the Kansas activity export showed runaway hidden reasoning-token usage.
 - Best judgment fallback: `anthropic/claude-opus-latest` / `anthropic/claude-opus-4.7`, used sparingly.
 
 Practical finding from Kansas: OpenRouter does not reduce token count by itself. The architecture reduces tokens. Code searches and extracts; models only see compact URL/title/snippet/candidate JSON.
 
+Log all model calls to `HOA_MODEL_USAGE_LOG` (`data/model_usage.jsonl` by default). The log records model, endpoint, generation id, token counts, exact OpenRouter generation metadata when available, latency, operation, compact source metadata, and errors. It must not include prompts, completions, document text, cookies, or API keys.
+
 ## County Query Generation
 
-Use Gemini to generate county-specific queries:
+Generate county-specific queries with the cheap default first:
 
 ```bash
 OPENROUTER_TIMEOUT_SECONDS=80 python benchmark/openrouter_ks_planner.py county-queries \
   --county Sedgwick \
   --count 30 \
-  --output benchmark/results/ks_sedgwick_gemini_queries.txt \
-  --model google/gemini-3.1-pro-preview \
-  --fallback-model deepseek/deepseek-v4-pro
+  --output benchmark/results/ks_sedgwick_deepseek_queries.txt \
+  --model deepseek/deepseek-v4-flash \
+  --fallback-model moonshotai/kimi-k2.6
 ```
+
+Use Gemini only for a bounded comparison or hard strategy batch, and record why
+the escalation was needed.
 
 For another state, either generalize the script arguments or create a state-specific copy. The desired query pattern is:
 
@@ -316,10 +322,16 @@ Low-yield or risky:
 
 Observed model behavior:
 
-- `google/gemini-3.1-pro-preview` is good at county query generation and strict validation, but can occasionally return malformed/truncated JSON. Smaller batches and retry/fallback help.
+- `google/gemini-3.1-pro-preview` can help with county query generation and strict validation, but the Kansas activity export showed it consumed over half the OpenRouter spend. Use it sparingly.
 - `deepseek/deepseek-v4-flash` is cheap and usable for PDF triage, but can hit upstream OpenRouter 429s.
-- `qwen/qwen3.5-flash` was cheap but token-wastey and worse at clean HOA names.
+- `qwen/qwen3.5-flash` was noisy on HOA names and produced runaway hidden reasoning-token usage in the activity export; it is blocklisted for classifier calls unless explicitly overridden.
 - `moonshotai/kimi-k2.6` is a reasonable fallback when DeepSeek is rate-limited.
+
+Analyze exported OpenRouter activity before changing routing:
+
+```bash
+python benchmark/analyze_openrouter_activity.py ~/Downloads/openrouter_activity_2026-05-05.csv
+```
 
 ## Handoff Checklist
 
