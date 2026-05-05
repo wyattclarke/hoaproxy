@@ -161,7 +161,23 @@ def _is_pdf_url(url: str) -> bool:
 
 def _title_case_slug(value: str) -> str:
     value = re.sub(r"[-_]+", " ", value)
+    value = re.sub(r"(?i)hoa$", "", value)
+    value = re.sub(r"(?i)(kansas|ks)$", "", value)
     value = re.sub(r"\b(hoa|ks|kc|inc|org|com|net)\b$", "", value, flags=re.IGNORECASE)
+    if " " not in value:
+        value = re.sub(r"(?i)(seven)(hills)", r"\1 \2", value)
+        value = re.sub(
+            r"(?i)(oak|copper|melrose|willow|willowbrooke|seven hills|prairie|deer|wood|stone|forest|spring|fox|cedar|blue|green|west|east|north|south)"
+            r"(park|creek|reserve|brooke|brook|hills?|lake|ridge|woods?|villas?|village|estates?|meadows?|point|run|valley|forest|oaks?)",
+            r"\1 \2",
+            value,
+        )
+        value = re.sub(
+            r"(?i)(park|creek|reserve|brooke|brook|hills?|lake|ridge|woods?|villas?|village|estates?|meadows?|point|run|valley|forest|oaks?)"
+            r"(park|creek|reserve|brooke|brook|hills?|lake|ridge|woods?|villas?|village|estates?|meadows?|point|run|valley|forest|oaks?)",
+            r"\1 \2",
+            value,
+        )
     value = re.sub(r"\s+", " ", value).strip()
     small = {"of", "and", "the", "at"}
     words = []
@@ -198,6 +214,12 @@ def _clean_name(value: str) -> str | None:
 
 def infer_name(title: str, url: str, snippet: str) -> str:
     candidates: list[str] = []
+    parsed = urlparse(url)
+    host = re.sub(r"^www\.", "", parsed.netloc.lower()).split(".", 1)[0]
+    if "/hmsft-doc/" in parsed.path.lower() and host:
+        host_name = _clean_name(_title_case_slug(host))
+        if host_name:
+            return host_name
     title = re.sub(r"(?i)^\s*\[?pdf\]?\s*", "", title).strip()
     hay = " ".join([title, snippet])
     for pattern in [
@@ -211,8 +233,6 @@ def infer_name(title: str, url: str, snippet: str) -> str:
         candidates.extend(parts)
         candidates.extend(reversed(parts))
         candidates.append(title)
-    parsed = urlparse(url)
-    host = re.sub(r"^www\.", "", parsed.netloc.lower()).split(".", 1)[0]
     if host and not re.search(r"^(portal|login|docs|files|cdn|assets|storage)$", host):
         candidates.append(_title_case_slug(host))
     candidates.append(snippet)
