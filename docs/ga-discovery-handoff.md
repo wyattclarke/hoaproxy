@@ -71,3 +71,37 @@ The current GA passes ran with statewide query files and statewide validation, s
 
 - Several manifests live under malformed slugs from the legal-phrase pass (e.g. `_unknown-county/a-section-44-3-220.../`, `_unknown-county/all-residents-of-.../`, `_unknown-county/and-restated-articles-of-incorporation-of-wicks-creek/`). The PDFs inside are real and classified correctly; only the directory name is bad. Future work: walk `gs://hoaproxy-bank/v1/GA/` for manifests whose slug matches a malformed pattern, reread the first page of each PDF, derive a clean HOA name, and rewrite the manifest under the new slug. Do not delete the underlying PDFs.
 - About 45 GA manifests have empty `documents: []` arrays (probe found a community page but couldn't harvest a governing PDF). Per the breadth-over-polish stance these are kept if the name+state are real, since a future drain worker can use the name to look up other sources. Only delete if the name is also junk (matches the malformed-slug patterns above).
+
+## Backfill Result (run 1, 2026-05-05)
+
+`scripts/ga_county_backfill.py` walked all 416 `_unknown-county/...` GA manifests:
+
+- **168 moved** to the right county prefix (PDF first/last-page text or HOA-name/URL city match).
+- **248 still under `_unknown-county/`** — heuristic could not pin a county. Most are HOA names without a city hint and PDFs whose recording county sits past the first ~6 pages or in non-text-extractable scans.
+- **0 collisions** (no manifest already existed at the destination).
+
+Suggested follow-up: a second backfill pass that (a) reads more PDF pages, (b) optionally calls `openrouter_repair_lead_names` on the still-unknown rows to ask the model for a city/county guess from the PDF text snippet, then re-routes.
+
+## Per-County Sweep Result (run 1, 2026-05-05)
+
+`benchmark/run_all_ga_counties.sh` looped `benchmark/run_ga_county_sweep.sh`
+through 115 GA counties (the bigger metros not in the initial statewide
+passes plus every long-tail rural county). Each county got:
+
+- A small per-county queries file (county + cities + Declaration/Bylaws/Articles/Architectural).
+- Serper sweep with `--default-county <county>`.
+- OpenRouter validate with `--county <county>` (DeepSeek primary, Kimi K2.6 fallback).
+- Cross-run URL dedup + junk filter.
+- Deterministic direct-PDF clean of the same Serper output.
+- Combined probe with `pre_discovered_pdf_urls` preserved.
+
+Bank delta during this pass: +118 manifests / +135 PDFs / +36 county prefixes.
+Final coverage: 534 manifests, 659 PDFs, 79 county prefixes.
+OpenRouter spend in this pass: ~$0.08 (total now ~$10.89 of the $20 cap).
+
+## Useful Next Branches
+
+- Second-pass backfill that also reads the PDF text and uses the model only when heuristics fail (cheap, finite scope).
+- Re-route the 248 still-unknown manifests that have a real HOA name + state (e.g. via Serper "<HOA name> <state> county" lookup).
+- Owned-domain whitelist preflight: walk every banked manifest with `website` set and only one PDF; preflight the documents page and bank only governing-doc URLs (declaration/bylaws/articles/amendment/rules/architectural). This is where NC's 4.05 PDFs/HOA average came from.
+- Host-family pass per top county (eNeighbors `/p/`, hmsft-doc, Cobalt index, gogladly, FieldStone, FirstService) using the existing `run_ga_county_sweep.sh` template with a host-family queries override.
