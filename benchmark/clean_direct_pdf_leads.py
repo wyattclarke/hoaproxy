@@ -278,6 +278,22 @@ def _state_ok(text: str, metadata: str, args: argparse.Namespace) -> bool:
     return any(re.search(rf"\b{re.escape(term)}\b", hay, re.IGNORECASE) for term in state_terms if term)
 
 
+def _build_out_of_state_re(args: argparse.Namespace) -> re.Pattern[str]:
+    """Drop the current state's name from OUT_OF_STATE_RE so target hits are kept."""
+    skip = {(args.state_name or "").lower(), (args.state or "").lower()}
+    skip.update({(h or "").lower() for h in (args.state_hint or [])})
+    pattern_parts = [
+        "florida", "california", "massachusetts", "missouri", "georgia",
+        "kentucky", "north carolina", "south carolina", "alabama",
+        "mississippi", "arkansas", "virginia", "texas", "tennessee",
+        "kansas", "oklahoma", "ohio", "michigan", "illinois",
+        "palm beach", "holbrook,\\s*ma", "chicago title",
+        "pleasant prairie", "brentwood hoa.*palm beach",
+    ]
+    pattern_parts = [p for p in pattern_parts if p.lower() not in skip]
+    return re.compile(r"\b(" + "|".join(pattern_parts) + r")\b", re.IGNORECASE)
+
+
 def clean(args: argparse.Namespace) -> int:
     rows = _jsonl_rows(Path(args.input))
     audit_map = _audit_by_url(Path(args.audit)) if args.audit else {}
@@ -286,6 +302,7 @@ def clean(args: argparse.Namespace) -> int:
     seen_urls: set[str] = set()
     reject_path = Path(args.rejects)
     reject_path.parent.mkdir(parents=True, exist_ok=True)
+    out_of_state_re = _build_out_of_state_re(args)
     with reject_path.open("w") as rejects:
         for row in rows:
             pdfs = row.get("pre_discovered_pdf_urls") or []
@@ -304,7 +321,7 @@ def clean(args: argparse.Namespace) -> int:
                 str(audit.get("snippet") or ""),
                 url,
             ])
-            if BLOCKED_HOST_RE.search(host) or JUNK_RE.search(metadata) or OUT_OF_STATE_RE.search(metadata):
+            if BLOCKED_HOST_RE.search(host) or JUNK_RE.search(metadata) or out_of_state_re.search(metadata):
                 print(json.dumps({"url": url, "reason": "metadata_reject", "metadata": metadata[:300]}, sort_keys=True), file=rejects)
                 continue
             pdf_bytes, skip = _download_pdf(session, url)
@@ -312,7 +329,7 @@ def clean(args: argparse.Namespace) -> int:
                 print(json.dumps({"url": url, "reason": skip or "download_failed"}, sort_keys=True), file=rejects)
                 continue
             text = _extract_text(pdf_bytes, args.max_pages)
-            if OUT_OF_STATE_RE.search(text[:5000]):
+            if out_of_state_re.search(text[:5000]):
                 print(json.dumps({"url": url, "reason": "text_out_of_state"}, sort_keys=True), file=rejects)
                 continue
             if not _state_ok(text, metadata, args):
