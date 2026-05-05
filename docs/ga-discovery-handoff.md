@@ -99,9 +99,23 @@ Bank delta during this pass: +118 manifests / +135 PDFs / +36 county prefixes.
 Final coverage: 534 manifests, 659 PDFs, 79 county prefixes.
 OpenRouter spend in this pass: ~$0.08 (total now ~$10.89 of the $20 cap).
 
+## Host-Family Per-County Pass (run 1, 2026-05-05)
+
+`benchmark/run_all_ga_counties_hostfamily.sh` looped
+`benchmark/run_ga_county_hostfamily.sh` over the top 40 GA counties
+in `benchmark/ga_top_counties_hostfamily.txt`. Each county got per-city
+host-family queries (eNeighbors `/p/`, hmsft-doc, Cobalt, GoGladly,
+FieldStone, FirstService, TheKeyManagers, wsimg/squarespace/rackcdn
+CDN PDFs, owned-domain `wp-content/uploads`, plus
+architectural/rules-and-regulations) followed by the same
+validate -> dedup -> clean -> probe pipeline.
+
+Bank delta: +97 manifests / +100 PDFs / +5 county prefixes.
+Final coverage: 631 manifests, 759 PDFs, 84 county prefixes.
+OpenRouter spend in this pass: ~$0.13 (running total ~$11.03 of $20 cap).
+
 ## Useful Next Branches
 
+- Owned-domain whitelist preflight: walk every banked manifest with `website` set and only one PDF; preflight the documents page and bank only governing-doc URLs (declaration/bylaws/articles/amendment/rules/architectural). This is where NC's 4.05 PDFs/HOA average came from.
 - Second-pass backfill that also reads the PDF text and uses the model only when heuristics fail (cheap, finite scope).
 - Re-route the 248 still-unknown manifests that have a real HOA name + state (e.g. via Serper "<HOA name> <state> county" lookup).
-- Owned-domain whitelist preflight: walk every banked manifest with `website` set and only one PDF; preflight the documents page and bank only governing-doc URLs (declaration/bylaws/articles/amendment/rules/architectural). This is where NC's 4.05 PDFs/HOA average came from.
-- Host-family pass per top county (eNeighbors `/p/`, hmsft-doc, Cobalt index, gogladly, FieldStone, FirstService) using the existing `run_ga_county_sweep.sh` template with a host-family queries override.
