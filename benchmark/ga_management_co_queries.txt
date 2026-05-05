@@ -1,0 +1,92 @@
+# GA HOA management companies and big-portal-host queries.
+# Run after CDN sweep. Targets companies that publish governing
+# documents on their own domains.
+
+# --- Hammersmith Management ---
+site:hammersmithmanagement.com Georgia "Homeowners Association"
+"Hammersmith Management" "Georgia" "Declaration of Covenants" filetype:pdf
+
+# --- Heritage Property Management Services ---
+site:heritageproperty.com Georgia "Homeowners Association"
+site:heritageproperty.com filetype:pdf "Atlanta"
+"Heritage Property Management" "Georgia" "Declaration" filetype:pdf
+
+# --- ARK Property Management ---
+site:arkproperty.com "Homeowners Association"
+site:arkproperty.com filetype:pdf "Atlanta"
+
+# --- Atlanta Community Management ---
+site:atlantacm.com "Homeowners Association"
+site:atlantacm.com filetype:pdf
+
+# --- Beacon Management Services ---
+site:beaconmgmtservices.com Georgia "Homeowners Association"
+"Beacon Management" "Georgia" "Declaration" filetype:pdf
+
+# --- Real Manage ---
+site:realmanage.com Georgia "Homeowners Association"
+"RealManage" "Georgia" "Declaration of Covenants" filetype:pdf
+
+# --- Associa (Community Management Associates) ---
+site:cmacommunities.com Georgia
+site:associaonline.com Georgia "Homeowners Association"
+"Associa" "Georgia" "Declaration of Covenants" filetype:pdf
+
+# --- FirstService Residential ---
+site:fsresidential.com Georgia "Homeowners Association"
+site:fsresidential.com filetype:pdf "Atlanta"
+
+# --- Cusick Community Management ---
+site:cusickmanagement.com "Homeowners Association"
+"Cusick Community Management" "Georgia" filetype:pdf
+
+# --- HOAleader / HOAware-style portals ---
+site:hoaleader.com Georgia "Homeowners Association"
+site:vertexcommunities.com Georgia
+site:appfolio.com Georgia "Declaration"
+site:nabrnetwork.com Georgia "Homeowners Association"
+
+# --- Big known Atlanta-area community URLs ---
+"East Cobb" "Homeowners Association" "Declaration" filetype:pdf
+"West Cobb" "Homeowners Association" "Declaration" filetype:pdf
+"South Forsyth" "Homeowners Association" "Declaration" filetype:pdf
+"Buford" "Georgia" "Homeowners Association" "Declaration" filetype:pdf
+"Grayson" "Georgia" "Homeowners Association" "Declaration" filetype:pdf
+"Loganville" "Georgia" "Homeowners Association" "Declaration" filetype:pdf
+"Conyers" "Georgia" "Homeowners Association" "Declaration" filetype:pdf
+"Covington" "Georgia" "Homeowners Association" "Declaration" filetype:pdf
+"Lithia Springs" "Homeowners Association" "Declaration" filetype:pdf
+"Mableton" "Georgia" "Homeowners Association" "Declaration" filetype:pdf
+"Hampton" "Georgia" "Homeowners Association" "Declaration" filetype:pdf
+"Locust Grove" "Homeowners Association" "Declaration" filetype:pdf
+"Tyrone" "Georgia" "Homeowners Association" "Declaration" filetype:pdf
+"Senoia" "Homeowners Association" "Declaration" filetype:pdf
+"Carrollton" "Georgia" "Homeowners Association" "Declaration" filetype:pdf
+"Villa Rica" "Homeowners Association" "Declaration" filetype:pdf
+"Bremen" "Georgia" "Homeowners Association" "Declaration" filetype:pdf
+"Cartersville" "Homeowners Association" "Declaration" filetype:pdf
+"Calhoun" "Georgia" "Homeowners Association" "Declaration" filetype:pdf
+"Rome" "Georgia" "Homeowners Association" "Declaration" filetype:pdf
+"LaGrange" "Georgia" "Homeowners Association" "Declaration" filetype:pdf
+"Statesboro" "Homeowners Association" "Declaration" filetype:pdf
+"Hinesville" "Homeowners Association" "Declaration" filetype:pdf
+"Brunswick" "Georgia" "Homeowners Association" "Declaration" filetype:pdf
+"St. Marys" "Georgia" "Homeowners Association" "Declaration" filetype:pdf
+"Kingsland" "Georgia" "Homeowners Association" "Declaration" filetype:pdf
+"Tifton" "Georgia" "Homeowners Association" "Declaration" filetype:pdf
+"Thomasville" "Georgia" "Homeowners Association" "Declaration" filetype:pdf
+"Valdosta" "Homeowners Association" "Declaration" filetype:pdf
+"Athens" "Georgia" "Homeowners Association" "Declaration" filetype:pdf
+"Watkinsville" "Homeowners Association" "Declaration" filetype:pdf
+"Madison" "Georgia" "Homeowners Association" "Declaration" filetype:pdf
+"Dahlonega" "Homeowners Association" "Declaration" filetype:pdf
+"Helen" "Georgia" "Homeowners Association" "Declaration" filetype:pdf
+"Ellijay" "Georgia" "Homeowners Association" "Declaration" filetype:pdf
+"Blue Ridge" "Georgia" "Homeowners Association" "Declaration" filetype:pdf
+
+# --- Architectural guidelines (often separate PDFs) ---
+"Georgia" "homeowners association" "Architectural Guidelines" filetype:pdf
+"Georgia" "homeowners association" "Architectural Standards" filetype:pdf
+"Georgia" "homeowners association" "Design Guidelines" filetype:pdf
+"Georgia" "homeowners association" "Modification Guidelines" filetype:pdf
+"Georgia" "homeowners association" "Rules and Regulations" filetype:pdf
