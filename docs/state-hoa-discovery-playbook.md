@@ -38,15 +38,15 @@ The hard requirement to run sweeps county-by-county is unchanged — that's abou
 
 Use this rule to decide when to stop active scraping for a state and move effort to the next state.
 
-Stop active discovery when **two consecutive strategy families** both produce:
+Stop active discovery only when **two consecutive sweeps** both produce:
 
 - Fewer than 3 net-new valid in-state manifests.
 - Fewer than 10 net-new valid in-state PDFs.
 - More than 80% rejects, exact duplicates, forms, newsletters, minutes, generic legal/government pages, or out-of-scope records.
 
-A strategy family is a distinct search/source angle, such as `eNeighbors direct URLs`, `hmsft/PMTech`, `HOA Express file/document`, `WordPress uploads`, `county recorder legal phrases`, or a county-focused direct-PDF pass. Multiple runs of the same query file count as one family unless the query/source shape meaningfully changes.
+A sweep is one concrete executed pass: one query file/source-family/county batch run through discovery, cleaning/validation, and banking or documented rejection. A strategy family is broader, such as `eNeighbors direct URLs`, `hmsft/PMTech`, `HOA Express file/document`, `WordPress uploads`, `county recorder legal phrases`, or a county-focused direct-PDF pattern. Do not stop because one broad family looks weak; require the next concrete sweep to fail the thresholds too.
 
-When the rule triggers, do not launch another broad scrape for that state. Allowed follow-up work is cleanup only: duplicate audits, unknown-county repair, name repair, out-of-scope rerouting, and targeted re-mining of already-downloaded result sets that costs no new Serper/OpenRouter budget. Restart active discovery only if a genuinely new high-yield source family appears.
+When the two-sweep rule triggers, do not launch another broad scrape for that state. Allowed follow-up work is cleanup only: duplicate audits, unknown-county repair, name repair, out-of-scope rerouting, and targeted re-mining of already-downloaded result sets that costs no new Serper/OpenRouter budget. Restart active discovery only if a genuinely new high-yield source family appears.
 
 ## Always Run County-By-County
 
