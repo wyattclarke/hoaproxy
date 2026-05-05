@@ -7,7 +7,7 @@ User instruction: continue autonomously for KS. Do not stop at checkpoints. Comm
 ## Current State
 
 - Bank prefix: `gs://hoaproxy-bank/v1/KS/`
-- Current count: 633 manifests, 1,460 PDFs
+- Current count: 638 manifests, 1,468 PDFs
 - OpenRouter credits: about `$10.73 / $20` used, about `$9.27` remaining
 - Active KS work: continuing deterministic source-family scraping; no Gemini.
 - An unrelated NC benchmark process may be running; leave it alone.
@@ -58,6 +58,7 @@ Highest-yield source families:
 - The no-Gemini hmsft/PMTech pass needs manual name repair for CDN PDFs. A raw hmsft run was stopped after noisy names; bad manifests were removed from GCS, then valid PDFs were rebanked under clean names. Clean hmsft additions/enrichments from this pass include Woodbridge, Willowbrooke Villas, Copper Creek, Melrose Reserve, Seven Hills, Montrachet, Foxborough, Southwood, Deer Valley, Gramercy Park, Villas at Southpointe, Preserve at Clear Creek, Indian Creek Park Estates, Villas of St. Andrews, Crestwood Village, Nottingham Downs Duplex, Prairie Point, Prairie Brook, and Milhaven.
 - The latest no-Gemini owned-domain PDF pass raised KS to 607 manifests and 1,431 PDFs. Manually selected governing-document PDFs added or enriched Amber Meadows, Primrose Addition, Prairie Creek Sixth, Timber Creek Estates, Willow Springs, Foxfire Addition, Clearwater Creek, Falcon Ridge Estates, Ryan's Run, Hallbrook East Village, Greystone Estates South, Oak Valley, Falcon Ridge, Prairie Lake Estates, Cobalt Reks, Reflection Ridge, Cedar Ridge, The Moorings 10th Addition, Mesa Verde, Nelsons Ridge, Milburn Fields, Crescent Lakes, and Woodland Park. Skipped minutes, planning/court packets, estate forms, out-of-state PDFs, and non-governing annual/board materials.
 - County/city-owned direct-PDF search is productive when it uses city names plus formal document terms. The latest pass used queries like `filetype:pdf "Overland Park" "Homes Association" "Declaration"` and raised KS to 633 manifests and 1,460 PDFs after manual selection. New/enriched communities included Willow Brooke, Seven Hills Lake, Arlington Estates, St. Andrews Place, Wycliff, Villas of Tamarind, Dover Estates, Chapel Hill, Symphony Hills, Mill Creek Meadows, Red Oak Hills, Oakmont, Villas of Falcon Valley, Normandy Place, Brookhill, Berkshire Villas, Tomahawk Creek, Evergreen, Amarado Estates, West View, Southwest Vistas, Whitetail, Grand Reserve of Mission Ranch, Heather Glen, Woodland Trails, Verona Gardens, Greenbrier of Leawood, Willow Farm, Gardner Ridge, Willow Creek, Auburn Hills 13, Shadow Rock, Sterling East, Grand Mere, and The Willows. This is a better late-stage pattern than broad generic county sweeps.
+- Secondary county/city direct-PDF queries are lower-yield but still useful when manually selected. The latest lower-density pass raised KS to 638 manifests and 1,468 PDFs after cleanup. It added or enriched Pepper Tree Park, Ant Hills, Northbrook, Morningview, Grand Mere Vanesta, Tomahawk Valley, Falcon Lakes, and Southwood. Pinehurst Villas and Lake Kahola were validation skips and their empty manifests were removed. eNeighbors public-document page URLs did not harvest PDFs when probed as pages, so prefer direct downloadable URLs or known eNeighbors source logic.
 
 Lower-yield or avoid:
 
