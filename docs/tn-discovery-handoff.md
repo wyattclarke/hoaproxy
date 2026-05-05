@@ -32,3 +32,26 @@ Updated: 2026-05-05
 ## Running Log
 
 - 2026-05-05: Starting TN bank coverage was 0 manifests and 0 PDFs.
+- 2026-05-05: Initial deterministic Serper pass used `benchmark/tn_initial_queries.txt`.
+  - Raw search output: `benchmark/results/tn_serper_docpages_initial_direct_1/`
+  - Search calls: 82; raw results: 591; unique URLs: 453; raw leads: 80.
+  - Deterministic direct-PDF cleaning accepted 37 candidates, then compact OpenRouter name repair kept 36.
+  - OpenRouter usage: 5 `deepseek/deepseek-v4-flash` calls for metadata-only name repair; no fallback model used.
+  - Banked 36 PDFs into 35 manifests. Fox Run merged two PDFs into one manifest.
+  - Count after pass: 35 manifests, 36 PDFs.
+
+## Productive Source Families
+
+- `psmtllc.com/wp-content/uploads/` direct PDFs: Jamison Place, Ridge at Carters Station, Clearview Acres, Walden Woods, Three Rivers, Muirwood.
+- `wmco.net/wp-content/uploads/` / `wmco.net/assets/uploads/` direct PDFs: Barefoot Bay, Rutherford Green, Bonbrook, Stonecrest Brentwood, Highland View.
+- HOA-owned WordPress/static sites: Fox Run, White Plains, Hidden Harbor, Berryhill, Legacy Bay, Riverwalk, Savannah Ridge, Sedgefield.
+- `irp.cdn-website.com/.../files/uploaded/` direct PDFs: Brush Creek and Lee Crossing.
+- GoDaddy blob downloads can work when title/snippet identify the association; first pass added Wyngate.
+
+## False Positives / Reject Patterns
+
+- State/government reports and packets: `tn.gov`, legislative studies, county subdivision regulations, public utility dockets.
+- CAI legislative reports and court filings.
+- Real-estate/listing hosts such as LandHub, Showcase, Chicago Title, auction/property packet hosts.
+- Generic welcome packages, forms, applications, minutes, budgets, newsletters, and pool/lease documents.
+- Out-of-state hits triggered by city names like Franklin or Brentwood.
