@@ -7,7 +7,7 @@ User instruction: continue autonomously for KS. Do not stop at checkpoints. Comm
 ## Current State
 
 - Bank prefix: `gs://hoaproxy-bank/v1/KS/`
-- Current count: 666 manifests, 1,506 PDFs
+- Current count: 671 manifests, 1,516 PDFs
 - OpenRouter credits: about `$10.73 / $20` used, about `$9.27` remaining
 - Active KS work: continuing deterministic source-family scraping; no Gemini.
 - An unrelated NC benchmark process may be running; leave it alone.
@@ -62,6 +62,7 @@ Highest-yield source families:
 - Re-mining existing result sets is worthwhile and costs no Serper/OpenRouter calls. A leftover pass over `ks_serper_docpages_articles_amendments_2p_1` raised KS to 643 manifests and 1,478 PDFs by adding or enriching Villages of Carmel, Hawthorne Valley, Villas of Falcon Valley, Amber Meadows, Equestrian Estates, Villas of Tamarind, Southwood, Villas of Asbury, Gleason Glen, West Ridge Estates, West Glen, Red Oak Hills, Maple Crest, and Holly Ridge.
 - Re-mining the CDN/source-family result set raised KS to 655 manifests and 1,494 PDFs. Clear-name leftovers added or enriched Canyon Lakes, Dayton Creek Cottages, Woodland Ridge, Southern Meadows, Regents Park Villas, Dayton Creek, Boulder Hills, Wolf Creek, East Village Villas, Boulder Creek Villas, Century Farms, Park Glen Estates, Amarado Estates, and Cedar Brook. Ambiguous scanned S3 PDFs were skipped when first-page text did not reveal the HOA name; CenterPoint Preserve failed validation and its empty manifest was removed.
 - Re-mining `ks_serper_docpages_direct_pdf_highsignal_1` raised KS to 666 manifests and 1,506 PDFs. Clean direct PDFs added or enriched Harwycke, Willo-Esque, Evergreen, Tyler's Landing, Villages of Southport, Price Hills, Copper Creek, Creekside, Wyndham Heights, Comotara, Eagles Landing South, Estates of Highland Ridge, Parkwood Hills, Holly Ridge, and Foxfield Village. Oak Park still has some validation skips, but the manifest already contains documents, so it was not removed.
+- Re-mining `ks_serper_docpages_statewide_legal_phrase_deep_3` raised KS to 671 manifests and 1,516 PDFs. Selected leftovers added or enriched Seven Hills Lake, Amber Meadows, Oak Hill, Walnut Creek Estates, Symphony Hills, Foxborough, Deer Valley, Highland Pointe, Blue Valley Riding, Kensington Valley, Greens of Chapel Creek, Shadow Rock, and Nelsons Ridge.
 
 Lower-yield or avoid:
 
