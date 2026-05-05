@@ -67,6 +67,12 @@ _STATE_BLOCKED_HOSTS: dict[str, list[str]] = {
     "KS": [
         "kslegislature", "ksrevenue\\.gov",
     ],
+    "FL": [
+        "leg\\.state\\.fl\\.us", "flsenate\\.gov", "myfloridahouse\\.gov",
+        "dos\\.fl\\.gov", "myfloridalicense\\.com", "flrules\\.org",
+        "flcourts\\.org", "flgov\\.com", "myflorida\\.com",
+        "dbpr\\.state\\.fl\\.us", "floridarevenue\\.com",
+    ],
 }
 
 

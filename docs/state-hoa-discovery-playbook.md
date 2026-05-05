@@ -13,6 +13,8 @@ The goal is not to make an LLM browse the web directly. The goal is to use cheap
 
 The HOA must be a **mandatory association created by recorded deed restrictions** — not a voluntary neighborhood/civic association. Mandatory-HOA signals include: Declaration of Covenants, CC&Rs, Restrictive Covenants, Master Deed, "Articles of Incorporation" of an HOA, "Bylaws of <community> Homeowners Association" tied to a recorded declaration. Voluntary-neighborhood signals to *avoid*: standalone "Architectural Guidelines" or "Design Guidelines" with no Declaration/CC&R reference, civic-association meeting minutes, garden-club bylaws.
 
+**"HOA" always includes condos.** Condominium associations (FL Chapter 718, equivalents elsewhere) are mandatory associations created by recorded master deeds + declarations of condominium and are in scope. Bank them under the same `(state, county, slug)` layout as any other HOA. Townhome and master associations are also in scope. Statute-level routing (Chapter 720 vs 718, etc.) is for the drain worker — discovery does not need to distinguish.
+
 When writing search queries, anchor any "architectural" / "design guidelines" / "architectural review" terms to a mandatory-HOA signal in the same query (e.g. `"Architectural Guidelines" "Declaration of Covenants" filetype:pdf`). A bare `"Architectural Guidelines" filetype:pdf` query will pick up voluntary-association docs and pollute the bank.
 
 Manifests with no PDFs are still useful if name+location are present — they tell the drain worker an HOA exists in a place. Manifests with PDFs but malformed names should still be banked; the PDF can be re-named later. The only hard rejects are: generic legal/explainer pages without a specific community, private/walled portal pages, voluntary neighborhood associations, and obvious junk hosts (real-estate listings, attorney marketing, social media, IRS/990 filings).
@@ -452,6 +454,30 @@ Useful result inspection:
 ```bash
 find benchmark/results -maxdepth 2 -name summary.json -o -name '*_audit.json'
 ```
+
+## Use Cheaper Subagents Where Possible
+
+When running this playbook in Claude Code (or any harness with subagents), default to delegating to **Sonnet** subagents (or any cheaper-than-the-orchestrator model) for the mechanical work, and reserve the top-tier orchestrator model for judgment.
+
+Cheap, mechanical, delegate freely:
+
+- Building per-county query files and shell scripts for a new state (mirror a prior state's `run_X_county_sweep_v2.sh` and counties file).
+- Parsing public datasets — Sunbiz / Secretary-of-State bulk dumps, Census gazetteers, ZIP→county crosswalks, county-name normalization.
+- Tagging existing JSONL rows with derived fields (county, slug, source family).
+- Running long-running scrape / validate / probe / bank batches in the background and writing per-county summary lines to the handoff doc.
+- Repairing mis-routed manifests (looking up correct county, calling `bank_hoa()`).
+- Repetitive deduplication audits and post-hoc name-repair passes.
+
+Reserve the orchestrator for:
+
+- Deciding which source family to pursue next when multiple are plausible.
+- Reading validator audits and updating the false-positive blocklist.
+- Scoping when to pivot from county sweeps → host-family expansion → legal-phrase searches → owned-domain preflights.
+- Calling the state stopping rule (two consecutive failed sweeps).
+- Resolving cross-state-routing edge cases.
+- Handling new policy / safety questions raised mid-run.
+
+Launch independent subagents in parallel — building scripts and parsing data don't have to be sequential. The orchestrator's job is to plan and verify; the subagents do the typing.
 
 ## Autonomy Failure Mode
 

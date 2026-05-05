@@ -1,0 +1,40 @@
+# FL counties for v2 deeper per-county sweep, with broader city lists
+# (every populated city/town/CDP in the county, not just the seat).
+# Format: <County>|<City1>;<City2>;...
+
+Miami-Dade|Miami;Hialeah;Miami Gardens;Homestead;Miami Beach;North Miami;North Miami Beach;Coral Gables;Doral;Kendall;Aventura;Miami Lakes;Cutler Bay;Pinecrest;South Miami;Palmetto Bay;Miami Springs;Key Biscayne;Opa-locka;Sweetwater;Medley;North Bay Village;Sunny Isles Beach;Biscayne Park;Virginia Gardens;El Portal;West Miami;Florida City;Naranja;Richmond West;Country Walk;Westchester;Fontainebleau;Kendale Lakes
+Broward|Fort Lauderdale;Hollywood;Pembroke Pines;Miramar;Coral Springs;Pompano Beach;Davie;Deerfield Beach;Sunrise;Plantation;Weston;Margate;Coconut Creek;Tamarac;Lauderhill;Oakland Park;Lauderdale Lakes;North Lauderdale;Hallandale Beach;Dania Beach;Wilton Manors;Cooper City;Southwest Ranches;Lighthouse Point;Sea Ranch Lakes
+Palm Beach|West Palm Beach;Boca Raton;Boynton Beach;Delray Beach;Wellington;Lake Worth Beach;Palm Beach Gardens;Jupiter;Royal Palm Beach;Greenacres;The Acreage;Riviera Beach;Lake Worth;Belle Glade;Palm Springs;Westlake;Loxahatchee;Juno Beach;Palm Beach;South Palm Beach;Highland Beach;Lantana;Haverhill;Glen Ridge
+Hillsborough|Tampa;Brandon;Riverview;Ruskin;Sun City Center;Temple Terrace;New Tampa;Valrico;Carrollwood;Northdale;Palm River-Clair Mel;Greater Carrollwood;Town 'n' Country;Citrus Park;Lutz;Seffner;Gibsonton;Apollo Beach;Mango;Wimauma;East Lake-Orient Park
+Orange|Orlando;Apopka;Ocoee;Winter Park;Winter Garden;Dr. Phillips;Hunters Creek;Pine Hills;Horizon West;Lake Nona;Windermere;Edgewood;Belle Isle;Maitland;Eatonville;Gotha;Zellwood;Christmas;Bithlo;Goldenrod;Williamsburg
+Pinellas|St. Petersburg;Clearwater;Largo;Dunedin;Tarpon Springs;Pinellas Park;Safety Harbor;Seminole;Kenneth City;Palm Harbor;Belleair Beach;Indian Rocks Beach;Belleair;Oldsmar;Treasure Island;St. Pete Beach;Madeira Beach;Redington Beach;North Redington Beach;South Pasadena;Gulfport;Belleair Bluffs;Belleair Shore;Indian Shores
+Duval|Jacksonville;Jacksonville Beach;Atlantic Beach;Neptune Beach;Baldwin;Mandarin;Arlington;Southside;Baymeadows;Regency;Ortega;Avondale;Riverside;San Jose;Westside
+Lee|Fort Myers;Cape Coral;Bonita Springs;Lehigh Acres;Estero;Fort Myers Beach;Sanibel;North Fort Myers;Gateway;San Carlos Park;Iona;Three Oaks;Villas;Tice
+Polk|Lakeland;Winter Haven;Auburndale;Bartow;Haines City;Davenport;Lake Alfred;Eagle Lake;Fort Meade;Lake Wales;Highland City;Mulberry;Kathleen;Polk City;Crystal Lake;Indian Lake Estates
+Brevard|Melbourne;Palm Bay;Titusville;Cocoa;Rockledge;Merritt Island;Cape Canaveral;Satellite Beach;Indian Harbour Beach;Melbourne Beach;Viera;West Melbourne;Cocoa Beach;Indialantic;Malabar;Palm Shores;Barefoot Bay;Micco;Grant-Valkaria
+Sarasota|Sarasota;Venice;North Port;Englewood;Osprey;Nokomis;Siesta Key;Longboat Key;Laurel;South Sarasota;Gulf Gate Estates;Bee Ridge;Fruitville;Warm Mineral Springs;Wellen Park
+Manatee|Bradenton;Palmetto;Lakewood Ranch;Ellenton;Parrish;Anna Maria;Holmes Beach;Bradenton Beach;Cortez;Oneco;Memphis;West Bradenton;Myakka City
+Pasco|New Port Richey;Zephyrhills;Dade City;Port Richey;Wesley Chapel;Land O Lakes;Holiday;New Port Richey East;Shady Hills;Beacon Square;Bayonet Point;Elfers;Jasmine Estates;Lacoochee
+Volusia|Daytona Beach;Ormond Beach;Port Orange;Deltona;Debary;Orange City;Edgewater;New Smyrna Beach;Holly Hill;South Daytona;Deland;Pierson;Lake Helen;DeLeon Springs;Barberville;Osteen;Samsula-Spruce Creek;Ponce Inlet
+Seminole|Altamonte Springs;Casselberry;Longwood;Oviedo;Sanford;Winter Springs;Lake Mary;Geneva;Heathrow;Chuluota;Wekiwa Springs;Forest City
+Marion|Ocala;Belleview;Dunnellon;Silver Springs Shores;Fairfield;Reddick;Mcintosh;Ocala Estates;Pine Run;Summerfield;Marion Oaks
+Collier|Naples;Marco Island;Immokalee;Golden Gate;Naples Manor;Lely;Lely Resort;Naples Park;Vineyards;Pelican Bay;North Naples;East Naples
+St. Johns|St. Augustine;Ponte Vedra Beach;Nocatee;Fruit Cove;Julington Creek;Palm Valley;St. Augustine Beach;Vilano Beach;Switzerland;Durbin Crossing
+Lake|Clermont;Leesburg;Eustis;Tavares;Mount Dora;Groveland;Minneola;Mascotte;Montverde;Fruitland Park;Lady Lake;Sorrento;Howey-in-the-Hills;Astatula
+Osceola|Kissimmee;St. Cloud;Poinciana;Celebration;Buenaventura Lakes;Intercession City;Yeehaw Junction;Campbell;Harmony
+Escambia|Pensacola;Pensacola Beach;Ferry Pass;Brent;Ensley;Bellview;Warrington;Myrtle Grove;West Pensacola;Goulding;Brownsville;Cantonment;Gonzalez
+Leon|Tallahassee;Woodville;Fort Braden;Chaires;Buck Lake;Centerville
+Alachua|Gainesville;High Springs;Archer;Hawthorne;Micanopy;Newberry;Waldo;Jonesville;Alachua;Tioga
+St. Lucie|Port St. Lucie;Fort Pierce;Tradition;Lakewood Park;White City;Weatherbee;Morningside
+Martin|Stuart;Palm City;Jensen Beach;Hobe Sound;Ocean Breeze;Rio;Indiantown;Sewalls Point;Jupiter Island;North River Shores
+Charlotte|Port Charlotte;Punta Gorda;Rotonda West;Deep Creek;Solana;Murdock;El Jobean;Grove City
+Indian River|Vero Beach;Sebastian;Fellsmere;Indian River Shores;Orchid;Roseland;Oslo;Gifford;Winter Beach
+Hernando|Spring Hill;Brooksville;Weeki Wachee;Ridge Manor;Bayport;Masaryktown;Timber Pines;Wiscon
+Citrus|Inverness;Crystal River;Homosassa Springs;Beverly Hills;Floral City;Lecanto;Pine Ridge;Citrus Springs;Sugarmill Woods;Homosassa
+Clay|Orange Park;Fleming Island;Middleburg;Keystone Heights;Green Cove Springs;Oakleaf Plantation;Doctors Inlet;Bellair-Meadowbrook Terrace
+Bay|Panama City;Panama City Beach;Lynn Haven;Callaway;Springfield;Southport;Parker;Laguna Beach;Inlet Beach;Tyndall AFB
+Santa Rosa|Navarre;Milton;Gulf Breeze;Pace;Bagdad;Jay;Holley;East Milton
+Okaloosa|Fort Walton Beach;Destin;Niceville;Crestview;Mary Esther;Cinco Bayou;Shalimar;Valparaiso;Laurel Hill;Baker
+Nassau|Fernandina Beach;Yulee;Callahan;Hilliard;Bryceville;Kings Bay
+Flagler|Palm Coast;Bunnell;Flagler Beach;Beverly Beach;Marineland
+Sumter|The Villages;Bushnell;Coleman;Center Hill;Webster;Wildwood

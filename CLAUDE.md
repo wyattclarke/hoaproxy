@@ -3,6 +3,8 @@
 ## Project Overview
 HOAproxy is a semantic search / Q&A platform for HOA documents, with a proxy voting system and legal corpus. Stack: FastAPI, SQLite (WAL mode), Qdrant vector DB, OpenAI embeddings.
 
+**"HOA" always includes condos.** Throughout this project — discovery, banking, ingest, search — "HOA" is shorthand for any community association governing real property by recorded covenants, including condominium associations (FL Chapter 718, equivalents in other states), townhome/master/property-owners associations, and traditional Chapter-720-style HOAs. The bank captures all of them under the same `gs://hoaproxy-bank/v1/{STATE}/{county}/{slug}/` layout. Statute-level routing is the drain worker's job, not discovery's.
+
 **Key files:**
 - `api/main.py` — FastAPI app (all routes)
 - `hoaware/db.py` — SQLite schema + all CRUD functions
