@@ -1,15 +1,15 @@
 # Kansas Discovery Handoff
 
-Updated: 2026-05-04
+Updated: 2026-05-05
 
 User instruction: continue autonomously for KS. Do not stop at checkpoints. Commit or hand off as needed, then immediately keep scraping. Only final-answer if blocked, out of budget, or asked for status.
 
 ## Current State
 
 - Bank prefix: `gs://hoaproxy-bank/v1/KS/`
-- Current count: 560 manifests, 1,346 PDFs
-- OpenRouter credits: about `$9.61 / $10` used, about `$0.39` remaining
-- Active KS work: none at last process check.
+- Current count: 590 manifests, 1,413 PDFs
+- OpenRouter credits: about `$10.73 / $20` used, about `$9.27` remaining
+- Active KS work: continuing deterministic source-family scraping; no Gemini.
 - An unrelated NC benchmark process may be running; leave it alone.
 - Do not commit `benchmark/results/`, `benchmark/run_benchmark.sh`, or `benchmark/task.txt`.
 - `hoaware/discovery/__main__.py` was already dirty and should not be touched unless specifically needed.
@@ -22,6 +22,7 @@ User instruction: continue autonomously for KS. Do not stop at checkpoints. Comm
 4. Probe validated leads one at a time with a subprocess timeout when hosts are fragile.
 5. Prefer host/source-family expansion over generic county sweeps once a productive pattern appears.
 6. For direct public PDF hits, manually clean/group the raw inferred names before probing. Use same-host crawl for document-library sites, but retry slow hosts as direct-only `pre_discovered_pdf_urls` with `website=null`.
+7. Do not use Gemini for this workflow. It was too expensive for the yield and is blocked by `HOA_DISCOVERY_MODEL_BLOCKLIST`.
 
 Highest-yield source families:
 
@@ -52,8 +53,9 @@ Highest-yield source families:
 - A follow-up whitelisted pass added or enriched Tatarrax Hills, Parkway Village, and Ginger Creek. This reinforces that county-by-county owned-site mining is now better than broad search: many useful PDFs are on ordinary HOA websites, but the page must be link-preflighted so only governing PDFs are sent to the bank.
 - Public ZIP archives can be high-yield when clearly labeled. Pheasant Run Condominiums exposed `DeclarationBylaws.zip`; after verifying robots and inspecting the archive in `/tmp`, bank only the amendment, articles, bylaws, and declaration PDFs, skipping management agreements and summaries. This added 21 PDFs in one clean pass.
 - Owned-domain search with governing-document phrases added or enriched Nottingham Downs Homes, Ridge at Pinewood, Irvine Acres, Moorings First, and Pepper Tree Park. Shannon Valley, Lancaster, and Kennett Place exposed good-looking PDF links but their `editor_upload` paths are robots-disallowed, so leave them skipped unless another allowed source appears.
-- Cobalt-managed HOA pages are a strong source family. Direct Cobalt PDFs added or enriched Westbank Townhomes, Nelsons Ridge, Vanesta, Williamsburg Townhome, and Grand Mere; Kimball links were dead/404. Continue with `site:cobaltreks.com/hoa/` and `site:cobaltreks.com/wp-content/uploads filetype:pdf` searches for Riley/Pottawatomie-style communities.
-- The Cobalt HOA index at `https://cobaltreks.com/hoa-management/` is better than search alone. A direct index pass added or enriched Brittnay Ridge, Brianna Court, Solheim, Westwood Village Condominium, and additional Nelsons Ridge docs. Continue by enumerating manager indexes/sitemaps wherever a source family proves productive.
+- Cobalt-managed HOA pages are a strong source family. Direct Cobalt PDFs added or enriched Westbank Townhomes, Nelsons Ridge, Vanesta, Williamsburg Townhome, and Grand Mere; Kimball links are now live and banked. Continue with `site:cobaltreks.com/hoa/` and `site:cobaltreks.com/wp-content/uploads filetype:pdf` searches for Riley/Pottawatomie-style communities.
+- The Cobalt HOA index at `https://cobaltreks.com/hoa-management/` is better than search alone. The latest direct index pass added or enriched Brittnay Ridge, Brianna Court, Grand Mere, Vanesta, Irvine Acres, Kimball, Nelsons Ridge, Solheim, Westbank, and Williamsburg. Rosewalk and Westwood Village created manifests but did not produce bankable PDFs in this pass. Continue by enumerating manager indexes/sitemaps wherever a source family proves productive.
+- The no-Gemini hmsft/PMTech pass needs manual name repair for CDN PDFs. A raw hmsft run was stopped after noisy names; bad manifests were removed from GCS, then valid PDFs were rebanked under clean names. Clean hmsft additions/enrichments from this pass include Woodbridge, Willowbrooke Villas, Copper Creek, Melrose Reserve, Seven Hills, Montrachet, Foxborough, Southwood, Deer Valley, Gramercy Park, Villas at Southpointe, Preserve at Clear Creek, Indian Creek Park Estates, Villas of St. Andrews, Crestwood Village, Nottingham Downs Duplex, Prairie Point, Prairie Brook, and Milhaven.
 
 Lower-yield or avoid:
 
