@@ -123,6 +123,12 @@ Updated: 2026-05-05
   - `benchmark/explode_pre_discovered_pdfs.py` expanded 18 discovered PDF URLs from the crawled leads; exact GCS/source prefilter removed 7 already-banked URLs and found 0 signed URLs.
   - Deterministic PDF/text cleaning accepted 4; compact OpenRouter repair kept all 4 with `deepseek/deepseek-v4-flash`.
   - Banked 4 PDFs with 0 skips. Count after pass: 156 manifests, 175 PDFs.
+- 2026-05-05: Public HOA document-page phrase extension used `benchmark/tn_public_document_pages_queries_3.txt`.
+  - Raw search output: `benchmark/results/tn_serper_docpages_tn_serper_docpages_public_pages_3/`
+  - Search calls: 25; raw results: 205; unique URLs: 188; raw leads: 95.
+  - `benchmark/explode_pre_discovered_pdfs.py` expanded 22 discovered PDF URLs; exact GCS/source prefilter removed 5 already-banked URLs and found 0 signed URLs.
+  - Deterministic PDF/text cleaning accepted 2; compact OpenRouter repair kept both with `deepseek/deepseek-v4-flash`.
+  - Banked 2 PDFs with 0 skips. Count after pass: 158 manifests, 177 PDFs.
 
 ## Productive Source Families
 
@@ -147,6 +153,7 @@ Updated: 2026-05-05
 - Civic/static CDN searches should not be expanded broadly. They mostly produce municipal packets, subdivision regulations, neighborhood newsletters, and grant material; the only prior bankable civic CDN-style hit was already deduped.
 - Broad `inurl:/file/document` searches have low marginal yield and high noise after the HOA Express-specific passes. Latest addition was The Springs Section I.
 - Public HOA document-page crawling can still produce finds when exploded to one PDF per lead and cleaned locally. Latest additions were Primm Farm, Richland Downs, Rarity Ridge, and Watermill.
+- Public document-page phrase extension added Maebry and Horse Creek Farms, but marginal yield dropped to 2 banked PDFs.
 
 ## False Positives / Reject Patterns
 
