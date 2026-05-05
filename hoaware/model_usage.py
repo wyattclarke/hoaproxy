@@ -22,10 +22,32 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_LOG_PATH = "data/model_usage.jsonl"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+DEFAULT_DISCOVERY_MODEL_BLOCKLIST = "google/gemini,qwen/qwen3.5-flash,qwen/qwen3.6-flash"
 
 
 def _env_truthy(name: str, default: str = "1") -> bool:
     return os.environ.get(name, default) in {"1", "true", "True"}
+
+
+def blocked_discovery_models() -> list[str]:
+    """Return model substrings blocked for autonomous discovery runs."""
+    raw = os.environ.get("HOA_DISCOVERY_MODEL_BLOCKLIST", DEFAULT_DISCOVERY_MODEL_BLOCKLIST)
+    return [item.strip().lower() for item in raw.split(",") if item.strip()]
+
+
+def discovery_model_allowed(model: str) -> bool:
+    if _env_truthy("HOA_ALLOW_BLOCKLISTED_DISCOVERY_MODELS", "0"):
+        return True
+    model_lower = model.lower()
+    return not any(blocked in model_lower for blocked in blocked_discovery_models())
+
+
+def assert_discovery_model_allowed(model: str) -> None:
+    if not discovery_model_allowed(model):
+        raise ValueError(
+            f"Model {model!r} is blocked by HOA_DISCOVERY_MODEL_BLOCKLIST. "
+            "Set HOA_ALLOW_BLOCKLISTED_DISCOVERY_MODELS=1 only for an explicit experiment."
+        )
 
 
 def _usage_payload(usage: Any) -> dict[str, Any]:

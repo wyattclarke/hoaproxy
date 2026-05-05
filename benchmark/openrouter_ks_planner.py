@@ -27,7 +27,7 @@ load_dotenv(ROOT / "settings.env", override=False)
 load_dotenv(ROOT / ".env", override=False)
 
 from hoaware.discovery.leads import Lead  # noqa: E402
-from hoaware.model_usage import CallTimer, log_llm_call  # noqa: E402
+from hoaware.model_usage import CallTimer, assert_discovery_model_allowed, log_llm_call  # noqa: E402
 
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
@@ -70,6 +70,7 @@ def chat_json(
     max_tokens: int = 3000,
     operation: str = "openrouter_ks_planner.chat_json",
 ) -> tuple[Any, dict[str, Any]]:
+    assert_discovery_model_allowed(model)
     base_url = os.environ.get("OPENROUTER_BASE_URL", OPENROUTER_BASE_URL)
     timer = CallTimer()
     log_metadata = {

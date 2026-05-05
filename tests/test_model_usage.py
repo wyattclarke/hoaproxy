@@ -67,3 +67,13 @@ def test_classifier_blocklist_can_be_overridden(monkeypatch):
     monkeypatch.setenv("HOA_ALLOW_BLOCKLISTED_CLASSIFIER_MODELS", "1")
 
     assert doc_classifier._classifier_models() == ["qwen/qwen3.5-flash-02-23"]
+
+
+def test_discovery_blocklist_rejects_gemini_and_qwen(monkeypatch):
+    monkeypatch.delenv("HOA_ALLOW_BLOCKLISTED_DISCOVERY_MODELS", raising=False)
+    monkeypatch.delenv("HOA_DISCOVERY_MODEL_BLOCKLIST", raising=False)
+
+    assert not model_usage.discovery_model_allowed("google/gemini-3.1-pro-preview")
+    assert not model_usage.discovery_model_allowed("qwen/qwen3.5-flash-02-23")
+    assert model_usage.discovery_model_allowed("deepseek/deepseek-v4-flash")
+    assert model_usage.discovery_model_allowed("moonshotai/kimi-k2.6")

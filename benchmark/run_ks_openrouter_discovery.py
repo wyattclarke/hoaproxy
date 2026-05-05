@@ -35,7 +35,7 @@ load_dotenv(ROOT / ".env", override=False)
 from hoaware.bank import DocumentInput, bank_hoa  # noqa: E402
 from hoaware.cost_tracker import COST_SERPER_PER_QUERY  # noqa: E402
 from hoaware.doc_classifier import ALL_CATEGORIES, VALID_CATEGORIES, classify_from_filename, classify_from_text  # noqa: E402
-from hoaware.model_usage import CallTimer, log_llm_call  # noqa: E402
+from hoaware.model_usage import CallTimer, assert_discovery_model_allowed, log_llm_call  # noqa: E402
 
 
 SERPER_ENDPOINT = "https://google.serper.dev/search"
@@ -882,6 +882,7 @@ def bank_docs(docs: list[AcceptedDoc], *, bucket: str, model_slug: str, audit: P
 
 
 def run_model(args: argparse.Namespace, model: str, run_dir: Path) -> dict[str, Any]:
+    assert_discovery_model_allowed(model)
     model_slug = re.sub(r"[^a-zA-Z0-9_.-]+", "_", model)
     audit = run_dir / f"{model_slug}.jsonl"
     client = _openrouter_client()

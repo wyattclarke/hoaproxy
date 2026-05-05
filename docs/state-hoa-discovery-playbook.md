@@ -72,8 +72,9 @@ Use OpenRouter for compact judgment tasks, not browsing.
 Current recommended models:
 
 - Default cheap triage/classification: `deepseek/deepseek-v4-flash`.
-- Strategy/query generation: start with `deepseek/deepseek-v4-flash`; escalate to `google/gemini-3.1-pro-preview` only for small, hard strategy batches.
+- Strategy/query generation: `deepseek/deepseek-v4-flash`.
 - Strict lead validation fallback: `moonshotai/kimi-k2.6` when DeepSeek is rate-limited or malformed.
+- Do not use `google/gemini-3.1-pro-preview` for this workflow; the Kansas activity export showed it was too expensive for the yield.
 - Avoid bulk classifier use of `qwen/qwen3.5-flash` and `qwen/qwen3.6-flash`; the Kansas activity export showed runaway hidden reasoning-token usage.
 - Best judgment fallback: `anthropic/claude-opus-latest` / `anthropic/claude-opus-4.7`, used sparingly.
 
@@ -94,8 +95,9 @@ OPENROUTER_TIMEOUT_SECONDS=80 python benchmark/openrouter_ks_planner.py county-q
   --fallback-model moonshotai/kimi-k2.6
 ```
 
-Use Gemini only for a bounded comparison or hard strategy batch, and record why
-the escalation was needed.
+The discovery scripts block Gemini and Qwen Flash by default through
+`HOA_DISCOVERY_MODEL_BLOCKLIST`. Override only for an explicit benchmark, not
+for autonomous scraping.
 
 For another state, either generalize the script arguments or create a state-specific copy. The desired query pattern is:
 
@@ -115,8 +117,8 @@ Run the Serper doc-page scraper without probing first:
 
 ```bash
 python benchmark/scrape_ks_serper_docpages.py \
-  --run-id sedgwick_gemini_1 \
-  --queries-file benchmark/results/ks_sedgwick_gemini_queries.txt \
+  --run-id sedgwick_deepseek_1 \
+  --queries-file benchmark/results/ks_sedgwick_deepseek_queries.txt \
   --max-queries 30 \
   --results-per-query 10 \
   --pages-per-query 1 \
@@ -219,11 +221,11 @@ Validate noisy candidates before banking:
 
 ```bash
 OPENROUTER_TIMEOUT_SECONDS=80 python benchmark/openrouter_ks_planner.py validate-leads \
-  benchmark/results/ks_serper_docpages_sedgwick_gemini_1/leads.jsonl \
-  --output benchmark/results/ks_sedgwick_gemini_validated_1.jsonl \
-  --audit benchmark/results/ks_sedgwick_gemini_validated_1_audit.json \
+  benchmark/results/ks_serper_docpages_sedgwick_deepseek_1/leads.jsonl \
+  --output benchmark/results/ks_sedgwick_deepseek_validated_1.jsonl \
+  --audit benchmark/results/ks_sedgwick_deepseek_validated_1_audit.json \
   --county Sedgwick \
-  --model google/gemini-3.1-pro-preview \
+  --model deepseek/deepseek-v4-flash \
   --fallback-model moonshotai/kimi-k2.6 \
   --batch-size 8
 ```
@@ -243,7 +245,7 @@ Probe only the validated lead file:
 
 ```bash
 python -m hoaware.discovery --json probe-batch \
-  benchmark/results/ks_sedgwick_gemini_validated_1.jsonl
+  benchmark/results/ks_sedgwick_deepseek_validated_1.jsonl
 ```
 
 For hosts that can hang, probe one lead at a time with a subprocess timeout. eNeighbors and some WordPress sites can otherwise stop a long batch on one URL.
@@ -263,9 +265,9 @@ If validated pages create clean HOA manifests but do not bank PDFs, use the dire
 
 ```bash
 OPENROUTER_TIMEOUT_SECONDS=80 python benchmark/run_ks_openrouter_discovery.py \
-  --models google/gemini-3.1-pro-preview \
-  --run-id gemini_sedgwick_pdf_1 \
-  --queries-file benchmark/results/ks_sedgwick_gemini_queries.txt \
+  --models deepseek/deepseek-v4-flash \
+  --run-id deepseek_sedgwick_pdf_1 \
+  --queries-file benchmark/results/ks_sedgwick_deepseek_queries.txt \
   --skip-seed-queries \
   --model-queries 0 \
   --max-queries 30 \
@@ -322,7 +324,7 @@ Low-yield or risky:
 
 Observed model behavior:
 
-- `google/gemini-3.1-pro-preview` can help with county query generation and strict validation, but the Kansas activity export showed it consumed over half the OpenRouter spend. Use it sparingly.
+- `google/gemini-3.1-pro-preview` consumed over half the OpenRouter spend in the Kansas activity export and is not used for ongoing scraping.
 - `deepseek/deepseek-v4-flash` is cheap and usable for PDF triage, but can hit upstream OpenRouter 429s.
 - `qwen/qwen3.5-flash` was noisy on HOA names and produced runaway hidden reasoning-token usage in the activity export; it is blocklisted for classifier calls unless explicitly overridden.
 - `moonshotai/kimi-k2.6` is a reasonable fallback when DeepSeek is rate-limited.
