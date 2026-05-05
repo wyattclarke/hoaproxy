@@ -4,6 +4,37 @@ This is the current repeatable system for starting a new state and scraping publ
 
 The goal is not to make an LLM browse the web directly. The goal is to use cheap deterministic code for search, fetching, PDF harvesting, deduping, and banking, then use OpenRouter only where judgment is valuable: search strategy and noisy lead validation.
 
+## What Counts As A Worthwhile Lead
+
+**Optimize for breadth.** The bank exists so a downstream worker has the largest possible pool of candidate HOAs to draw from. Bank a lead whenever you have at least:
+
+- A plausible **HOA name**, AND
+- Either a **town/city or county**, OR a public **document URL** (governing PDF or doc-page).
+
+Manifests with no PDFs are still useful if name+location are present — they tell the drain worker an HOA exists in a place. Manifests with PDFs but malformed names should still be banked; the PDF can be re-named later. The only hard rejects are: clearly out-of-state hits, generic legal/explainer pages without a specific community, private/walled portal pages, and obvious junk hosts (real-estate listings, attorney marketing, social media, IRS/990 filings).
+
+Do **not** filter for "high quality" by withholding a lead just because the inferred name is messy or the slug is ugly — let it land in the bank with whatever name you have, and clean up names in a separate post-hoc pass (`openrouter_repair_lead_names.py`, then re-bank).
+
+## Always Run County-By-County
+
+**Mandatory rule.** Every Serper sweep, every validate-leads call, and every probe batch should be scoped to one county at a time, with the county passed through end-to-end so manifests land under `gs://hoaproxy-bank/v1/{STATE}/{county}/`.
+
+In practice this means:
+
+- One queries file per county (or per source-family-within-county). Generate it with `openrouter_ks_planner.py county-queries --county <Name>` or hand-edit a per-county `benchmark/{state}_{county}_queries.txt`.
+- `scrape_state_serper_docpages.py --default-county <Name>` so emitted leads carry the county.
+- `openrouter_ks_planner.py validate-leads --county <Name>` so the validator stamps the county on every kept lead and the prompt scopes acceptance to that county.
+- `clean_direct_pdf_leads.py` should also write `county` on accepted rows (currently leaves it null — see Cross-State Lessons).
+- `probe_leads_with_pre_discovered.py` reads `Lead.county` and `bank_hoa()` puts it in the GCS path; you do not have to set anything else once the lead carries the county.
+
+Statewide queries (`"Georgia" "homeowners association" filetype:pdf` etc.) are tempting because they catch hits the per-county sweeps miss, but they create manifests under `_unknown-county/` which makes downstream county analytics impossible. Run them only after every populated county has had a focused pass, and only with `--require-state-hint` plus a per-batch county guess (e.g. infer from URL host or page text) before banking. Do not let a statewide pass be the *first* thing that touches a state.
+
+If you do bank statewide leads to `_unknown-county/`, treat it as a debt: a follow-up pass should walk those manifests, re-derive the county from page/PDF text, and re-bank under the correct county prefix.
+
+This playbook is state-agnostic and harness-agnostic. Replace `{STATE}` (e.g. `GA`, `TN`, `KS`) and `{state-name}` (e.g. `Georgia`) throughout. Code blocks containing literal `Kansas`/`KS` strings are illustrative — they are real queries from the May 2026 Kansas pass and should be translated, not copied. The lessons in "Cross-State Lessons" generalize, even though the named communities are Kansas examples.
+
+For per-state progress, see the matching handoff doc (`ks-discovery-handoff.md`, `tn-discovery-handoff.md`, etc.). When starting a new state, create `docs/{state}-discovery-handoff.md` and update it as you go.
+
 ## System Shape
 
 The bank is the raw GCS sink:
@@ -20,9 +51,10 @@ Key files:
 - `hoaware/bank.py`: GCS banking and dedup.
 - `hoaware/discovery/leads.py`: `Lead` dataclass.
 - `hoaware/discovery/probe.py`: public page probe, PDF harvest, bank write.
-- `benchmark/scrape_ks_serper_docpages.py`: deterministic Serper search -> noisy candidate leads.
-- `benchmark/openrouter_ks_planner.py`: OpenRouter county query generation and lead validation.
-- `benchmark/run_ks_openrouter_discovery.py`: OpenRouter-assisted direct PDF candidate triage and banking.
+- `benchmark/scrape_state_serper_docpages.py`: state-generic deterministic Serper search -> noisy candidate leads. Use this for new states.
+- `benchmark/scrape_ks_serper_docpages.py`: legacy Kansas-only variant; kept for reproducibility, do not extend.
+- `benchmark/openrouter_ks_planner.py`: OpenRouter county query generation and lead validation. Despite the filename, it accepts `--county` and a queries-file path, so it works for any state.
+- `benchmark/run_ks_openrouter_discovery.py`: OpenRouter-assisted direct PDF candidate triage and banking. Same: filename is legacy; arguments are state-agnostic.
 
 ## Recommended Workflow For A New State
 
@@ -84,7 +116,18 @@ Log all model calls to `HOA_MODEL_USAGE_LOG` (`data/model_usage.jsonl` by defaul
 
 ## County Query Generation
 
-Generate county-specific queries with the cheap default first:
+Generate county-specific queries with the cheap default first. Template:
+
+```bash
+OPENROUTER_TIMEOUT_SECONDS=80 python benchmark/openrouter_ks_planner.py county-queries \
+  --county {County} \
+  --count 30 \
+  --output benchmark/results/{state-lower}_{county-lower}_deepseek_queries.txt \
+  --model deepseek/deepseek-v4-flash \
+  --fallback-model moonshotai/kimi-k2.6
+```
+
+Example (Kansas, Sedgwick County) — translate names for your target state:
 
 ```bash
 OPENROUTER_TIMEOUT_SECONDS=80 python benchmark/openrouter_ks_planner.py county-queries \
@@ -140,6 +183,8 @@ This file is noisy by design. Do not blindly probe it. It can include legal-info
 ## Host-Focused Expansion
 
 When a source family starts yielding, focus on it directly. This was the biggest Kansas improvement.
+
+The query examples below use literal `Kansas` / city names from the May 2026 Kansas pass — substitute your target `{state-name}` and metro names when reusing them. The host patterns themselves (eNeighbors, `DocumentCenter/View`, `cobaltreks.com`, `gogladly.com/connect/document`, `hmsft-doc`, `pmtechsol.sfo2.cdn.digitaloceanspaces.com`, etc.) are nationwide, not Kansas-specific.
 
 For eNeighbors-style public pages:
 
@@ -294,7 +339,9 @@ This worked well in Kansas for public HOA document libraries such as Meadows at 
 
 For owned HOA websites with many PDFs, preflight the links before probing. The current page probe banks every linked PDF, so sites with newsletters, minutes, budgets, forms, pool documents, or rental documents can pollute the bank. For these sites, scrape the page links first, whitelist only governing-document URLs, and pass those URLs as `pre_discovered_pdf_urls` instead of letting `probe(lead)` crawl the whole page.
 
-## Current Kansas Lessons
+## Cross-State Lessons (originally captured during Kansas pass)
+
+The named communities below are Kansas-specific examples, but the *patterns* (host families, query phrasings, false-positive shapes, model behavior) generalize to other states.
 
 High-yield:
 

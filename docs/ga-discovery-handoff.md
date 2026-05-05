@@ -56,6 +56,18 @@ User instruction: continue autonomously for GA. Do not stop at checkpoints. Comm
 - Spend so far: about $0.04 OpenRouter (~$10.78 of $20 cap used; net $0.04 added during this GA run).
 - Bank coverage at last check: ~360 manifests / ~399 PDFs across the GA prefix. Many manifests under `_unknown-county/` because validated leads do not currently carry county fields.
 
+## Lead Quality Stance
+
+The user's preference is **breadth over polish**: bank every lead that has a plausible HOA name plus a town/county or a public document URL. Manifests with no PDFs are kept if name+location are present; manifests with malformed names are kept if there is a real PDF, with name repair deferred to a post-hoc pass. The only hard rejects are out-of-state hits, generic legal pages without a specific community, private portals, and obvious junk hosts. See the "What Counts As A Worthwhile Lead" section in `docs/state-hoa-discovery-playbook.md`.
+
+## County Routing (Outstanding Debt)
+
+The current GA passes ran with statewide query files and statewide validation, so almost every manifest landed under `gs://hoaproxy-bank/v1/GA/_unknown-county/...`. Per the playbook's "Always Run County-By-County" rule, this is a known debt that should be worked off:
+
+- For ongoing GA work, every new sweep should be one county at a time. Generate per-county queries (`openrouter_ks_planner.py county-queries --county Fulton ...`), pass `--default-county Fulton` to the Serper scraper, pass `--county Fulton` to `validate-leads`, and let the existing probe pipeline carry the county to the bank.
+- For already-banked `_unknown-county/...` manifests: a follow-up pass should walk them, re-derive the county from the PDF first-page text or the source URL host, and re-bank under the correct county prefix. Until that runs, GA county analytics are blocked.
+
 ## Known Bank-Slug Issues
 
 - Several manifests live under malformed slugs from the legal-phrase pass (e.g. `_unknown-county/a-section-44-3-220.../`, `_unknown-county/all-residents-of-.../`, `_unknown-county/and-restated-articles-of-incorporation-of-wicks-creek/`). The PDFs inside are real and classified correctly; only the directory name is bad. Future work: walk `gs://hoaproxy-bank/v1/GA/` for manifests whose slug matches a malformed pattern, reread the first page of each PDF, derive a clean HOA name, and rewrite the manifest under the new slug. Do not delete the underlying PDFs.
+- About 45 GA manifests have empty `documents: []` arrays (probe found a community page but couldn't harvest a governing PDF). Per the breadth-over-polish stance these are kept if the name+state are real, since a future drain worker can use the name to look up other sources. Only delete if the name is also junk (matches the malformed-slug patterns above).
