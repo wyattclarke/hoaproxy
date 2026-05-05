@@ -160,12 +160,20 @@ Updated: 2026-05-05
   - Exact GCS/source prefilter removed 7 already-banked URLs and found 0 signed URLs, leaving 11 new direct PDFs.
   - Deterministic PDF/text cleaning accepted 4; compact OpenRouter repair kept all 4 with `deepseek/deepseek-v4-flash`.
   - Banked 4 PDFs with 0 skips. Count after pass: 182 manifests, 207 PDFs.
+- 2026-05-05: IRP CDN source-family sweep used `benchmark/tn_irp_cdn_source_queries_2.txt`.
+  - Raw search output: `benchmark/results/tn_serper_docpages_tn_serper_docpages_irp_cdn_2/`
+  - Search calls: 32; raw results: 318; unique URLs: 174; raw leads: 100.
+  - Exact GCS/source prefilter removed 10 already-banked URLs and found 0 signed URLs, leaving 90 new direct PDFs.
+  - Deterministic PDF/text cleaning accepted 22; one municipal zoning ordinance was manually rejected before model repair.
+  - Compact OpenRouter repair kept 20 with `deepseek/deepseek-v4-flash`. Local normalization merged Park Place, Whistle Stop Farms, Poplar Ridge, and Windswept variants before banking.
+  - Banked 20 PDFs with 0 skips. Count after pass: 193 manifests, 223 PDFs.
 
 ## Productive Source Families
 
 - `psmtllc.com/wp-content/uploads/` direct PDFs: Jamison Place, Ridge at Carters Station, Clearview Acres, Walden Woods, Three Rivers, Muirwood, Maebry, The Springs Section I, Richland Downs, Stratford Hall, Staghorn, Hidden River, Saratoga Park, Burton Farms VI, Carter's Station, Breezeway, Carlton Landing, Crescent Ridge, Barton Hills, Stonecrest, Eagle View Village.
 - `sregtn.com/wp-content/uploads/` direct PDFs: Tywater, River Forest, Germantown Commons, Thomas Downs, Chelsea's Way, Sawyer Green II, Millgate, and related SREG-managed communities.
 - `wmco.net/wp-content/uploads/` and `wmco.net/assets/uploads/` direct PDFs: Barefoot Bay, Rutherford Green, Bonbrook, Stonecrest Brentwood, Highland View, Townhomes of Andover, Clairmonte, Ivan Creek, Treemont Estates, Chestnut Bend, Millgate, Glenellen Estates.
+- `irp-cdn.multiscreensite.com` and `irp.cdn-website.com` direct PDFs: Brush Creek, Lee Crossing, Park Place Townhomes, Meadows of Spring Hill, Hamilton Church Manor, Walnut Ridge, Whistle Stop Farms, Windswept, Poplar Ridge, Donelson Downs, Simmons Ridge, Pennock Place, Four Maples, Hardison Hills, Chapmans Retreat, and related SREG-style CDN mirrors.
 - `wmco.net/wp-content/uploads/` / `wmco.net/assets/uploads/` direct PDFs: Barefoot Bay, Rutherford Green, Bonbrook, Stonecrest Brentwood, Highland View.
 - HOA-owned WordPress/static sites: Fox Run, White Plains, Hidden Harbor, Berryhill, Legacy Bay, Riverwalk, Savannah Ridge, Sedgefield.
 - `irp.cdn-website.com/.../files/uploaded/` direct PDFs: Brush Creek and Lee Crossing.
@@ -192,6 +200,7 @@ Updated: 2026-05-05
 - Broader PSMT upload-month queries still produced bankable docs but with increasing duplicate/non-governing noise. Latest additions were Stonecrest, Eagle View Village, and extra Three Rivers/Stratford Hall docs.
 - SREG remains productive but noisier than PSMT; many exact-new PDFs are policies, FAQs, or construction/pool docs. Latest additions were Germantown Commons, Thomas Downs, Chelsea's Way, Sawyer Green II, and Millgate.
 - WMCO remains productive for direct PDFs but has many forms/applications/insurance docs. Latest additions included Townhomes of Andover, Clairmonte, Ivan Creek, Treemont Estates, Chestnut Bend, Glenellen Estates, plus Bonbrook and Millgate updates.
+- IRP CDN is productive but broad and noisy; without state-hint gating it finds many out-of-state CDN documents, so keep deterministic state/text filtering mandatory. Latest additions included Park Place Townhomes, Meadows of Spring Hill, Hamilton Church Manor, Walnut Ridge, Cottages at Sycamore Ridge, Poplar Ridge, Donelson Downs, Pennock Place, Four Maples, and Chapmans Retreat.
 
 ## False Positives / Reject Patterns
 
