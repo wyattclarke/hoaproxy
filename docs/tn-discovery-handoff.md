@@ -78,6 +78,13 @@ Updated: 2026-05-05
   - Deterministic direct-PDF cleaning accepted 14; local manual filtering removed 5 duplicate/newsletter candidates before model repair.
   - Compact OpenRouter name repair ran on 9 candidates with `deepseek/deepseek-v4-flash`. One response shape dropped two keep decisions from the helper output, so final names were normalized locally from the public source domains, URLs, and audit.
   - Banked 9 PDFs with 0 skips. Count after pass: 143 manifests, 161 PDFs.
+- 2026-05-05: Regional legal-phrase expansion used `benchmark/tn_regional_legal_phrase_queries_2.txt`.
+  - Raw search output: `benchmark/results/tn_serper_docpages_tn_serper_docpages_regional_legal_2/`
+  - Search calls: 64; raw results: 61; unique URLs: 59; raw leads: 49.
+  - Exact GCS source-URL prefilter removed 8 already-banked URLs and found 0 signed URLs, leaving 41 new public direct PDFs.
+  - Deterministic direct-PDF cleaning accepted 4; local manual filtering removed 2 Tellico Tell-E-Gram newsletter PDFs.
+  - Compact OpenRouter name repair kept 2 with `deepseek/deepseek-v4-flash` after passing Serper audit snippets for state/name context.
+  - Banked 2 PDFs with 0 skips. Count after pass: 145 manifests, 163 PDFs.
 
 ## Productive Source Families
 
@@ -95,6 +102,7 @@ Updated: 2026-05-05
 - Management-host expansion remains useful but is starting to duplicate prior finds. Latest additions included Estates of Primm Springs, Breckenridge, Polk Place, Belvoir, Reserve at Spencer Creek, Amerine Station, Creek Bend Farms, Belltown, Carrington Place, Ambrose, Benelli Park, and Hawks Landing.
 - Secondary-metro city searches still produce useful finds when deduped and cleaned first. Latest additions included Vineyard Grove, Chandler Point, Tellico Village, Lakeview Estates, Middlebrook, Steeplechase, Shiloh Springs, Jackson Square, Ashberry Farms, and Canyons.
 - Public static-host expansion now has lower marginal yield but still added Clifftops, Sedman Hill Townhomes, Thrasher Landing, Townes at Horse Creek Farms, Grand Valley Lakes, McKay's Mill, Old Capitol Town, and Grandview.
+- Regional legal-phrase expansion appears low yield after prior passes. Latest additions were Shagbark and Jackson Creek.
 
 ## False Positives / Reject Patterns
 
@@ -104,3 +112,4 @@ Updated: 2026-05-05
 - Generic welcome packages, forms, applications, minutes, budgets, newsletters, and pool/lease documents.
 - Out-of-state hits triggered by city names like Franklin or Brentwood.
 - Signed or credentialed URLs from otherwise public-looking search results, especially AWS query strings containing `AWSAccessKeyId`, `Signature`, or `X-Amz-Signature`. Exclude these before model repair and banking.
+- Tellico Village `tgYYYYMMDD.pdf` Tell-E-Gram PDFs are newsletters and should be rejected even if they contain covenant/legal snippets.
