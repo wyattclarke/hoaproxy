@@ -1,0 +1,83 @@
+# GA counties for v2 deeper per-county sweep, with broader city lists
+# (every populated city/town/CDP in the county, not just the seat).
+# Format: <County>|<City1>;<City2>;...
+
+Fulton|Atlanta;Sandy Springs;Alpharetta;Johns Creek;Milton;Roswell;Buckhead;Vinings;Druid Hills;East Point;College Park;Union City;Fairburn;Palmetto;Chattahoochee Hills;Mountain Park;Hapeville;Mountain View;South Fulton;Old National
+Gwinnett|Lawrenceville;Duluth;Suwanee;Snellville;Peachtree Corners;Lilburn;Norcross;Dacula;Buford;Grayson;Loganville;Sugar Hill;Berkeley Lake;Braselton;Mountain Park;Centerville;Auburn;Hoschton;Rest Haven;Lake Lanier
+Cobb|Marietta;Smyrna;Kennesaw;Acworth;Powder Springs;Austell;Mableton;Vinings;East Cobb;West Cobb;Sandy Plains;Kennesaw Mountain
+DeKalb|Decatur;Dunwoody;Brookhaven;Tucker;Stone Mountain;Chamblee;Doraville;Lithonia;Avondale Estates;Pine Lake;Clarkston;Redan;North Decatur;North Druid Hills;Belvedere Park;Candler-McAfee;Panthersville;Gresham Park;Scottdale
+Cherokee|Woodstock;Canton;Holly Springs;Ball Ground;Waleska;Nelson;Free Home;Lebanon;Towne Lake;Hickory Flat
+Henry|McDonough;Stockbridge;Locust Grove;Hampton;Ola;Luella;Stockbridge Lake;East Atlanta;Pleasant Grove
+Forsyth|Cumming;Coal Mountain;Lake Lanier;Brookwood;Concord;Sharon Springs;Mid-Forsyth;Vickery;Vickery Creek
+Fayette|Peachtree City;Fayetteville;Tyrone;Brooks;Woolsey;Inman
+Coweta|Newnan;Senoia;Sharpsburg;Grantville;Moreland;Turin;Madras;Haralson
+Douglas|Douglasville;Lithia Springs;Austell;Winston;Villa Rica
+Paulding|Dallas;Hiram;Powder Springs;Acworth;Rockmart;Yorkville;Braswell
+Hall|Gainesville;Flowery Branch;Oakwood;Buford;Clermont;Murrayville;Lula;Rest Haven;Tadmore
+Bibb|Macon;Lizella;Avondale Estates;Payne;East Macon;Bellevue
+Houston|Warner Robins;Perry;Centerville;Bonaire;Kathleen;Robins
+Bryan|Richmond Hill;Pembroke;Ellabell;Black Creek
+Effingham|Rincon;Springfield;Guyton;Eden;Marlow;Pineora
+Whitfield|Dalton;Tunnel Hill;Cohutta;Varnell;Rocky Face
+Bartow|Cartersville;Adairsville;Emerson;Kingston;White;Taylorsville;Pine Log;Allatoona;Euharlee
+Floyd|Rome;Lindale;Cave Spring;Armuchee;Silver Creek
+Chatham|Savannah;Pooler;Garden City;Tybee Island;Wilmington Island;Bloomingdale;Thunderbolt;Whitemarsh Island;Vernonburg;Skidaway Island
+Glynn|Brunswick;St. Simons;Sea Island;Jekyll Island;Sterling;Country Club Estates;Dock Junction
+Camden|St. Marys;Kingsland;Woodbine;St. Marys
+Clayton|Jonesboro;Riverdale;Morrow;Forest Park;Lake City;Lovejoy;Rex;Conley;Ellenwood
+Newton|Covington;Oxford;Mansfield;Porterdale;Newborn
+Walton|Monroe;Loganville;Social Circle;Walnut Grove;Good Hope;Between
+Carroll|Carrollton;Villa Rica;Bremen;Temple;Whitesburg;Bowdon;Roopville;Mount Zion
+Rockdale|Conyers
+Barrow|Winder;Auburn;Statham;Bethlehem;Carl
+Jackson|Commerce;Jefferson;Braselton;Hoschton;Pendergrass;Maysville;Talmo;Nicholson
+Spalding|Griffin;Sunny Side;Orchard Hill;Experiment
+Troup|LaGrange;West Point;Hogansville;Mountville
+Liberty|Hinesville;Midway;Riceboro;Allenhurst;Walthourville;Fleming;Flemington
+Bulloch|Statesboro;Brooklet;Portal;Register
+Lowndes|Valdosta;Hahira;Lake Park;Dasher;Remerton
+Tift|Tifton;Ty Ty;Omega
+Thomas|Thomasville;Boston;Coolidge;Meigs;Pavo;Ochlocknee
+Richmond|Augusta;Hephzibah;Blythe;Fort Gordon
+Columbia|Evans;Martinez;Grovetown;Harlem;Appling
+Clarke|Athens;Bogart;Winterville
+Oconee|Watkinsville;Bishop;Bogart;North High Shoals;Farmington
+Muscogee|Columbus;Fort Benning;Phenix City
+Dougherty|Albany;Lee;Putney
+Walker|LaFayette;Rossville;Chickamauga;Lookout Mountain;Rock Spring
+Dawson|Dawsonville;Big Canoe
+Pickens|Jasper;Ball Ground;Talking Rock;Marble Hill
+Rabun|Clayton;Tiger;Mountain City;Sky Valley;Lakemont;Lake Burton;Lake Rabun
+Habersham|Cornelia;Demorest;Clarkesville;Mount Airy;Baldwin;Tallulah Falls
+White|Cleveland;Helen;Sautee Nacoochee
+Lumpkin|Dahlonega
+Greene|Greensboro;Union Point;Siloam;Lake Oconee
+Morgan|Madison;Buckhead;Bostwick;Rutledge
+Putnam|Eatonton;Lake Oconee
+Baldwin|Milledgeville
+Wayne|Jesup;Odum;Screven
+Ware|Waycross;Manor
+Decatur|Bainbridge;Climax;Brinson
+Mitchell|Camilla;Pelham;Sale City;Baconton
+Grady|Cairo;Whigham
+Brooks|Quitman;Dixie;Morven;Pavo
+Crisp|Cordele;Arabi
+Worth|Sylvester;Poulan;Sumner;Doerun
+Upson|Thomaston;Yatesville
+Lamar|Barnesville;Aldora;Milner
+Pike|Zebulon;Concord;Williamson;Molena
+Harris|Hamilton;Pine Mountain;Shiloh;West Point
+Meriwether|Greenville;Manchester;Warm Springs;Woodbury;Gay;Lone Oak
+Heard|Franklin;Centralhatchee
+Pierce|Blackshear;Patterson
+Fannin|Blue Ridge;McCaysville;Morganton;Mineral Bluff
+Union|Blairsville;Suches
+Towns|Hiawassee;Young Harris
+Gilmer|Ellijay;East Ellijay;Cherry Log
+Gordon|Calhoun;Fairmount;Ranger;Plainville;Sugar Valley;Resaca
+Hart|Hartwell;Royston;Bowersville;Reed Creek
+Stephens|Toccoa;Martin;Avalon
+Franklin|Lavonia;Carnesville;Royston;Canon
+Banks|Homer;Maysville;Alto
+Madison|Danielsville;Comer;Hull;Ila;Carlton;Royston
+Polk|Cedartown;Rockmart;Aragon;Taylorsville

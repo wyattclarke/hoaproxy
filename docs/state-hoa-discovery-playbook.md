@@ -11,15 +11,27 @@ The goal is not to make an LLM browse the web directly. The goal is to use cheap
 - A plausible **HOA name**, AND
 - Either a **town/city or county**, OR a public **document URL** (governing PDF or doc-page).
 
-Manifests with no PDFs are still useful if name+location are present — they tell the drain worker an HOA exists in a place. Manifests with PDFs but malformed names should still be banked; the PDF can be re-named later. The only hard rejects are: clearly out-of-state hits, generic legal/explainer pages without a specific community, private/walled portal pages, and obvious junk hosts (real-estate listings, attorney marketing, social media, IRS/990 filings).
+The HOA must be a **mandatory association created by recorded deed restrictions** — not a voluntary neighborhood/civic association. Mandatory-HOA signals include: Declaration of Covenants, CC&Rs, Restrictive Covenants, Master Deed, "Articles of Incorporation" of an HOA, "Bylaws of <community> Homeowners Association" tied to a recorded declaration. Voluntary-neighborhood signals to *avoid*: standalone "Architectural Guidelines" or "Design Guidelines" with no Declaration/CC&R reference, civic-association meeting minutes, garden-club bylaws.
+
+When writing search queries, anchor any "architectural" / "design guidelines" / "architectural review" terms to a mandatory-HOA signal in the same query (e.g. `"Architectural Guidelines" "Declaration of Covenants" filetype:pdf`). A bare `"Architectural Guidelines" filetype:pdf` query will pick up voluntary-association docs and pollute the bank.
+
+Manifests with no PDFs are still useful if name+location are present — they tell the drain worker an HOA exists in a place. Manifests with PDFs but malformed names should still be banked; the PDF can be re-named later. The only hard rejects are: clearly out-of-state hits, generic legal/explainer pages without a specific community, private/walled portal pages, voluntary neighborhood associations, and obvious junk hosts (real-estate listings, attorney marketing, social media, IRS/990 filings).
 
 Do **not** filter for "high quality" by withholding a lead just because the inferred name is messy or the slug is ugly — let it land in the bank with whatever name you have, and clean up names in a separate post-hoc pass (`openrouter_repair_lead_names.py`, then re-bank).
 
 ## Always Run County-By-County
 
-**Mandatory rule.** Every Serper sweep, every validate-leads call, and every probe batch should be scoped to one county at a time, with the county passed through end-to-end so manifests land under `gs://hoaproxy-bank/v1/{STATE}/{county}/`.
+**HARD REQUIREMENT.** Every Serper sweep, every validate-leads call, and every probe batch is scoped to one county at a time, with the county passed through end-to-end so manifests land under `gs://hoaproxy-bank/v1/{STATE}/{county}/`. This rule has two reasons:
 
-In practice this means:
+1. Anything banked statewide lands under `_unknown-county/` and is invisible to downstream county analytics until a backfill re-routes it. Backfill is lossy (the heuristics route ~40% in practice) and creates collisions when the same HOA already exists at the right slug.
+2. County scoping gives a clear stopping rule. When county X yields zero new manifests in two consecutive query angles, that county is exhausted — move on. Without scoping, "is this state done" is unanswerable and the assistant ends up sprawling forever.
+
+**Do not launch a statewide `scrape_state_serper_docpages.py` invocation** (no `--default-county` set, broad query file with no `"<County> County"` constraint). Any time you reach for one, treat it as a sign that you've drifted off the rule and stop. The only allowed statewide-shaped operations are:
+
+- Per-HOA enrichment passes that use the *existing* manifest's county (e.g. `scripts/ga_find_owned_website.py`, `scripts/ga_owned_domain_depth.py`). These do not create new manifests; they enrich within the bank's existing county routing.
+- A one-time backfill (`scripts/ga_county_backfill.py`) over historical `_unknown-county/` debt — never to legitimize new statewide sweeps.
+
+In practice the per-county pipeline is:
 
 - One queries file per county (or per source-family-within-county). Generate it with `openrouter_ks_planner.py county-queries --county <Name>` or hand-edit a per-county `benchmark/{state}_{county}_queries.txt`.
 - `scrape_state_serper_docpages.py --default-county <Name>` so emitted leads carry the county.
@@ -27,9 +39,11 @@ In practice this means:
 - `clean_direct_pdf_leads.py` should also write `county` on accepted rows (currently leaves it null — see Cross-State Lessons).
 - `probe_leads_with_pre_discovered.py` reads `Lead.county` and `bank_hoa()` puts it in the GCS path; you do not have to set anything else once the lead carries the county.
 
-Statewide queries (`"Georgia" "homeowners association" filetype:pdf` etc.) are tempting because they catch hits the per-county sweeps miss, but they create manifests under `_unknown-county/` which makes downstream county analytics impossible. Run them only after every populated county has had a focused pass, and only with `--require-state-hint` plus a per-batch county guess (e.g. infer from URL host or page text) before banking. Do not let a statewide pass be the *first* thing that touches a state.
+The Serper-cost penalty for repeating productive query patterns once per county is real but small (Serper is ~$1 per 1000 searches; even 150 counties × 30 queries each = $4.50 worst case). Pay it.
 
-If you do bank statewide leads to `_unknown-county/`, treat it as a debt: a follow-up pass should walk those manifests, re-derive the county from page/PDF text, and re-bank under the correct county prefix.
+If you find yourself looking at a query angle that "works statewide and would be nice to run once", convert it to a per-county loop instead — make a `benchmark/run_ga_<angle>_per_county.sh` that loops the per-county sweep with that angle's queries. Never reach for the statewide form.
+
+If a previous pass left manifests under `_unknown-county/`, treat that as legacy debt: backfill it, but don't take the existence of `_unknown-county/` as license to add more.
 
 This playbook is state-agnostic and harness-agnostic. Replace `{STATE}` (e.g. `GA`, `TN`, `KS`) and `{state-name}` (e.g. `Georgia`) throughout. Code blocks containing literal `Kansas`/`KS` strings are illustrative — they are real queries from the May 2026 Kansas pass and should be translated, not copied. The lessons in "Cross-State Lessons" generalize, even though the named communities are Kansas examples.
 
