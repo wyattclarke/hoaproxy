@@ -46,6 +46,11 @@ Updated: 2026-05-05
   - Compact OpenRouter name repair ran on 56 new URLs and kept 50 leads, all with `deepseek/deepseek-v4-flash`.
   - Before banking, local corrections normalized `CareIlton` to `Carellton` and merged Whistle Stop variants under `Whistle Stop Farms Homeowners Association`.
   - Banked 50 PDFs with 0 skips. Count after pass: 75 manifests, 85 PDFs.
+- 2026-05-05: Static-host pass used `benchmark/tn_static_host_queries.txt`.
+  - Raw search output: `benchmark/results/tn_serper_docpages_static_hosts_1/`
+  - Raw leads: 54; deterministic direct-PDF cleaning accepted 15; 2 exact URLs were already banked.
+  - Compact OpenRouter name repair ran on 13 new URLs and kept 11. It rejected a municipal subdivision-regulations PDF and one unclear update/newsletter-style candidate.
+  - Banked 11 PDFs with 0 skips. Count after pass: 86 manifests, 96 PDFs.
 
 ## Productive Source Families
 
@@ -57,6 +62,8 @@ Updated: 2026-05-05
 - GoDaddy blob downloads can work when title/snippet identify the association; first pass added Wyngate.
 - Smithbilt/builder-hosted PDFs produced several Knoxville/Sumner-area communities: Hayden Farms, Manor in the Foothills, Winchester Commons, Honey Oaks, Carellton, Canterbury.
 - HOA-owned WordPress/Squarespace/static domains in Knox/Shelby/Williamson remain productive when direct PDFs are preflighted.
+- CloudFront/static-host PDFs produced Sunset Pointe, River Watch, RiverBend Hills, Retreats at White Oak, and related direct covenants.
+- HOA Express-style `/file/document` and `/file/document-page` URLs produced Meadows Condominium, Fredericksburg/Brentwood Pointe-style documents, Chesney Hills, and similar direct PDFs.
 
 ## False Positives / Reject Patterns
 
