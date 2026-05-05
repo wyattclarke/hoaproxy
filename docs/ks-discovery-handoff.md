@@ -7,7 +7,7 @@ User instruction: continue autonomously for KS. Do not stop at checkpoints. Comm
 ## Current State
 
 - Bank prefix: `gs://hoaproxy-bank/v1/KS/`
-- Current count: 697 manifests, 1,562 PDFs
+- Current count: 698 manifests, 1,570 PDFs
 - OpenRouter credits: about `$10.73 / $20` used, about `$9.27` remaining
 - Active KS work: continuing deterministic source-family scraping; no Gemini.
 - An unrelated NC benchmark process may be running; leave it alone.
@@ -75,6 +75,7 @@ Highest-yield source families:
 - A DeepSeek source-family planning call used 4,275 tokens and mostly recommended already-known families, so it was less valuable than deterministic evidence. A follow-up management/CDN direct-PDF pass raised KS to 691 manifests and 1,552 PDFs by adding or enriching Tomahawk Creek, Sylvan Lake, North Lakes, Nottingham Downs Duplex, Willow Ridge, and Highland Ridge. The useful part of this branch was direct URL inspection, not generic model strategy.
 - PayHOA and ManageCasa source-specific searches only rediscovered Sylvan Lake and Comotara. HOAEdge added one Edgewood PDF, raising KS to 691 manifests and 1,553 PDFs. These source-specific searches are useful for cleanup but are probably exhausted after one focused pass.
 - Expanding terminology from `homes/homeowners association` to `owners association`, `property owners association`, `villa owners`, `townhome owners`, and `condominium owners` was high-yield. This pass raised KS to 697 manifests and 1,562 PDFs by adding or enriching Cedar Creek, Woodland Park, Mill Creek Meadows, Montrachet, Allens Lake, Westbank Townhomes, Tanglewood Lake, Monroe Manor, Solheim, Spring Creek Meadows, Westwind Estates, and Villas of Asbury. Carry this terminology expansion to other states.
+- `Architectural Guidelines`, `Design Guidelines`, and `Rules and Regulations` terminology is useful for enrichment but noisier. The latest pass raised KS to 698 manifests and 1,570 PDFs by adding or enriching Villas of Falcon Valley, Brookhill, Oak Hill, Grand Mere, Sugar Valley Lakes, St. Andrews Place, Tanglewood Lake, and Parkwood Hills. Skip newsletters, pool forms, clubhouse rental forms, generic law PDFs, city packets, and out-of-state rules manuals.
 
 Lower-yield or avoid:
 
