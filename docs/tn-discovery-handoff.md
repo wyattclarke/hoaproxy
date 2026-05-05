@@ -39,6 +39,13 @@ Updated: 2026-05-05
   - OpenRouter usage: 5 `deepseek/deepseek-v4-flash` calls for metadata-only name repair; no fallback model used.
   - Banked 36 PDFs into 35 manifests. Fox Run merged two PDFs into one manifest.
   - Count after pass: 35 manifests, 36 PDFs.
+- 2026-05-05: Source-family pass used `benchmark/tn_source_family_queries.txt`.
+  - Raw search output: `benchmark/results/tn_serper_docpages_source_family_1/`
+  - Search calls: 90; raw results: 541; unique URLs: 393; raw leads: 120.
+  - Deterministic direct-PDF cleaning accepted 70 candidates; 14 exact URLs were already banked.
+  - Compact OpenRouter name repair ran on 56 new URLs and kept 50 leads, all with `deepseek/deepseek-v4-flash`.
+  - Before banking, local corrections normalized `CareIlton` to `Carellton` and merged Whistle Stop variants under `Whistle Stop Farms Homeowners Association`.
+  - Banked 50 PDFs with 0 skips. Count after pass: 75 manifests, 85 PDFs.
 
 ## Productive Source Families
 
@@ -46,7 +53,10 @@ Updated: 2026-05-05
 - `wmco.net/wp-content/uploads/` / `wmco.net/assets/uploads/` direct PDFs: Barefoot Bay, Rutherford Green, Bonbrook, Stonecrest Brentwood, Highland View.
 - HOA-owned WordPress/static sites: Fox Run, White Plains, Hidden Harbor, Berryhill, Legacy Bay, Riverwalk, Savannah Ridge, Sedgefield.
 - `irp.cdn-website.com/.../files/uploaded/` direct PDFs: Brush Creek and Lee Crossing.
+- `irp-cdn.multiscreensite.com/.../files/uploaded/` direct PDFs: Creekstone Village, Nashboro Village, Estates of Hickory Woods.
 - GoDaddy blob downloads can work when title/snippet identify the association; first pass added Wyngate.
+- Smithbilt/builder-hosted PDFs produced several Knoxville/Sumner-area communities: Hayden Farms, Manor in the Foothills, Winchester Commons, Honey Oaks, Carellton, Canterbury.
+- HOA-owned WordPress/Squarespace/static domains in Knox/Shelby/Williamson remain productive when direct PDFs are preflighted.
 
 ## False Positives / Reject Patterns
 
