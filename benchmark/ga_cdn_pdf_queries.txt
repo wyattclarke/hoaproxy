@@ -1,0 +1,66 @@
+# GA direct-PDF queries on the CDNs and indie HOA hosts we've already
+# proven productive (WSImg/GoDaddy, Squarespace, Rackcdn, S3, FieldStone,
+# TheKeyManagers, CribFlyer-PDF, BWWS Platform, etc.).
+
+# --- WSImg / GoDaddy CDN ---
+site:img1.wsimg.com "Georgia" "Homeowners Association" filetype:pdf
+site:img1.wsimg.com "Georgia" "Declaration of Covenants" filetype:pdf
+site:img1.wsimg.com "Georgia" "Bylaws" "Homeowners" filetype:pdf
+site:img1.wsimg.com "Georgia" "Architectural" HOA filetype:pdf
+site:nebula.wsimg.com "Georgia" "Homeowners Association" filetype:pdf
+site:nebula.wsimg.com "Georgia" "Declaration" "Covenants" filetype:pdf
+
+# --- Squarespace static ---
+site:static1.squarespace.com "Georgia" "Homeowners Association" filetype:pdf
+site:static1.squarespace.com "Georgia" "Declaration of Covenants" filetype:pdf
+site:static1.squarespace.com "Atlanta" "homeowners association" filetype:pdf
+site:static1.squarespace.com "Marietta" "homeowners association" filetype:pdf
+
+# --- Rackcdn / S3 / Cloudfront ---
+site:rackcdn.com "Georgia" "Homeowners Association" filetype:pdf
+site:rackcdn.com "Atlanta" "Homeowners Association" filetype:pdf
+site:s3.amazonaws.com "Georgia" "Homeowners Association" filetype:pdf
+site:s3.amazonaws.com "Georgia" "Declaration of Covenants" filetype:pdf
+site:s3.us-west-1.amazonaws.com "Georgia" "Homeowners Association" filetype:pdf
+site:cdn.buildercloud.io "Georgia" "Homeowners Association" filetype:pdf
+site:assets.bwwsplatform.com "Georgia" "Homeowners Association" filetype:pdf
+
+# --- Productive management portals ---
+site:thekeymanagers.com "Georgia" filetype:pdf
+site:fieldstonerp.com "Georgia" filetype:pdf
+site:fsresidential.com "Georgia" filetype:pdf
+site:cribflyer-pdf.s3.us-west-1.amazonaws.com "Georgia" filetype:pdf
+
+# --- Generic HOA-owned domain hints (Atlanta metro) ---
+"Atlanta" "homeowners association" "Declaration of Covenants" filetype:pdf
+"Sandy Springs" "homeowners association" "Declaration of Covenants" filetype:pdf
+"Roswell" "homeowners association" "Declaration of Covenants" filetype:pdf
+"Alpharetta" "homeowners association" "Declaration of Covenants" filetype:pdf
+"Marietta" "homeowners association" "Declaration of Covenants" filetype:pdf
+"Decatur" "Georgia" "homeowners association" "Declaration of Covenants" filetype:pdf
+"Buckhead" "homeowners association" "Declaration of Covenants" filetype:pdf
+"Brookhaven" "Georgia" "homeowners association" "Declaration of Covenants" filetype:pdf
+"Dunwoody" "homeowners association" "Declaration of Covenants" filetype:pdf
+"Smyrna" "Georgia" "homeowners association" "Declaration of Covenants" filetype:pdf
+"Vinings" "homeowners association" "Declaration of Covenants" filetype:pdf
+"East Cobb" "homeowners association" "Declaration of Covenants" filetype:pdf
+"Lawrenceville" "homeowners association" "Declaration of Covenants" filetype:pdf
+"Duluth" "Georgia" "homeowners association" "Declaration of Covenants" filetype:pdf
+"Suwanee" "homeowners association" "Declaration of Covenants" filetype:pdf
+"Cumming" "Georgia" "homeowners association" "Declaration of Covenants" filetype:pdf
+"Woodstock" "Georgia" "homeowners association" "Declaration of Covenants" filetype:pdf
+"Canton" "Georgia" "homeowners association" "Declaration of Covenants" filetype:pdf
+"Newnan" "homeowners association" "Declaration of Covenants" filetype:pdf
+"Peachtree City" "homeowners association" "Declaration of Covenants" filetype:pdf
+"Savannah" "Georgia" "homeowners association" "Declaration of Covenants" filetype:pdf
+"Augusta" "Georgia" "homeowners association" "Declaration of Covenants" filetype:pdf
+"Pooler" "Georgia" "homeowners association" "Declaration of Covenants" filetype:pdf
+"Macon" "Georgia" "homeowners association" "Declaration of Covenants" filetype:pdf
+"Warner Robins" "homeowners association" "Declaration of Covenants" filetype:pdf
+"Athens" "Georgia" "homeowners association" "Declaration of Covenants" filetype:pdf
+"Columbus" "Georgia" "homeowners association" "Declaration of Covenants" filetype:pdf
+"Valdosta" "Georgia" "homeowners association" "Declaration of Covenants" filetype:pdf
+"Rome" "Georgia" "homeowners association" "Declaration of Covenants" filetype:pdf
+"Dalton" "Georgia" "homeowners association" "Declaration of Covenants" filetype:pdf
+"Albany" "Georgia" "homeowners association" "Declaration of Covenants" filetype:pdf
+"Statesboro" "homeowners association" "Declaration of Covenants" filetype:pdf
