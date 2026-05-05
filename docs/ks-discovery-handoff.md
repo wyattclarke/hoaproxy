@@ -7,7 +7,7 @@ User instruction: continue autonomously for KS. Do not stop at checkpoints. Comm
 ## Current State
 
 - Bank prefix: `gs://hoaproxy-bank/v1/KS/`
-- Current count: 768 manifests, 1,723 PDFs
+- Current count: 771 manifests, 1,726 PDFs
 - OpenRouter credits: about `$10.73 / $20` used, about `$9.27` remaining
 - Active KS work: continuing deterministic source-family scraping; no Gemini.
 - An unrelated NC benchmark process may be running; leave it alone.
@@ -88,6 +88,7 @@ Highest-yield source families:
 - A broad non-eNeighbors search (`"Kansas" "HOA documents"`, city document queries, `-eneighbors`) plus deterministic direct-PDF cleaning raised KS to 765 manifests and 1,711 PDFs. Most hits were duplicates or enrichments, but the clean selected set included Villas of Falcon Valley, Southern Meadows, The Cedars, Dover Estates, Falcon Ridge Estates, Clearwater Creek, Normandy Place, Woodland Park, Red Oak Hills, and Mill Creek Meadows. This branch is lower-yield than eNeighbors at the current stage, but still useful for enrichment and occasional new manifests.
 - A direct Cobalt index refresh raised KS to 766 manifests and 1,720 PDFs. The Cobalt source is mostly Riley County enrichment at this point, but it found updated 2026 uploads for Brittnay Ridge, Brianna Court, Grand Mere, Vanesta, Irvine Acres, Kimball, Nelsons Ridge, Solheim, Westbank Townhomes, and Williamsburg. Manager index enumeration remains cheap and clean: parse the index, keep only bylaws/covenants/declarations/articles/rules/guidelines/amendments, skip contracts/plat maps/overviews, and direct-seed selected PDFs.
 - A late Wichita/Sedgwick direct-PDF pass over the tail of the generated Wichita query list raised KS to 768 manifests and 1,723 PDFs. It added/enriched Tylers Landing and West Ridge Estates. The query family is now low-volume, but county-focused direct PDF passes still beat broad statewide search for non-Johnson coverage.
+- A Riley/Pottawatomie/Geary county pass raised KS to 771 manifests and 1,726 PDFs. It added Wildcat Woods, Lake Elbo Club, and The Reserve Community Association. This pass also showed the usual county-name ambiguity problem: many `Douglas`, `Riley`, or `Pottawatomie` queries retrieve out-of-state county material unless the query includes Kansas cities, Kansas state terms, and direct HOA phrases.
 
 Lower-yield or avoid:
 
