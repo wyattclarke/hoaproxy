@@ -154,6 +154,12 @@ Updated: 2026-05-05
   - Deterministic PDF/text cleaning accepted 12; compact OpenRouter repair kept 8 with `deepseek/deepseek-v4-flash`.
   - Local normalization merged Bonbrook into the existing Bonbrook manifest and normalized Glenellen Estates before banking.
   - Banked 8 PDFs with 0 skips. Count after pass: 178 manifests, 203 PDFs.
+- 2026-05-05: Smithbilt source-family sweep used `benchmark/tn_smithbilt_source_queries_2.txt`.
+  - Raw search output: `benchmark/results/tn_serper_docpages_tn_serper_docpages_smithbilt_2/`
+  - Search calls: 30; raw results: 248; unique URLs: 30; raw leads: 18.
+  - Exact GCS/source prefilter removed 7 already-banked URLs and found 0 signed URLs, leaving 11 new direct PDFs.
+  - Deterministic PDF/text cleaning accepted 4; compact OpenRouter repair kept all 4 with `deepseek/deepseek-v4-flash`.
+  - Banked 4 PDFs with 0 skips. Count after pass: 182 manifests, 207 PDFs.
 
 ## Productive Source Families
 
@@ -166,6 +172,7 @@ Updated: 2026-05-05
 - `irp-cdn.multiscreensite.com/.../files/uploaded/` direct PDFs: Creekstone Village, Nashboro Village, Estates of Hickory Woods.
 - GoDaddy blob downloads can work when title/snippet identify the association; first pass added Wyngate.
 - Smithbilt/builder-hosted PDFs produced several Knoxville/Sumner-area communities: Hayden Farms, Manor in the Foothills, Winchester Commons, Honey Oaks, Carellton, Canterbury.
+- Smithbilt direct PDFs remain useful but are now dedupe-heavy. Latest additions were The Farm at River Bend, Brake Ridge, Holliday Park, and Lyons Creek.
 - HOA-owned WordPress/Squarespace/static domains in Knox/Shelby/Williamson remain productive when direct PDFs are preflighted.
 - CloudFront/static-host PDFs produced Sunset Pointe, River Watch, RiverBend Hills, Retreats at White Oak, and related direct covenants.
 - HOA Express-style `/file/document` and `/file/document-page` URLs produced Meadows Condominium, Fredericksburg/Brentwood Pointe-style documents, Chesney Hills, and similar direct PDFs.
