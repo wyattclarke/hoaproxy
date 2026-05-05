@@ -51,6 +51,13 @@ Updated: 2026-05-05
   - Raw leads: 54; deterministic direct-PDF cleaning accepted 15; 2 exact URLs were already banked.
   - Compact OpenRouter name repair ran on 13 new URLs and kept 11. It rejected a municipal subdivision-regulations PDF and one unclear update/newsletter-style candidate.
   - Banked 11 PDFs with 0 skips. Count after pass: 86 manifests, 96 PDFs.
+- 2026-05-05: Deep legal/recorder phrase pass used `benchmark/tn_deep_legal_phrase_queries.txt`.
+  - Raw search output: `benchmark/results/tn_serper_docpages_deep_legal_1/`
+  - Search calls: 72; raw results: 359; unique URLs: 270; raw leads: 140.
+  - Dedupe against prior TN repaired URLs left 100 new URLs for deterministic cleaning.
+  - Deterministic direct-PDF cleaning accepted 40 candidates; compact OpenRouter name repair kept 33 with `deepseek/deepseek-v4-flash`.
+  - Before banking, local normalization merged `Fredonia Nature Resort` into `Fredonia Mountain Nature Resort`.
+  - Banked 33 PDFs with 0 skips. Count after pass: 114 manifests, 128 PDFs.
 
 ## Productive Source Families
 
@@ -64,6 +71,7 @@ Updated: 2026-05-05
 - HOA-owned WordPress/Squarespace/static domains in Knox/Shelby/Williamson remain productive when direct PDFs are preflighted.
 - CloudFront/static-host PDFs produced Sunset Pointe, River Watch, RiverBend Hills, Retreats at White Oak, and related direct covenants.
 - HOA Express-style `/file/document` and `/file/document-page` URLs produced Meadows Condominium, Fredericksburg/Brentwood Pointe-style documents, Chesney Hills, and similar direct PDFs.
+- Legal/recorder phrase searches are still productive when direct PDFs are cleaned first. Latest additions included Braystone Park, Pine Creek Estates, Buckingham Place, Silver Springs, Victoria Park, Padgett Hill, Hatties Place, Park Run, Veterans Cove, Pennfield, Ivan Creek, Bakertown Woods, Providence Landing, Halle Plantation, Westwind Reserve, Millgate, Lone Mountain Shores, Featherfoot Point, Splendor Oaks, Lake Meadows, Chestnut Cove, and Chapel Creek.
 
 ## False Positives / Reject Patterns
 
