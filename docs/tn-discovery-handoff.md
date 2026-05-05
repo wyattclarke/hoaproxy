@@ -191,6 +191,13 @@ Updated: 2026-05-05
   - No OpenRouter repair was used for this pass; names were normalized locally from filenames, URLs, and extracted text.
   - Banked 13 PDFs with 0 skips. Count after pass: 206 manifests, 245 PDFs.
   - Note: accepted rows landed under `_unknown-county` because `clean_direct_pdf_leads.py` was still dropping county at the time of this run; the helper now preserves incoming `city` and `county` for subsequent county-scoped branches.
+- 2026-05-05: Williamson/Franklin/Brentwood owner-terminology pass used `benchmark/tn_williamson_owner_term_queries_4.txt`.
+  - Raw search output: `benchmark/results/tn_serper_docpages_tn_williamson_owner_terms_4/`
+  - Search calls: 48; raw results: 221; unique URLs: 178; raw leads: 157.
+  - Exact GCS/source prefilter removed 6 already-banked URLs and found 0 signed URLs, leaving 151 new public direct PDFs.
+  - Deterministic PDF/text cleaning accepted 27; local review kept 9 and rejected shared-name/out-of-state/title-company/auction/government-regulation false positives.
+  - No OpenRouter repair was used; retained names were normalized locally.
+  - Banked 9 PDFs with 0 skips under the `TN/williamson/` prefix. Count after pass: 214 manifests, 254 PDFs.
 
 ## Productive Source Families
 
@@ -228,7 +235,7 @@ Updated: 2026-05-05
 - Focused `f15f4572/files/uploaded` IRP queries are still productive but duplicate-heavy after the broader IRP/SREG passes. Latest additions included Nashboro Woods, Brentwood Trace I, River Plantation Section VI, Greens at Legacy Townhomes, Oak Meadows, and extra governing documents for Thomas Downs, Breckenridge, Tywater, Millgate, Chapmans Retreat, Donelson Downs, Hawks Landing, Sawyer Green II, and Vineyard Grove.
 - Management-company domain probes for Ghertner/Timmons/AMI/Cedar/Sentry/Kuester/CMG/PMI/FCS returned no direct public PDFs; do not expand those domains unless a specific public source page is found first.
 - eNeighbors appears dry for the tested Williamson/Franklin/Brentwood/Spring Hill/Nolensville queries; do not treat it as a proven TN source family yet.
-- Owner-terminology searches (`property owners association`, `townhome owners association`, `condominium owners association`, `master deed`, `restrictive covenants`) can still produce TN documents, but broad Nashville/Davidson terms are noisy and hit court, government, real-estate, and industry PDFs. Latest additions included Porter Village, Overton Retreat, Clari Park, The Row at 31st, Kensington Downs, Village at Carter's Station, Emerson Hills, Belle Meade, and added PDFs for Germantown Commons, Carrington Place, and Chelsea's Way.
+- Owner-terminology searches (`property owners association`, `townhome owners association`, `condominium owners association`, `master deed`, `restrictive covenants`) can still produce TN documents, but broad terms are noisy and hit court, government, real-estate, title-company, and industry PDFs. Latest additions included Porter Village, Overton Retreat, Clari Park, The Row at 31st, Kensington Downs, Village at Carter's Station, Emerson Hills, Belle Meade, Carlton Landing, Brentwood Hills, Brentwood Lakes, Brentwood Park, Estates of Brentwood, Clear Creek, Whitney Park, Brady Estates, and added PDFs for Germantown Commons, Carrington Place, and Chelsea's Way.
 
 ## False Positives / Reject Patterns
 
