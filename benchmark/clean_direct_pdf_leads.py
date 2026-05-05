@@ -182,6 +182,15 @@ def _filename(url: str) -> str:
 def _clean_name(raw: str) -> str | None:
     name = raw or ""
     name = re.sub(r"\s+", " ", name.replace("\n", " "))
+    name = re.sub(r"(?i)^\s*\[?pdf\]?\s*", "", name)
+    name = re.sub(r"(?i)^(?:untitled|this instrument prepared from|recorded instrument)\s*[-:]*\s*", "", name)
+    name = re.sub(r"(?i)^(?:article\s+[ivx\d]+\.?|revised\s+[a-z]+\s+\d+\s*,?\s*\d{4}\s*\d*)\s+", "", name)
+    name = re.sub(r"(?i)^(?:shall\s+mean(?:\s+and\s+refer\s+to)?(?:\s+the)?|means(?:\s+the)?|by|known\s+and\s+identified\s+as|"
+                  r"name\s+of\s+(?:this\s+)?(?:non-profit\s+)?corporation\s+shall\s+be|"
+                  r"is\s+made\s+this.*?\bby|profit\s+corporation\s+known\s+and\s+identified\s+as)\s+", "", name)
+    name = re.sub(r"(?i)^community\s+understand\s+the\s+rules\s+of\s+the\s+", "", name)
+    if re.search(r"(?i)\b(initial text of which|membership in the association|welcome package|our community is proud)\b", name):
+        return None
     name = re.sub(r"(?i)\b(?:incorporated|inc\.?|llc|l\.l\.c\.)\b", "", name)
     name = re.sub(r"(?i)\bhome\s*owner'?s?\s+association\b", "Homeowners Association", name)
     name = re.sub(r"(?i)\bhomes\s+association\b", "Homes Association", name)
@@ -190,8 +199,12 @@ def _clean_name(raw: str) -> str | None:
     name = re.sub(r"(?i),?\s+(?:a\s+)?tennessee\s+(?:nonprofit|not[- ]for[- ]profit|corporation).*$", "", name)
     name = re.sub(r"(?i)\b(?:the\s+)?undersigned.*$", "", name)
     name = re.sub(r"(?i)^(?:of|for|and|the|charter|bylaws?|declaration|amended|restated|restrictive|covenants?|conditions|restrictions|rules|regulations)\s+", "", name)
+    name = re.sub(r"(?i)\b(?:declaration|covenants?|conditions|restrictions?|bylaws?|rules?|regulations?|architectural|guidelines?|amendments?|recorded|final|searchable|pdf)\b", " ", name)
+    name = re.sub(r"\s+", " ", name)
     name = name.strip(" .,-:;()[]")
     if not name or len(name) < 5 or len(name) > 120:
+        return None
+    if re.search(r"(?i)\b(godaddy|rackcdn|wordpress|county register|suite|street|overview|document|untitled)\b", name):
         return None
     if not HOA_RE.search(name):
         if not COMMUNITY_RE.search(name):
@@ -204,12 +217,26 @@ def _name_from_filename(filename: str) -> str | None:
     stem = re.sub(r"\.pdf$", "", filename, flags=re.IGNORECASE)
     stem = unquote(stem)
     stem = re.sub(r"[_+%-]+", " ", stem)
-    stem = re.split(r"(?i)\b(declaration|covenants?|conditions|restrictions?|bylaws?|rules?|regulations?|architectural|guidelines?|amendments?|restated|recorded|signed|final|searchable)\b", stem, 1)[0]
+    stem = re.split(
+        r"(?i)\b(declaration|covenants?|conditions|restrictions?|bylaws?|rules?|regulations?|architectural|guidelines?|amendments?|restated|recorded|signed|final|searchable)\b",
+        stem,
+        maxsplit=1,
+    )[0]
     return _clean_name(stem)
 
 
 def infer_name(row: dict, audit: dict | None, text: str, url: str) -> str | None:
     candidates: list[str] = []
+    if audit:
+        snippet = str(audit.get("snippet") or "")
+        title = str(audit.get("title") or "")
+        for pattern in [
+            r"([A-Z][A-Za-z0-9&'., -]{2,80}?\s+(?:Homeowners?|Home Owners?|Homes|Property Owners?|Owners|Condominium|Townhomes?)\s+Association)",
+            r"([A-Z][A-Za-z0-9&'., -]{2,80}?\s+HOA)",
+        ]:
+            candidates.extend(m.group(1) for m in re.finditer(pattern, f"{title} {snippet}", re.IGNORECASE))
+        candidates.append(title)
+        candidates.append(snippet)
     for match in ASSOC_RE.finditer(text[:8000]):
         candidates.append(match.group(1))
     for pattern in [
@@ -219,8 +246,6 @@ def infer_name(row: dict, audit: dict | None, text: str, url: str) -> str | None
     ]:
         for match in re.finditer(pattern, text[:8000], re.IGNORECASE | re.DOTALL):
             candidates.append(match.group(1))
-    if audit:
-        candidates.extend([str(audit.get("title") or ""), str(audit.get("snippet") or "")])
     candidates.append(str(row.get("name") or ""))
     candidates.append(_name_from_filename(_filename(url)) or "")
     host = re.sub(r"^www\.", "", urlparse(url).netloc.lower()).split(".", 1)[0]
