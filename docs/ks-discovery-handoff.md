@@ -144,6 +144,7 @@ ps -fA | rg 'hoaware.discovery|run_ks_openrouter_discovery|scrape_ks_serper|open
 
 ## Next Good Branches
 
+- Preserve out-of-scope records. If a future KS pass finds a clean public governing document for another state, do not delete it. Route it into the correct state prefix when the state is clear, or leave/log it for that state's future scrape if the destination is ambiguous. Only delete empty stubs or exact duplicate copies after verifying the canonical copy remains available.
 - More source-specific searches for hmsft/HOAMsoft, HOA Express `/file/document-page/`, GoDaddy `img1.wsimg.com/blobby/go/.../downloads`, eNeighbors public documents, and county recorder/legal phrases.
 - More independent-domain searches for remaining Kansas metros/counties, but inspect host distribution before validation.
 - Smaller city-specific passes for places with actual HOA-owned domains:
