@@ -1,0 +1,67 @@
+# GA HOA-owned community-website document pages.
+# Goal: find HOA-owned domains that have a /documents or /governing-documents
+# page exposing several PDFs at once. The probe will crawl the page and
+# bank multiple governing PDFs per visit.
+
+# --- Generic owned-domain document pages ---
+"Georgia" inurl:hoa "Documents"
+"Georgia" inurl:hoa governing documents
+"Georgia" inurl:.org "Governing Documents" "Homeowners Association"
+"Georgia" inurl:.org "HOA documents"
+"Georgia" "Association Documents" inurl:.com
+"Georgia" "Document Library" "Homeowners Association"
+"Georgia" "Documents and Forms" "Homeowners Association"
+
+# --- Atlanta metro owned-domain HOA documents pages ---
+"Atlanta" "Homeowners Association" "Documents" inurl:hoa
+"Sandy Springs" "Homeowners Association" "Documents" inurl:hoa
+"Roswell" "Homeowners Association" "Documents" inurl:hoa
+"Alpharetta" "Homeowners Association" "Documents" inurl:hoa
+"Marietta" "Homeowners Association" "Documents" inurl:hoa
+"Smyrna" Georgia "Homeowners Association" "Documents" inurl:hoa
+"Lawrenceville" "Homeowners Association" "Documents" inurl:hoa
+"Duluth" Georgia "Homeowners Association" "Documents" inurl:hoa
+"Suwanee" "Homeowners Association" "Documents" inurl:hoa
+"Cumming" Georgia "Homeowners Association" "Documents" inurl:hoa
+"Decatur" Georgia "Homeowners Association" "Documents" inurl:hoa
+"Brookhaven" Georgia "Homeowners Association" "Documents" inurl:hoa
+"Dunwoody" "Homeowners Association" "Documents" inurl:hoa
+
+# --- Variations: byaws, declaration, covenants pages ---
+"Georgia" inurl:.org "Bylaws" "Homeowners Association"
+"Georgia" inurl:.com "Bylaws" "Homeowners Association"
+"Georgia" inurl:.net "Bylaws" "Homeowners Association"
+"Georgia" inurl:.org "Declaration" "Homeowners Association"
+"Georgia" inurl:.com "Declaration" "Homeowners Association"
+"Georgia" inurl:.net "Declaration" "Homeowners Association"
+
+# --- Plantation / community subdivisions ---
+"Georgia" "Plantation Homeowners" "Documents" filetype:pdf
+"Georgia" "subdivision" "covenants" "homeowners association" filetype:pdf
+"Georgia" "Architectural Control Committee" "Homeowners Association" filetype:pdf
+
+# --- HOAware / HOA Management portals ---
+site:nabrnetwork.com Georgia "Homeowners Association" Documents
+site:vertexcommunities.com Georgia documents
+site:sentrymgt.com Georgia "Homeowners Association"
+site:cmacommunities.com Georgia documents
+
+# --- Small-town GA HOA-domain hints ---
+"Statesboro" "Homeowners Association" Documents inurl:hoa
+"Hinesville" "Homeowners Association" Documents inurl:hoa
+"Brunswick" Georgia "Homeowners Association" Documents inurl:hoa
+"Tifton" Georgia "Homeowners Association" Documents inurl:hoa
+"Rome" Georgia "Homeowners Association" Documents inurl:hoa
+"Athens" Georgia "Homeowners Association" Documents inurl:hoa
+"Macon" Georgia "Homeowners Association" Documents inurl:hoa
+
+# --- Active community website CDN paths ---
+"Georgia" "Homeowners Association" inurl:wp-content/uploads filetype:pdf
+"Georgia" "Homeowners Association" inurl:images/uploaded filetype:pdf
+"Georgia" "Homeowners Association" inurl:files/uploaded filetype:pdf
+"Georgia" "Homeowners Association" inurl:storage/files filetype:pdf
+
+# --- CRG / Builder portals ---
+site:crg.com Georgia Homeowners
+site:lookbooklink.com Georgia Homeowners
+site:peachtreeresidential.com Georgia covenants
