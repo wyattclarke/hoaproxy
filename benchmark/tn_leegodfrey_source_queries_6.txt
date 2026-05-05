@@ -1,0 +1,9 @@
+site:leegodfrey.com/wp-content/uploads filetype:pdf HOA covenants
+site:leegodfrey.com/wp-content/uploads filetype:pdf HOA "bylaws"
+site:leegodfrey.com/wp-content/uploads filetype:pdf HOA "restrictions"
+site:leegodfrey.com/wp-content/uploads filetype:pdf HOA "declaration"
+site:leegodfrey.com/wp-content/uploads filetype:pdf "homeowners association"
+site:leegodfrey.com/wp-content/uploads filetype:pdf "property owners association"
+site:leegodfrey.com/wp-content/uploads filetype:pdf Jackson HOA
+site:leegodfrey.com/wp-content/uploads filetype:pdf Madison HOA
+site:leegodfrey.com/wp-content/uploads filetype:pdf Tennessee HOA
