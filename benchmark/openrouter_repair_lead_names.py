@@ -57,6 +57,8 @@ def _parse_json(text: str) -> Any:
 
 def _decisions_from_data(data: Any) -> list[Any]:
     if isinstance(data, dict):
+        if "keep" in data and "index" in data:
+            return [data]
         decisions = data.get("decisions", [])
         return decisions if isinstance(decisions, list) else []
     if isinstance(data, list):
