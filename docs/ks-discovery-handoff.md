@@ -7,7 +7,7 @@ User instruction: continue autonomously for KS. Do not stop at checkpoints. Comm
 ## Current State
 
 - Bank prefix: `gs://hoaproxy-bank/v1/KS/`
-- Current count: 685 manifests, 1,541 PDFs
+- Current count: 686 manifests, 1,543 PDFs
 - OpenRouter credits: about `$10.73 / $20` used, about `$9.27` remaining
 - Active KS work: continuing deterministic source-family scraping; no Gemini.
 - An unrelated NC benchmark process may be running; leave it alone.
@@ -68,6 +68,7 @@ Highest-yield source families:
 - A focused `site:*/file/document` search raised KS to 683 manifests and 1,538 PDFs. This pattern is better than `file/document-page` alone because many HOA Express-style sites expose direct PDF routes. Selected documents added or enriched St. Andrews Place, Pheasant Run, Wolf Creek, Brookhill, Willow Ridge, Willo-Esque, Maple Dunes, Southern Village, Highcroft, Quivira Falls, Heather Glen, Edgewood, Arlington Estates, and Gramercy Park. Continue to skip annual meetings, newsletters, review/social docs, and city packets.
 - A CommunitySite-specific direct-file pass raised KS to 684 manifests and 1,539 PDFs by adding Brooks Farm. The source is low-volume; most remaining CommunitySite hits were dues notices, meeting notices, ARC request forms, or law/reference PDFs.
 - A GoGladly leftovers pass raised KS to 685 manifests and 1,541 PDFs by adding or enriching Meadows Place and Southcrest Addition. Continue to skip Longwood reminders/history and Hawthorne Place estate-sale forms.
+- A cheap DeepSeek/OpenRouter Wyandotte county-query call used 434 total tokens and produced a focused query file. The resulting deterministic Serper/manual pass raised KS to 686 manifests and 1,543 PDFs by adding Westlake and Persimmon Hill. The planner was cheap and auditable, but the output was generic; the value came from deterministic preflight and direct-PDF selection, not model browsing.
 
 Lower-yield or avoid:
 
