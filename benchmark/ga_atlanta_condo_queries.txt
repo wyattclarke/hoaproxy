@@ -1,0 +1,49 @@
+# Atlanta condominiums and townhomes - distinct from typical HOAs.
+
+filetype:pdf "Atlanta" "Condominium Association" "Master Deed"
+filetype:pdf "Atlanta" "Condominium Association" "Declaration"
+filetype:pdf "Atlanta" "Condominium Association" "Bylaws"
+filetype:pdf "Atlanta" "Townhome Association" "Declaration"
+filetype:pdf "Atlanta" "Townhome Association" "Bylaws"
+filetype:pdf "Atlanta" "Townhomes" "Declaration of Covenants"
+filetype:pdf "Buckhead" "Condominium Association"
+filetype:pdf "Midtown" "Atlanta" "Condominium Association"
+filetype:pdf "Sandy Springs" "Condominium Association" "Declaration"
+filetype:pdf "Roswell" "Condominium Association" "Declaration"
+filetype:pdf "Brookhaven" "Georgia" "Condominium Association" "Declaration"
+filetype:pdf "Decatur" "Georgia" "Condominium Association" "Declaration"
+filetype:pdf "Dunwoody" "Condominium Association" "Declaration"
+filetype:pdf "Smyrna" "Georgia" "Condominium Association" "Declaration"
+filetype:pdf "Marietta" "Condominium Association" "Declaration"
+filetype:pdf "Alpharetta" "Condominium Association" "Declaration"
+filetype:pdf "Vinings" "Condominium Association" "Declaration"
+filetype:pdf "Peachtree" "Atlanta" "Condominium Association" "Declaration"
+
+# --- Specific Atlanta condo districts ---
+filetype:pdf "Brookhaven" "Townhome Association" "Declaration"
+filetype:pdf "Atlanta" "Loft" "Condominium Association"
+filetype:pdf "Atlanta" "High-Rise" "Condominium Association"
+
+# --- Townhome / townhouse Associations ---
+filetype:pdf "Georgia" "Townhouse Association" "Declaration"
+filetype:pdf "Georgia" "Townhome Association" "Declaration"
+filetype:pdf "Georgia" "Townhome Owners Association" "Declaration"
+
+# --- Master associations (large planned communities) ---
+filetype:pdf "Georgia" "Master Association" "Declaration"
+filetype:pdf "Georgia" "Master Association" "Bylaws"
+
+# --- Phase Declarations for big subdivisions ---
+filetype:pdf "Georgia" "First Phase" "Declaration of Covenants"
+filetype:pdf "Georgia" "Phase II" "Declaration" "Homeowners Association"
+filetype:pdf "Georgia" "Phase 1" "Declaration of Covenants" "Homeowners Association"
+
+# --- Sub-associations / sub-master ---
+filetype:pdf "Georgia" "Sub-Association" "Declaration"
+filetype:pdf "Georgia" "Sub-Master Association" "Declaration"
+
+# --- POA / Property Owners Association ---
+filetype:pdf "Georgia" "POA" "Articles of Incorporation"
+filetype:pdf "Georgia" "POA" "Declaration of Covenants"
+filetype:pdf "Georgia" "Property Owners' Association" "Declaration"
+filetype:pdf "Georgia" "Property Owners' Association" "Bylaws"
