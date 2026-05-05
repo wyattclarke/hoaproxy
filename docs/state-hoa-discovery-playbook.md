@@ -15,9 +15,24 @@ The HOA must be a **mandatory association created by recorded deed restrictions*
 
 When writing search queries, anchor any "architectural" / "design guidelines" / "architectural review" terms to a mandatory-HOA signal in the same query (e.g. `"Architectural Guidelines" "Declaration of Covenants" filetype:pdf`). A bare `"Architectural Guidelines" filetype:pdf` query will pick up voluntary-association docs and pollute the bank.
 
-Manifests with no PDFs are still useful if name+location are present — they tell the drain worker an HOA exists in a place. Manifests with PDFs but malformed names should still be banked; the PDF can be re-named later. The only hard rejects are: clearly out-of-state hits, generic legal/explainer pages without a specific community, private/walled portal pages, voluntary neighborhood associations, and obvious junk hosts (real-estate listings, attorney marketing, social media, IRS/990 filings).
+Manifests with no PDFs are still useful if name+location are present — they tell the drain worker an HOA exists in a place. Manifests with PDFs but malformed names should still be banked; the PDF can be re-named later. The only hard rejects are: generic legal/explainer pages without a specific community, private/walled portal pages, voluntary neighborhood associations, and obvious junk hosts (real-estate listings, attorney marketing, social media, IRS/990 filings).
 
 Do **not** filter for "high quality" by withholding a lead just because the inferred name is messy or the slug is ugly — let it land in the bank with whatever name you have, and clean up names in a separate post-hoc pass (`openrouter_repair_lead_names.py`, then re-bank).
+
+### Out-Of-State And Out-Of-County Hits Are Free Wins, Not Rejects
+
+If a sweep targeted at state X or county X turns up an HOA that's actually in state Y or county Y (mandatory association, real PDF, plausible name), **bank it under the correct Y prefix** — do NOT drop it. We will eventually scrape the whole country, and a TN HOA found by a GA sweep is a future-TN-pass HOA we don't have to discover again.
+
+Concretely:
+
+- The *cleaner* and the *validator* should not hard-reject leads on out-of-state grounds. They should re-route to the correct state's prefix when the evidence is clear (PDF text mentions "X County, Tennessee" or the URL host is a known TN domain) and otherwise let the lead through with `state=null` so the backfill / drain worker can route it later.
+- The *probe* writes via `bank_hoa()`, which already takes the lead's `state` and `county`. If discovery code knows the target state/county is wrong, it should overwrite `Lead.state` and `Lead.county` before probing.
+- Slugging dedup will handle the case where a TN HOA we banked from a GA sweep is later re-found by a TN sweep — bank merges by `(state, county, slug)`, so the second sighting just appends a new `metadata_source` entry to the existing manifest.
+- Implementation status (2026-05-05): `clean_direct_pdf_leads.py`'s `OUT_OF_STATE_RE` *currently* still hard-rejects PDFs whose text mentions another state name. That's wrong under this rule and should be replaced with a "rewrite Lead.state to that state" step instead. The validator's per-state scope rule should similarly be relaxed from "reject" to "re-route". Do this when you next touch those files.
+
+The same logic applies inside a state: a Fulton sweep that finds a Cobb HOA should bank it under `gs://hoaproxy-bank/v1/GA/cobb/<slug>/`, not under `gs://hoaproxy-bank/v1/GA/fulton/<slug>/` and not under `_unknown-county/`. The county scope of a sweep is a *search hint*, not a *banking constraint*. Use the lead's own evidence (city in URL/anchor/PDF text → city→county map → bank under that county) and only fall back to the sweep's `--default-county` when no better signal exists.
+
+The hard requirement to run sweeps county-by-county is unchanged — that's about query scoping and stopping discipline, not about where leads ultimately land.
 
 ## Always Run County-By-County
 
