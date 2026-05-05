@@ -7,7 +7,7 @@ User instruction: continue autonomously for KS. Do not stop at checkpoints. Comm
 ## Current State
 
 - Bank prefix: `gs://hoaproxy-bank/v1/KS/`
-- Current count: 678 manifests, 1,524 PDFs
+- Current count: 683 manifests, 1,538 PDFs
 - OpenRouter credits: about `$10.73 / $20` used, about `$9.27` remaining
 - Active KS work: continuing deterministic source-family scraping; no Gemini.
 - An unrelated NC benchmark process may be running; leave it alone.
@@ -65,6 +65,7 @@ Highest-yield source families:
 - Re-mining `ks_serper_docpages_statewide_legal_phrase_deep_3` raised KS to 671 manifests and 1,516 PDFs. Selected leftovers added or enriched Seven Hills Lake, Amber Meadows, Oak Hill, Walnut Creek Estates, Symphony Hills, Foxborough, Deer Valley, Highland Pointe, Blue Valley Riding, Kensington Valley, Greens of Chapel Creek, Shadow Rock, and Nelsons Ridge.
 - A focused HA-KC direct-file pass raised KS to 674 manifests and 1,519 PDFs. It added or enriched Brooke Meadows, Prairie Village Homes Association, and Verona Hills. HA-KC remains low-volume: unlabeled scanned restriction files should be skipped unless the first page or filename reveals a clean HOA name.
 - A small cleanup pass over `ks_serper_docpages_statewide_legal_phrase_2_2p_1` raised KS to 678 manifests and 1,524 PDFs. Selected leftovers added or enriched Deer Valley, Grand Ridge at Grand Mere, Preserve at Clear Creek, Rockwood, Timber Creek III, and Nelsons Ridge.
+- A focused `site:*/file/document` search raised KS to 683 manifests and 1,538 PDFs. This pattern is better than `file/document-page` alone because many HOA Express-style sites expose direct PDF routes. Selected documents added or enriched St. Andrews Place, Pheasant Run, Wolf Creek, Brookhill, Willow Ridge, Willo-Esque, Maple Dunes, Southern Village, Highcroft, Quivira Falls, Heather Glen, Edgewood, Arlington Estates, and Gramercy Park. Continue to skip annual meetings, newsletters, review/social docs, and city packets.
 
 Lower-yield or avoid:
 
