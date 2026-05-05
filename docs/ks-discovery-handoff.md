@@ -7,7 +7,7 @@ User instruction: continue autonomously for KS. Do not stop at checkpoints. Comm
 ## Current State
 
 - Bank prefix: `gs://hoaproxy-bank/v1/KS/`
-- Current count: 590 manifests, 1,413 PDFs
+- Current count: 607 manifests, 1,431 PDFs
 - OpenRouter credits: about `$10.73 / $20` used, about `$9.27` remaining
 - Active KS work: continuing deterministic source-family scraping; no Gemini.
 - An unrelated NC benchmark process may be running; leave it alone.
@@ -56,6 +56,7 @@ Highest-yield source families:
 - Cobalt-managed HOA pages are a strong source family. Direct Cobalt PDFs added or enriched Westbank Townhomes, Nelsons Ridge, Vanesta, Williamsburg Townhome, and Grand Mere; Kimball links are now live and banked. Continue with `site:cobaltreks.com/hoa/` and `site:cobaltreks.com/wp-content/uploads filetype:pdf` searches for Riley/Pottawatomie-style communities.
 - The Cobalt HOA index at `https://cobaltreks.com/hoa-management/` is better than search alone. The latest direct index pass added or enriched Brittnay Ridge, Brianna Court, Grand Mere, Vanesta, Irvine Acres, Kimball, Nelsons Ridge, Solheim, Westbank, and Williamsburg. Rosewalk and Westwood Village created manifests but did not produce bankable PDFs in this pass. Continue by enumerating manager indexes/sitemaps wherever a source family proves productive.
 - The no-Gemini hmsft/PMTech pass needs manual name repair for CDN PDFs. A raw hmsft run was stopped after noisy names; bad manifests were removed from GCS, then valid PDFs were rebanked under clean names. Clean hmsft additions/enrichments from this pass include Woodbridge, Willowbrooke Villas, Copper Creek, Melrose Reserve, Seven Hills, Montrachet, Foxborough, Southwood, Deer Valley, Gramercy Park, Villas at Southpointe, Preserve at Clear Creek, Indian Creek Park Estates, Villas of St. Andrews, Crestwood Village, Nottingham Downs Duplex, Prairie Point, Prairie Brook, and Milhaven.
+- The latest no-Gemini owned-domain PDF pass raised KS to 607 manifests and 1,431 PDFs. Manually selected governing-document PDFs added or enriched Amber Meadows, Primrose Addition, Prairie Creek Sixth, Timber Creek Estates, Willow Springs, Foxfire Addition, Clearwater Creek, Falcon Ridge Estates, Ryan's Run, Hallbrook East Village, Greystone Estates South, Oak Valley, Falcon Ridge, Prairie Lake Estates, Cobalt Reks, Reflection Ridge, Cedar Ridge, The Moorings 10th Addition, Mesa Verde, Nelsons Ridge, Milburn Fields, Crescent Lakes, and Woodland Park. Skipped minutes, planning/court packets, estate forms, out-of-state PDFs, and non-governing annual/board materials.
 
 Lower-yield or avoid:
 
