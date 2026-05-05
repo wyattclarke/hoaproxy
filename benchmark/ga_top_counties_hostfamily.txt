@@ -1,0 +1,42 @@
+# GA top metros for the host-family second pass.
+# Format: <County>|<City1>;<City2>;...
+Fulton|Atlanta;Sandy Springs;Alpharetta;Johns Creek;Milton;Roswell;Buckhead;East Point;College Park;Union City
+Gwinnett|Lawrenceville;Duluth;Suwanee;Snellville;Peachtree Corners;Lilburn;Norcross;Dacula;Buford;Grayson;Loganville
+Cobb|Marietta;Smyrna;Kennesaw;Acworth;Powder Springs;Austell;Mableton;Vinings
+DeKalb|Decatur;Dunwoody;Brookhaven;Tucker;Stone Mountain;Chamblee;Doraville;Lithonia;Avondale Estates
+Cherokee|Woodstock;Canton;Holly Springs;Ball Ground;Waleska
+Henry|McDonough;Stockbridge;Locust Grove;Hampton
+Forsyth|Cumming
+Fayette|Peachtree City;Fayetteville;Tyrone
+Coweta|Newnan;Senoia;Sharpsburg
+Douglas|Douglasville;Lithia Springs
+Paulding|Dallas;Hiram
+Hall|Gainesville;Flowery Branch;Oakwood
+Bibb|Macon
+Houston|Warner Robins;Perry;Centerville
+Bryan|Richmond Hill;Pembroke
+Effingham|Rincon;Springfield;Guyton
+Whitfield|Dalton;Tunnel Hill
+Bartow|Cartersville;Adairsville;Emerson
+Floyd|Rome;Lindale
+Chatham|Savannah;Pooler;Garden City;Tybee Island
+Glynn|Brunswick;St. Simons;Sea Island
+Camden|St. Marys;Kingsland;Woodbine
+Clayton|Jonesboro;Riverdale;Morrow
+Newton|Covington;Oxford
+Walton|Monroe;Loganville;Social Circle
+Carroll|Carrollton;Villa Rica;Bremen;Temple
+Rockdale|Conyers
+Barrow|Winder;Auburn;Statham
+Jackson|Commerce;Jefferson;Braselton;Hoschton
+Spalding|Griffin
+Troup|LaGrange;West Point;Hogansville
+Liberty|Hinesville;Midway
+Bulloch|Statesboro
+Lowndes|Valdosta;Lake Park;Hahira
+Tift|Tifton;Ty Ty
+Thomas|Thomasville;Boston;Coolidge
+Richmond|Augusta
+Columbia|Evans;Martinez;Grovetown
+Clarke|Athens
+Oconee|Watkinsville;Bishop;Bogart
