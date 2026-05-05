@@ -64,6 +64,13 @@ Updated: 2026-05-05
   - Dedupe against prior TN repaired URLs left 54 new URLs; deterministic direct-PDF cleaning accepted 15.
   - Compact OpenRouter name repair kept 14 and rejected one unclear McKay's Mill supplemental document.
   - Banked 14 PDFs with 0 skips. Count after pass: 126 manifests, 142 PDFs.
+- 2026-05-05: Secondary-metro expansion used `benchmark/tn_secondary_metro_queries.txt`.
+  - Raw search output: `benchmark/results/tn_serper_docpages_secondary_metros_1/`
+  - Search calls: 68; raw results: 332; unique URLs: 294; raw leads: 160.
+  - Dedupe against prior TN repaired URLs left 147 new URLs; deterministic direct-PDF cleaning accepted 20.
+  - One AWS signed URL was excluded before model repair or banking; signed URLs must stay out of model prompts and the bank.
+  - Compact OpenRouter name repair ran on the remaining 19 public URLs and kept 10 with `deepseek/deepseek-v4-flash`.
+  - Banked 10 PDFs with 0 skips. Count after pass: 136 manifests, 152 PDFs.
 
 ## Productive Source Families
 
@@ -79,6 +86,7 @@ Updated: 2026-05-05
 - HOA Express-style `/file/document` and `/file/document-page` URLs produced Meadows Condominium, Fredericksburg/Brentwood Pointe-style documents, Chesney Hills, and similar direct PDFs.
 - Legal/recorder phrase searches are still productive when direct PDFs are cleaned first. Latest additions included Braystone Park, Pine Creek Estates, Buckingham Place, Silver Springs, Victoria Park, Padgett Hill, Hatties Place, Park Run, Veterans Cove, Pennfield, Ivan Creek, Bakertown Woods, Providence Landing, Halle Plantation, Westwind Reserve, Millgate, Lone Mountain Shores, Featherfoot Point, Splendor Oaks, Lake Meadows, Chestnut Cove, and Chapel Creek.
 - Management-host expansion remains useful but is starting to duplicate prior finds. Latest additions included Estates of Primm Springs, Breckenridge, Polk Place, Belvoir, Reserve at Spencer Creek, Amerine Station, Creek Bend Farms, Belltown, Carrington Place, Ambrose, Benelli Park, and Hawks Landing.
+- Secondary-metro city searches still produce useful finds when deduped and cleaned first. Latest additions included Vineyard Grove, Chandler Point, Tellico Village, Lakeview Estates, Middlebrook, Steeplechase, Shiloh Springs, Jackson Square, Ashberry Farms, and Canyons.
 
 ## False Positives / Reject Patterns
 
@@ -87,3 +95,4 @@ Updated: 2026-05-05
 - Real-estate/listing hosts such as LandHub, Showcase, Chicago Title, auction/property packet hosts.
 - Generic welcome packages, forms, applications, minutes, budgets, newsletters, and pool/lease documents.
 - Out-of-state hits triggered by city names like Franklin or Brentwood.
+- Signed or credentialed URLs from otherwise public-looking search results, especially AWS query strings containing `AWSAccessKeyId`, `Signature`, or `X-Amz-Signature`. Exclude these before model repair and banking.
