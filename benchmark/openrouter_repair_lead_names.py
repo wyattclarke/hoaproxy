@@ -60,7 +60,10 @@ def _decisions_from_data(data: Any) -> list[Any]:
         if "keep" in data and "index" in data:
             return [data]
         decisions = data.get("decisions", [])
-        return decisions if isinstance(decisions, list) else []
+        if isinstance(decisions, list):
+            return decisions
+        candidates = data.get("candidates", [])
+        return candidates if isinstance(candidates, list) else []
     if isinstance(data, list):
         return data
     return []
