@@ -308,20 +308,96 @@ def _state_ok(text: str, metadata: str, args: argparse.Namespace) -> bool:
     return any(re.search(rf"\b{re.escape(term)}\b", hay, re.IGNORECASE) for term in state_terms if term)
 
 
-def _build_out_of_state_re(args: argparse.Namespace) -> re.Pattern[str]:
-    """Drop the current state's name from OUT_OF_STATE_RE so target hits are kept."""
-    skip = {(args.state_name or "").lower(), (args.state or "").lower()}
-    skip.update({(h or "").lower() for h in (args.state_hint or [])})
-    pattern_parts = [
-        "florida", "california", "massachusetts", "missouri", "georgia",
-        "kentucky", "north carolina", "south carolina", "alabama",
-        "mississippi", "arkansas", "virginia", "texas", "tennessee",
-        "kansas", "oklahoma", "ohio", "michigan", "illinois",
-        "palm beach", "holbrook,\\s*ma", "chicago title",
-        "pleasant prairie", "brentwood hoa.*palm beach",
-    ]
-    pattern_parts = [p for p in pattern_parts if p.lower() not in skip]
-    return re.compile(r"\b(" + "|".join(pattern_parts) + r")\b", re.IGNORECASE)
+# US state name -> two-letter abbreviation. Used by detect_state_county()
+# to re-route a lead to the actual state/county shown by the PDF text,
+# even if the sweep targeted a different state. Per the playbook,
+# out-of-state and out-of-county hits are free wins, not rejects.
+_US_STATES: dict[str, str] = {
+    "alabama": "AL", "alaska": "AK", "arizona": "AZ", "arkansas": "AR",
+    "california": "CA", "colorado": "CO", "connecticut": "CT", "delaware": "DE",
+    "florida": "FL", "georgia": "GA", "hawaii": "HI", "idaho": "ID",
+    "illinois": "IL", "indiana": "IN", "iowa": "IA", "kansas": "KS",
+    "kentucky": "KY", "louisiana": "LA", "maine": "ME", "maryland": "MD",
+    "massachusetts": "MA", "michigan": "MI", "minnesota": "MN",
+    "mississippi": "MS", "missouri": "MO", "montana": "MT", "nebraska": "NE",
+    "nevada": "NV", "new hampshire": "NH", "new jersey": "NJ",
+    "new mexico": "NM", "new york": "NY", "north carolina": "NC",
+    "north dakota": "ND", "ohio": "OH", "oklahoma": "OK", "oregon": "OR",
+    "pennsylvania": "PA", "rhode island": "RI", "south carolina": "SC",
+    "south dakota": "SD", "tennessee": "TN", "texas": "TX", "utah": "UT",
+    "vermont": "VT", "virginia": "VA", "washington": "WA",
+    "west virginia": "WV", "wisconsin": "WI", "wyoming": "WY",
+    "district of columbia": "DC",
+}
+
+# Sorted by length desc so "north carolina" matches before "carolina".
+_US_STATE_NAMES_RE = re.compile(
+    r"\b(" + "|".join(re.escape(n) for n in sorted(_US_STATES.keys(), key=lambda s: -len(s))) + r")\b",
+    re.IGNORECASE,
+)
+# "<County> County, <state>" — captures both county name and state. Requires
+# Title Case so we don't pick up "Mentions Fulton County, Georgia" as a
+# county named "Mentions Fulton". Allows 1-3 word counties (Jeff Davis,
+# St. Marys, Prince George's). Case-insensitive on the state name only.
+_COUNTY_STATE_RE = re.compile(
+    r"\b((?:[A-Z][A-Za-z'.]+\s+){0,2}[A-Z][A-Za-z'.]+)\s+County,?\s+(?:Georgia|Alabama|Alaska|Arizona|Arkansas|California|Colorado|Connecticut|Delaware|Florida|Hawaii|Idaho|Illinois|Indiana|Iowa|Kansas|Kentucky|Louisiana|Maine|Maryland|Massachusetts|Michigan|Minnesota|Mississippi|Missouri|Montana|Nebraska|Nevada|New Hampshire|New Jersey|New Mexico|New York|North Carolina|North Dakota|Ohio|Oklahoma|Oregon|Pennsylvania|Rhode Island|South Carolina|South Dakota|Tennessee|Texas|Utah|Vermont|Virginia|Washington|West Virginia|Wisconsin|Wyoming|District of Columbia)\b",
+)
+# Re-extract the state separately because the long alternation above is
+# anchored via a non-capturing group; we need a paired re for state too.
+_COUNTY_STATE_PAIR_RE = re.compile(
+    r"\b((?:[A-Z][A-Za-z'.]+\s+){0,2}[A-Z][A-Za-z'.]+)\s+County,?\s+("
+    + "|".join(re.escape(n.title()) for n in sorted(_US_STATES.keys(), key=lambda s: -len(s)))
+    + r")\b",
+)
+
+
+def detect_state_county(text: str) -> tuple[str | None, str | None]:
+    """Best-effort (state_abbrev, county) inference from PDF text.
+
+    Strategy:
+      1. Look for "<County> County, <State>" patterns first — strongest
+         signal, gives both fields at once. Pick the most-mentioned pair.
+      2. Fall back to bare state-name mentions; pick the most-mentioned.
+      3. Returns (None, None) if nothing distinctive found — caller
+         should keep its original sweep-driven state/county.
+
+    Both returns are *suggestions*; the caller may still prefer its
+    sweep's --default-county if the hint is weaker than the lead's
+    pre-existing county evidence.
+    """
+    if not text:
+        return None, None
+
+    # Pair-based: "<County> County, <State>".
+    pair_counts: dict[tuple[str, str], int] = {}
+    for match in _COUNTY_STATE_PAIR_RE.finditer(text):
+        county_raw = match.group(1).strip()
+        state_raw = match.group(2).strip().lower()
+        # Reject pseudo-counties from PDF noise ("Of County", "This County").
+        if not re.search(r"[A-Za-z]{3,}", county_raw) or county_raw.lower() in {
+            "the", "this", "of", "and", "for", "in", "by", "on",
+        }:
+            continue
+        county = county_raw
+        state = _US_STATES.get(state_raw)
+        if not state:
+            continue
+        key = (state, county)
+        pair_counts[key] = pair_counts.get(key, 0) + 1
+    if pair_counts:
+        (state, county), _ = max(pair_counts.items(), key=lambda kv: kv[1])
+        return state, county
+
+    # State-only fallback: which state name is mentioned most?
+    state_counts: dict[str, int] = {}
+    for match in _US_STATE_NAMES_RE.finditer(text):
+        state = _US_STATES.get(match.group(1).lower())
+        if state:
+            state_counts[state] = state_counts.get(state, 0) + 1
+    if state_counts:
+        return max(state_counts.items(), key=lambda kv: kv[1])[0], None
+
+    return None, None
 
 
 def clean(args: argparse.Namespace) -> int:
@@ -332,8 +408,8 @@ def clean(args: argparse.Namespace) -> int:
     seen_urls: set[str] = set()
     reject_path = Path(args.rejects)
     reject_path.parent.mkdir(parents=True, exist_ok=True)
-    out_of_state_re = _build_out_of_state_re(args)
     blocked_host_re = _build_blocked_host_re(args)
+    target_state = (args.state or "").upper()
     with reject_path.open("w") as rejects:
         for row in rows:
             pdfs = row.get("pre_discovered_pdf_urls") or []
@@ -352,7 +428,11 @@ def clean(args: argparse.Namespace) -> int:
                 str(audit.get("snippet") or ""),
                 url,
             ])
-            if blocked_host_re.search(host) or JUNK_RE.search(metadata) or out_of_state_re.search(metadata):
+            # Note: blocked_host_re still hard-rejects scrape farms, real estate
+            # sites, etc.; JUNK_RE still hard-rejects newsletters/minutes/etc.
+            # Out-of-state was *previously* a hard reject — now we route the
+            # lead to the actual state we detect from the PDF text instead.
+            if blocked_host_re.search(host) or JUNK_RE.search(metadata):
                 print(json.dumps({"url": url, "reason": "metadata_reject", "metadata": metadata[:300]}, sort_keys=True), file=rejects)
                 continue
             pdf_bytes, skip = _download_pdf(session, url)
@@ -360,12 +440,30 @@ def clean(args: argparse.Namespace) -> int:
                 print(json.dumps({"url": url, "reason": skip or "download_failed"}, sort_keys=True), file=rejects)
                 continue
             text = _extract_text(pdf_bytes, args.max_pages)
-            if out_of_state_re.search(text[:5000]):
-                print(json.dumps({"url": url, "reason": "text_out_of_state"}, sort_keys=True), file=rejects)
-                continue
-            if not _state_ok(text, metadata, args):
-                print(json.dumps({"url": url, "reason": "no_state_evidence"}, sort_keys=True), file=rejects)
-                continue
+
+            # Determine the lead's actual (state, county) from the PDF.
+            # Priority order:
+            #   1. PDF-detected state+county (strongest signal — the
+            #      recorded declaration usually says "X County, <State>").
+            #   2. Sweep's --default-county + --state (fallback).
+            # If the detected state is *different* from the sweep's
+            # target, we re-route. Per the playbook, a TN HOA found by a
+            # GA sweep banks under v1/TN/<county>/<slug>/ and contributes
+            # to the eventual TN pass.
+            detected_state, detected_county = detect_state_county(text[:25000])
+            if detected_state:
+                final_state = detected_state
+                final_county = detected_county or row.get("county")
+            else:
+                # No PDF state evidence at all. Skip — banking under the
+                # sweep's target state with zero corroboration would be
+                # unsafe (the lead might be from anywhere).
+                if not _state_ok(text, metadata, args):
+                    print(json.dumps({"url": url, "reason": "no_state_evidence"}, sort_keys=True), file=rejects)
+                    continue
+                final_state = target_state
+                final_county = row.get("county")
+
             clf = classify_from_text(text, str(row.get("name") or "")) if text else None
             if not clf:
                 clf = classify_from_filename(_filename(url))
@@ -379,11 +477,11 @@ def clean(args: argparse.Namespace) -> int:
                 continue
             lead = Lead(
                 name=name,
-                source=f"clean-direct-pdf-{args.state.lower()}",
+                source=f"clean-direct-pdf-{target_state.lower()}",
                 source_url=url,
-                state=args.state.upper(),
+                state=final_state,
                 city=row.get("city"),
-                county=row.get("county"),
+                county=final_county,
                 website=None,
             )
             payload = asdict(lead)
@@ -392,6 +490,9 @@ def clean(args: argparse.Namespace) -> int:
                 "category": category,
                 "method": (clf or {}).get("method"),
                 "confidence": (clf or {}).get("confidence"),
+                "rerouted": final_state != target_state,
+                "detected_state": detected_state,
+                "detected_county": detected_county,
             }
             accepted.append(payload)
             if args.delay:

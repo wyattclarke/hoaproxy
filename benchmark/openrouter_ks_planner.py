@@ -157,10 +157,14 @@ def validate_batch(
     state: str,
     county: str | None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    # Per the playbook ("Out-Of-State And Out-Of-County Hits Are Free Wins,
+    # Not Rejects"), border-metro hits get re-routed downstream — don't
+    # reject at validation. Just note the focus county/state so the model
+    # prefers them but doesn't drop other-state hits.
     scope_rule = (
-        f"For this run, require evidence that the lead is in {county} County or one of its cities. Reject generic {state} leads and leads that are probably from another county."
+        f"This run targets {county} County, {state}. Prefer leads in {county} County, but if a lead is clearly a mandatory HOA in another county or another US state (e.g. a border-metro hit), KEEP it — the bank routes by the lead's own evidence, not by this sweep's scope."
         if county
-        else f"For this statewide run, require evidence that the lead is in {state}. Reject leads that are probably from another state."
+        else f"This run targets {state}. Prefer leads in {state}, but if a lead is clearly a mandatory HOA in another US state, KEEP it — the bank routes by the lead's own evidence."
     )
     prompt = {
         "task": "Validate noisy public-web leads before probing/banking HOA governing documents.",
