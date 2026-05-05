@@ -1,0 +1,134 @@
+# GA counties to sweep one-at-a-time, ordered by likely HOA density.
+# Format: <County>|<City1>;<City2>;...
+# Used by run_all_ga_counties.sh.
+#
+# Counties already covered by the broad statewide passes (Fulton, Gwinnett,
+# Cobb, DeKalb, Cherokee, Henry, Fayette, Coweta, Douglas, Paulding,
+# Forsyth, Clayton, Hall, Chatham, Richmond, Columbia, Bibb, Houston,
+# Newton, Walton, Carroll, Bartow, Floyd, Lowndes, Bulloch, Liberty,
+# Glynn, Camden, Tift, Thomas, Clarke, Oconee, Lumpkin, White, Murray,
+# Dade, Catoosa, McIntosh, Dawson, Pickens, Rabun, Habersham) are
+# omitted; we'll iterate them with focused per-county queries only if
+# the backfill leaves them under-represented.
+
+# --- Top-40 unsweep'd counties (population-ordered) ---
+Muscogee|Columbus;Fort Benning;Phenix City
+Whitfield|Dalton;Tunnel Hill
+Rockdale|Conyers
+Barrow|Winder;Auburn;Statham
+Jackson|Commerce;Jefferson;Braselton
+Spalding|Griffin
+Troup|LaGrange;West Point;Hogansville
+Walker|LaFayette;Rossville
+Effingham|Rincon;Springfield;Guyton
+Bryan|Richmond Hill;Pembroke
+Dougherty|Albany;Lee
+Laurens|Dublin
+Polk|Cedartown;Rockmart
+Colquitt|Moultrie
+Coffee|Douglas
+Sumter|Americus
+Baldwin|Milledgeville
+Madison|Danielsville;Comer
+Stephens|Toccoa
+Hart|Hartwell
+Franklin|Lavonia;Carnesville
+Banks|Homer
+Morgan|Madison
+Putnam|Eatonton
+Greene|Greensboro;Union Point
+Wayne|Jesup
+Ware|Waycross
+Decatur|Bainbridge
+Mitchell|Camilla;Pelham
+Grady|Cairo
+Brooks|Quitman
+Crisp|Cordele
+Worth|Sylvester
+Upson|Thomaston
+Lamar|Barnesville
+Pike|Zebulon
+Harris|Hamilton;Pine Mountain
+Meriwether|Greenville;Manchester;Warm Springs
+Heard|Franklin
+Pierce|Blackshear
+
+# --- Mid-tier counties ---
+Fannin|Blue Ridge;McCaysville;Morganton
+Union|Blairsville
+Towns|Hiawassee;Young Harris
+Gilmer|Ellijay;East Ellijay
+Gordon|Calhoun;Fairmount
+Pulaski|Hawkinsville
+Twiggs|Jeffersonville
+Bleckley|Cochran
+Dodge|Eastman
+Wilcox|Abbeville;Rochelle
+Tattnall|Reidsville;Glennville
+Toombs|Vidalia;Lyons
+Treutlen|Soperton
+Emanuel|Swainsboro
+Jenkins|Millen
+Screven|Sylvania
+Burke|Waynesboro
+Jefferson|Louisville;Wadley
+Washington|Sandersville;Tennille
+Hancock|Sparta
+Glascock|Gibson
+Warren|Warrenton
+McDuffie|Thomson
+Wilkes|Washington
+Lincoln|Lincolnton
+Elbert|Elberton
+Oglethorpe|Lexington
+Wilkinson|Irwinton
+Jasper|Monticello;Shady Dale
+
+# --- Long tail (small population but may still have a few HOAs) ---
+Atkinson|Pearson;Willacoochee
+Bacon|Alma
+Baker|Newton
+Ben Hill|Fitzgerald
+Berrien|Nashville;Ray City
+Brantley|Nahunta;Hoboken
+Calhoun|Edison;Morgan
+Candler|Metter
+Charlton|Folkston
+Chattahoochee|Cusseta
+Chattooga|Summerville;Trion
+Clay|Fort Gaines
+Clinch|Homerville
+Cook|Adel;Sparks
+Crawford|Roberta;Knoxville
+Dooly|Vienna
+Early|Blakely
+Echols|Statenville
+Evans|Claxton;Hagan
+Glascock|Gibson
+Haralson|Buchanan;Tallapoosa;Bremen
+Irwin|Ocilla
+Jeff Davis|Hazlehurst
+Johnson|Wrightsville
+Jones|Gray;Haddock
+Lanier|Lakeland
+Lee|Leesburg
+Long|Ludowici
+Macon|Montezuma;Oglethorpe
+Marion|Buena Vista
+Miller|Colquitt
+Monroe|Forsyth
+Montgomery|Mount Vernon;Ailey
+Peach|Fort Valley;Byron
+Quitman|Georgetown
+Randolph|Cuthbert
+Schley|Ellaville
+Seminole|Donalsonville
+Stewart|Lumpkin;Richland
+Talbot|Talbotton
+Taliaferro|Crawfordville
+Taylor|Butler;Reynolds
+Telfair|McRae;Helena
+Terrell|Dawson
+Turner|Ashburn;Sycamore
+Webster|Preston
+Wheeler|Alamo;Glenwood
