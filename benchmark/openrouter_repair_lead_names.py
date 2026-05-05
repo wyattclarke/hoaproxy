@@ -55,6 +55,15 @@ def _parse_json(text: str) -> Any:
         raise
 
 
+def _decisions_from_data(data: Any) -> list[Any]:
+    if isinstance(data, dict):
+        decisions = data.get("decisions", [])
+        return decisions if isinstance(decisions, list) else []
+    if isinstance(data, list):
+        return data
+    return []
+
+
 def _chat_json(client: OpenAI, model: str, prompt: dict[str, Any], *, operation: str) -> Any:
     assert_discovery_model_allowed(model)
     base_url = os.environ.get("OPENROUTER_BASE_URL", OPENROUTER_BASE_URL)
@@ -184,7 +193,7 @@ def repair(args: argparse.Namespace) -> int:
                 continue
             data = _chat_json(client, args.fallback_model, prompt, operation="openrouter_repair_lead_names")
             used_model = args.fallback_model
-        decisions = data.get("decisions", []) if isinstance(data, dict) else []
+        decisions = _decisions_from_data(data)
         kept_count = 0
         for decision in decisions:
             if not isinstance(decision, dict) or not decision.get("keep"):
