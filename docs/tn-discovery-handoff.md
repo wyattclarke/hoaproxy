@@ -98,6 +98,12 @@ Updated: 2026-05-05
   - Deterministic PDF/text cleaning accepted 6; compact OpenRouter repair kept 4 and rejected a newsletter-style Fredericksburg candidate plus a generic HOAleader-style guide.
   - Local normalization merged two River Sound name variants before banking.
   - Banked 4 PDFs with 0 skips. Count after pass: 149 manifests, 168 PDFs.
+- 2026-05-05: HOA Express-style governing-term extension used `benchmark/tn_hoaexpress_document_queries_3.txt`.
+  - Raw search output: `benchmark/results/tn_serper_docpages_tn_serper_docpages_hoaexpress_3/`
+  - Search calls: 60; raw results: 223; unique URLs: 99; raw leads: 23.
+  - Exact GCS source-URL prefilter removed 4 already-banked URLs and found 0 signed URLs, leaving 19 new public document endpoints.
+  - Deterministic PDF/text cleaning accepted 2; compact OpenRouter repair kept both with `deepseek/deepseek-v4-flash`.
+  - Banked 2 PDFs with 0 skips. Count after pass: 151 manifests, 170 PDFs.
 
 ## Productive Source Families
 
@@ -118,6 +124,7 @@ Updated: 2026-05-05
 - Regional legal-phrase expansion appears low yield after prior passes. Latest additions were Shagbark and Jackson Creek.
 - Builder/realtor host expansion is mostly exhausted after prior passes. Latest addition was Calla Crossing; Lee Godfrey and Smithbilt searches now mostly duplicate or reject.
 - HOA Express-style `/file/document` and `/file/document-page` expansion remains worth targeted use. Latest additions were River Sound, Abbottsford, and Montgomery Cove.
+- HOA Express governing-term extension added River Plantation Section 1 and Villas at Lyons Crossing, but marginal yield dropped to 2 banked PDFs.
 
 ## False Positives / Reject Patterns
 
