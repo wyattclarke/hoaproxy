@@ -351,8 +351,8 @@ def clean(args: argparse.Namespace) -> int:
                 source=f"clean-direct-pdf-{args.state.lower()}",
                 source_url=url,
                 state=args.state.upper(),
-                city=None,
-                county=None,
+                city=row.get("city"),
+                county=row.get("county"),
                 website=None,
             )
             payload = asdict(lead)

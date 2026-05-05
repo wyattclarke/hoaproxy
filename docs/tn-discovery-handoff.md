@@ -190,7 +190,7 @@ Updated: 2026-05-05
   - Deterministic PDF/text cleaning accepted 17; local review removed 4 non-bankable or non-HOA-source candidates before banking.
   - No OpenRouter repair was used for this pass; names were normalized locally from filenames, URLs, and extracted text.
   - Banked 13 PDFs with 0 skips. Count after pass: 206 manifests, 245 PDFs.
-  - Note: accepted rows landed under `_unknown-county` because `clean_direct_pdf_leads.py` currently drops county; source-term branches should repair county before final banking when practical.
+  - Note: accepted rows landed under `_unknown-county` because `clean_direct_pdf_leads.py` was still dropping county at the time of this run; the helper now preserves incoming `city` and `county` for subsequent county-scoped branches.
 
 ## Productive Source Families
 
