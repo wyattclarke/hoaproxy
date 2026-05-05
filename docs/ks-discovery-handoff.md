@@ -7,7 +7,7 @@ User instruction: continue autonomously for KS. Do not stop at checkpoints. Comm
 ## Current State
 
 - Bank prefix: `gs://hoaproxy-bank/v1/KS/`
-- Current count: 738 manifests, 1,634 PDFs
+- Current count: 756 manifests, 1,680 PDFs
 - OpenRouter credits: about `$10.73 / $20` used, about `$9.27` remaining
 - Active KS work: continuing deterministic source-family scraping; no Gemini.
 - An unrelated NC benchmark process may be running; leave it alone.
@@ -82,6 +82,7 @@ Highest-yield source families:
 - `Articles of Incorporation`, `By-Laws`, and amended/restated bylaws variants raised KS to 707 manifests and 1,587 PDFs. It added or enriched Rockwood Estates, Ryan's Run, Brookhill, Huntington Place, Foxborough, Crestwood Village, Bel Air Heights, Maple Crest, and Quivira Falls. Lakepointe failed validation and its empty manifest was removed.
 - Amendment-specific queries (`Amendment to Declaration`, `Supplemental Declaration`, `First/Second/Third Amendment`) raised KS to 710 manifests and 1,595 PDFs. They added or enriched Tyler's Landing, Montrachet, Kensington at St. Andrews, Running Horse, Bella Sera, Red Oak Hills, Falcon Ridge Estates, and Cedar Creek. The raw `ksa` slug was repaired to `kensington-at-st-andrews` after checking the site title; keep repairing abbreviated host-derived names before counting them as clean.
 - Critical eNeighbors correction: probing `public-document` URLs as pages creates zero-document stubs, but direct-seeding those same URLs as `pre_discovered_pdf_urls` banks the PDF. A batch of repaired eNeighbors public-document URLs raised KS to 738 manifests and 1,634 PDFs, adding or enriching Wilshire Farms, Northwood Trails, Fairway Hills, Leawood South, Indian Creek Estates, Links at Lionsgate, Village at Deer Creek, Hampton Place, Homestead Woods, Arbor Lake, Fontainebleau, Gladacres, Wilderness Valley, Avignon Villa, Whitehorse, Nottingham by the Green, Wilshire, Woodsonia, Grayson Place Villas, Tremont Manor, LionsGate, Fountain Hills, The Manor Single Family, Stonebridge, Summerfield Farm, Rock Creek, and Tiffany Greens. For other states, treat eNeighbors as a high-yield direct-document source: search public-document URLs, repair names, then pass each URL through `pre_discovered_pdf_urls`.
+- A second eNeighbors direct batch mined all prior `leads.jsonl` files for unused `eneighbors.com/!h_.../public-document/...` URLs and raised KS to 756 manifests and 1,680 PDFs. Additions/enrichments included Steeplechase, Switzer Lake Estates, Highlands Ranch, Nottingham by the Green, Grey Oaks, Forest View, Coves North, Homestead Creek, Tuscany Reserve, LionsGate, Pavilions of Leawood, Mills Farm, Villas at Parkside, Windsor Hills, North Creek, Newcastle, Wilderness, Village at Deer Creek, Wilshire, Rock Creek, Summerfield Farm, Indian Creek Estates, Arbor Lake, Embassy Park, Cottages at Woodridge, Fountain Hills, Leawood South, and Farm at Garnet Hill. This is now the top late-stage KS strategy by yield.
 
 Lower-yield or avoid:
 
