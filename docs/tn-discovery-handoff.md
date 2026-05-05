@@ -180,6 +180,17 @@ Updated: 2026-05-05
   - Compact OpenRouter repair kept all 14 with `deepseek/deepseek-v4-flash`; no fallback model was needed.
   - Local normalization merged Breckenridge, Sawyer Green II, and Vineyard Grove into existing canonical manifests and named River Plantation Section VI before banking.
   - Banked 14 PDFs with 0 skips. Count after pass: 198 manifests, 233 PDFs.
+- 2026-05-05: Williamson eNeighbors probe used `benchmark/tn_williamson_eneighbors_queries_4.txt`.
+  - Raw search output: `benchmark/results/tn_serper_docpages_tn_williamson_eneighbors_4/`
+  - Search returned 0 leads, so no preflight, model repair, or banking was needed.
+- 2026-05-05: Davidson/Nashville owner-terminology direct-PDF pass used `benchmark/tn_davidson_owner_term_queries_4.txt`.
+  - Raw search output: `benchmark/results/tn_serper_docpages_tn_davidson_owner_terms_4/`
+  - Search calls: 44; raw results: 247; unique URLs: 207; raw leads hit the `--max-leads` cap at 160.
+  - Exact GCS/source prefilter removed 11 already-banked URLs and 1 signed URL, leaving 148 new public direct PDFs.
+  - Deterministic PDF/text cleaning accepted 17; local review removed 4 non-bankable or non-HOA-source candidates before banking.
+  - No OpenRouter repair was used for this pass; names were normalized locally from filenames, URLs, and extracted text.
+  - Banked 13 PDFs with 0 skips. Count after pass: 206 manifests, 245 PDFs.
+  - Note: accepted rows landed under `_unknown-county` because `clean_direct_pdf_leads.py` currently drops county; source-term branches should repair county before final banking when practical.
 
 ## Productive Source Families
 
@@ -216,6 +227,8 @@ Updated: 2026-05-05
 - IRP CDN is productive but broad and noisy; without state-hint gating it finds many out-of-state CDN documents, so keep deterministic state/text filtering mandatory. Latest additions included Park Place Townhomes, Meadows of Spring Hill, Hamilton Church Manor, Walnut Ridge, Cottages at Sycamore Ridge, Poplar Ridge, Donelson Downs, Pennock Place, Four Maples, and Chapmans Retreat.
 - Focused `f15f4572/files/uploaded` IRP queries are still productive but duplicate-heavy after the broader IRP/SREG passes. Latest additions included Nashboro Woods, Brentwood Trace I, River Plantation Section VI, Greens at Legacy Townhomes, Oak Meadows, and extra governing documents for Thomas Downs, Breckenridge, Tywater, Millgate, Chapmans Retreat, Donelson Downs, Hawks Landing, Sawyer Green II, and Vineyard Grove.
 - Management-company domain probes for Ghertner/Timmons/AMI/Cedar/Sentry/Kuester/CMG/PMI/FCS returned no direct public PDFs; do not expand those domains unless a specific public source page is found first.
+- eNeighbors appears dry for the tested Williamson/Franklin/Brentwood/Spring Hill/Nolensville queries; do not treat it as a proven TN source family yet.
+- Owner-terminology searches (`property owners association`, `townhome owners association`, `condominium owners association`, `master deed`, `restrictive covenants`) can still produce TN documents, but broad Nashville/Davidson terms are noisy and hit court, government, real-estate, and industry PDFs. Latest additions included Porter Village, Overton Retreat, Clari Park, The Row at 31st, Kensington Downs, Village at Carter's Station, Emerson Hills, Belle Meade, and added PDFs for Germantown Commons, Carrington Place, and Chelsea's Way.
 
 ## False Positives / Reject Patterns
 
@@ -227,3 +240,4 @@ Updated: 2026-05-05
 - Signed or credentialed URLs from otherwise public-looking search results, especially AWS query strings containing `AWSAccessKeyId`, `Signature`, or `X-Amz-Signature`. Exclude these before model repair and banking.
 - Tellico Village `tgYYYYMMDD.pdf` Tell-E-Gram PDFs are newsletters and should be rejected even if they contain covenant/legal snippets.
 - `cdnsm5-hosted.civiclive.com/UserFiles` is mostly government/newsletter/grant material for TN; avoid except for exact known HOA bylaws URLs.
+- Public legal/case, bankruptcy, and industry-association PDFs can pass superficial owner-association term searches. Reject court opinions, bankruptcy packets, industry reports, real-estate auction/listing packets, and government attachments unless the direct PDF is clearly the HOA governing document itself.
