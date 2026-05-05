@@ -7,7 +7,7 @@ User instruction: continue autonomously for KS. Do not stop at checkpoints. Comm
 ## Current State
 
 - Bank prefix: `gs://hoaproxy-bank/v1/KS/`
-- Current count: 691 manifests, 1,552 PDFs
+- Current count: 691 manifests, 1,553 PDFs
 - OpenRouter credits: about `$10.73 / $20` used, about `$9.27` remaining
 - Active KS work: continuing deterministic source-family scraping; no Gemini.
 - An unrelated NC benchmark process may be running; leave it alone.
@@ -73,6 +73,7 @@ Highest-yield source families:
 - A Squarespace upload pass raised KS to 688 manifests and 1,546 PDFs by adding Northridge Estates. Broad `site:*.squarespace.com/s/` searches are low-yield and pick up newspaper/out-of-state noise; use only after higher-yield source families.
 - A direct `filesusr.com/ugd` search found no candidates, but a Webydo/files8 source pass raised KS to 689 manifests and 1,549 PDFs by adding/enriching Falcon Lakes and Boulders at Falcon Lakes. Files8 is low-volume but high-signal when a known community/source family appears.
 - A DeepSeek source-family planning call used 4,275 tokens and mostly recommended already-known families, so it was less valuable than deterministic evidence. A follow-up management/CDN direct-PDF pass raised KS to 691 manifests and 1,552 PDFs by adding or enriching Tomahawk Creek, Sylvan Lake, North Lakes, Nottingham Downs Duplex, Willow Ridge, and Highland Ridge. The useful part of this branch was direct URL inspection, not generic model strategy.
+- PayHOA and ManageCasa source-specific searches only rediscovered Sylvan Lake and Comotara. HOAEdge added one Edgewood PDF, raising KS to 691 manifests and 1,553 PDFs. These source-specific searches are useful for cleanup but are probably exhausted after one focused pass.
 
 Lower-yield or avoid:
 
