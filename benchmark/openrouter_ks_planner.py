@@ -145,8 +145,25 @@ def _compact_candidate(row: dict[str, Any], idx: int) -> dict[str, Any]:
         "website": row.get("website"),
         "source_url": row.get("source_url"),
         "state": row.get("state"),
+        "county": row.get("county"),
+        "city": row.get("city"),
         "source": row.get("source"),
     }
+
+
+def _clean_state(value: Any, fallback: str) -> str:
+    state = re.sub(r"[^A-Za-z]", "", str(value or "")).upper()
+    return state[:2] if len(state) == 2 else fallback.upper()
+
+
+def _clean_county(value: Any) -> str | None:
+    county = re.sub(r"\s+", " ", str(value or "")).strip(" .,-")
+    if not county:
+        return None
+    county = re.sub(r"(?i)\s+county$", "", county).strip(" .,-")
+    if not county or len(county) > 80:
+        return None
+    return county
 
 
 def validate_batch(
@@ -177,8 +194,9 @@ def validate_batch(
             "Reject generic legal-info pages, social posts, management-company marketing pages without a specific community, government pages, and malformed names.",
             "Reject nonprofit tax filings, ProPublica/IRS pages, real estate listings, law firm pages, newspaper articles, court/case-law pages, and generic HOA explainer pages.",
             "If the name is malformed but the URL/title clearly identifies a community, repair it.",
+            "If evidence clearly shows a different US state or county, keep the lead and return repaired_state as the two-letter state code and repaired_county without the word County. If state/county are unclear, leave them null.",
             "Prefer community document/governing-doc pages over generic home pages.",
-            "Return decisions with index, keep, repaired_name, confidence 0-1, reason.",
+            "Return decisions with index, keep, repaired_name, repaired_state, repaired_county, confidence 0-1, reason.",
         ],
         "candidates": [_compact_candidate(row, idx) for idx, row in enumerate(batch)],
     }
@@ -204,14 +222,21 @@ def validate_batch(
         if len(repaired) < 4:
             continue
         row["name"] = repaired[:120]
-        row["state"] = state
-        if county:
+        row["state"] = _clean_state(decision.get("repaired_state") or row.get("state"), state)
+        repaired_county = _clean_county(decision.get("repaired_county") or row.get("county"))
+        if repaired_county:
+            row["county"] = repaired_county
+        elif row["state"] == state.upper() and county:
             row["county"] = county
+        else:
+            row.pop("county", None)
         row["source"] = row.get("source") or f"openrouter-{model}-validated"
         row["validation"] = {
             "model": model,
             "confidence": confidence,
             "reason": str(decision.get("reason") or "")[:300],
+            "target_state": state,
+            "target_county": county,
         }
         kept.append(row)
     return kept, {"usage": usage, "raw": data}
@@ -257,8 +282,8 @@ def cmd_validate_leads(args: argparse.Namespace) -> int:
             name=str(row["name"]),
             source=str(row.get("source") or "openrouter-validated"),
             source_url=str(row.get("source_url") or row.get("website") or ""),
-            state=args.state,
-            county=args.county,
+            state=str(row.get("state") or args.state).upper(),
+            county=row.get("county") or (args.county if str(row.get("state") or args.state).upper() == args.state.upper() else None),
             city=row.get("city"),
             website=row.get("website"),
         )

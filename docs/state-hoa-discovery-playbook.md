@@ -28,11 +28,25 @@ Concretely:
 - The *cleaner* and the *validator* should not hard-reject leads on out-of-state grounds. They should re-route to the correct state's prefix when the evidence is clear (PDF text mentions "X County, Tennessee" or the URL host is a known TN domain) and otherwise let the lead through with `state=null` so the backfill / drain worker can route it later.
 - The *probe* writes via `bank_hoa()`, which already takes the lead's `state` and `county`. If discovery code knows the target state/county is wrong, it should overwrite `Lead.state` and `Lead.county` before probing.
 - Slugging dedup will handle the case where a TN HOA we banked from a GA sweep is later re-found by a TN sweep — bank merges by `(state, county, slug)`, so the second sighting just appends a new `metadata_source` entry to the existing manifest.
-- Implementation status (2026-05-05, updated): `clean_direct_pdf_leads.py` now does this — `detect_state_county()` extracts `(state_abbrev, county_name)` from PDF text and the emitted Lead is stamped with the detected state/county instead of the sweep's target. The validator (`openrouter_ks_planner.py validate-leads`) prompt is also relaxed from "reject other-state" to "prefer this state but keep clear mandatory-HOA hits in other states." Border-metro hits no longer pay the discovery cost twice.
+- Implementation status (2026-05-05, updated): `clean_direct_pdf_leads.py` now does this — `detect_state_county()` extracts `(state_abbrev, county_name)` from PDF text and the emitted Lead is stamped with the detected state/county instead of the sweep's target. The validator (`openrouter_ks_planner.py validate-leads`) also asks for repaired state/county fields and preserves clear mandatory-HOA hits outside the sweep scope. Border-metro hits no longer pay the discovery cost twice.
 
 The same logic applies inside a state: a Fulton sweep that finds a Cobb HOA should bank it under `gs://hoaproxy-bank/v1/GA/cobb/<slug>/`, not under `gs://hoaproxy-bank/v1/GA/fulton/<slug>/` and not under `_unknown-county/`. The county scope of a sweep is a *search hint*, not a *banking constraint*. Use the lead's own evidence (city in URL/anchor/PDF text → city→county map → bank under that county) and only fall back to the sweep's `--default-county` when no better signal exists.
 
 The hard requirement to run sweeps county-by-county is unchanged — that's about query scoping and stopping discipline, not about where leads ultimately land.
+
+## State Stopping Rule
+
+Use this rule to decide when to stop active scraping for a state and move effort to the next state.
+
+Stop active discovery when **two consecutive strategy families** both produce:
+
+- Fewer than 3 net-new valid in-state manifests.
+- Fewer than 10 net-new valid in-state PDFs.
+- More than 80% rejects, exact duplicates, forms, newsletters, minutes, generic legal/government pages, or out-of-scope records.
+
+A strategy family is a distinct search/source angle, such as `eNeighbors direct URLs`, `hmsft/PMTech`, `HOA Express file/document`, `WordPress uploads`, `county recorder legal phrases`, or a county-focused direct-PDF pass. Multiple runs of the same query file count as one family unless the query/source shape meaningfully changes.
+
+When the rule triggers, do not launch another broad scrape for that state. Allowed follow-up work is cleanup only: duplicate audits, unknown-county repair, name repair, out-of-scope rerouting, and targeted re-mining of already-downloaded result sets that costs no new Serper/OpenRouter budget. Restart active discovery only if a genuinely new high-yield source family appears.
 
 ## Always Run County-By-County
 

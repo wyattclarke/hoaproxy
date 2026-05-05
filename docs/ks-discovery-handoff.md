@@ -7,10 +7,10 @@ User instruction: continue autonomously for KS. Do not stop at checkpoints. Comm
 ## Current State
 
 - Bank prefix: `gs://hoaproxy-bank/v1/KS/`
-- Current count: 777 manifests, 1,734 PDFs
-- OpenRouter credits: about `$10.73 / $20` used, about `$9.27` remaining
-- Active KS work: continuing deterministic source-family scraping; no Gemini.
-- An unrelated NC benchmark process may be running; leave it alone.
+- Current cleaned count: 448 manifests with documents, 1,417 PDFs.
+- OpenRouter credits: about `$12.04 / $20` used, about `$7.96` remaining as of the last check.
+- Active KS work: stopped under the state stopping rule; continue cleanup/rerouting only unless a new high-yield source family appears. No Gemini.
+- Unrelated benchmark processes may be running; leave them alone unless the user asks about them.
 - Do not commit `benchmark/results/`, `benchmark/run_benchmark.sh`, or `benchmark/task.txt`.
 - `hoaware/discovery/__main__.py` was already dirty and should not be touched unless specifically needed.
 
@@ -144,16 +144,10 @@ ps -fA | rg 'hoaware.discovery|run_ks_openrouter_discovery|scrape_ks_serper|open
 
 ## Next Good Branches
 
+- KS active discovery now uses the stopping rule from `docs/state-hoa-discovery-playbook.md`: stop when two consecutive strategy families each produce fewer than 3 net-new valid KS manifests, fewer than 10 net-new valid KS PDFs, and more than 80% rejects/duplicates/forms/out-of-scope. The recent broad legal-phrase pass plus the late low-volume source/county passes meet that threshold. Do not launch another broad KS scrape unless a genuinely new source family appears.
 - Preserve out-of-scope records. If a future KS pass finds a clean public governing document for another state, do not delete it. Route it into the correct state prefix when the state is clear, or leave/log it for that state's future scrape if the destination is ambiguous. Only delete empty stubs or exact duplicate copies after verifying the canonical copy remains available.
-- More source-specific searches for hmsft/HOAMsoft, HOA Express `/file/document-page/`, GoDaddy `img1.wsimg.com/blobby/go/.../downloads`, eNeighbors public documents, and county recorder/legal phrases.
-- More independent-domain searches for remaining Kansas metros/counties, but inspect host distribution before validation.
-- Smaller city-specific passes for places with actual HOA-owned domains:
-  - Johnson County suburbs not fully exhausted.
-  - Sedgwick/Wichita variations.
-  - Douglas/Lawrence produced very high PDF yield from Westwood Hills.
-  - Riley/Manhattan produced Nelson's Ridge and Parkway Village.
-- Use manual deterministic selection when raw host list has only a few obvious HOA-owned domains; skip OpenRouter in that case.
-- Next good branch: deterministic source-specific searches are still safer than more OpenRouter. OpenRouter usage is about `$9.61 / $10`, possibly including unrelated benchmark activity. Do not spend model budget casually. Good next pivots are manually selected leftovers from `benchmark/results/ks_serper_docpages_statewide_legal_phrase_deep_3/leads.jsonl`, then more county-constrained legal phrases and source-specific hmsft/HOAMsoft, GoDaddy-download, and HOA Express searches. Avoid newsletters, meeting minutes, forms, out-of-state hits, and generic `homesassociation.org` records unless the specific HOA identity is clear.
+- Allowed KS follow-ups are cleanup/rerouting tasks: remaining `_unknown-county` repair when PDF text names the county, name repair for malformed but valid manifests, exact-duplicate audits, and rerouting valid out-of-scope records to their correct state prefix.
+- If active KS discovery is restarted later, the only acceptable reason is a new source family with evidence of real yield, not another broad legal/county/owned-domain variation.
 
 ## Autonomy Reminder
 
