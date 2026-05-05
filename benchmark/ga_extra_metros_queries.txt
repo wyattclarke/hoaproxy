@@ -1,0 +1,71 @@
+# GA extra metros + deeper legal phrasing.
+# Run as a final pass to fill in coverage gaps.
+
+# --- Coastal / South Georgia ---
+"Saint Marys" "Georgia" "Homeowners Association" "Declaration"
+"St. Simons" "Georgia" "homeowners association" filetype:pdf
+"Sea Island" "Georgia" "homeowners association" filetype:pdf
+"Brunswick" "Georgia" "homeowners association" "Declaration of Covenants" filetype:pdf
+"Tybee Island" "Georgia" "homeowners association" filetype:pdf
+"Richmond Hill" "Georgia" "homeowners association" filetype:pdf
+"Hinesville" "Georgia" "homeowners association" filetype:pdf
+"Skidaway" "Georgia" "homeowners association" filetype:pdf
+"Wilmington Island" "Georgia" "homeowners association" filetype:pdf
+
+# --- North Georgia mountains ---
+"Blue Ridge" "Georgia" "homeowners association" filetype:pdf
+"Big Canoe" "Georgia" "homeowners association" filetype:pdf
+"Dawsonville" "Georgia" "homeowners association" filetype:pdf
+"Jasper" "Georgia" "homeowners association" filetype:pdf
+"Clayton" "Georgia" "Property Owners Association" filetype:pdf
+"Lake Burton" "Georgia" "homeowners association" filetype:pdf
+"Lake Rabun" "Georgia" "homeowners association" filetype:pdf
+"Lake Lanier" "Georgia" "homeowners association" filetype:pdf
+"Bear Lake" "Georgia" "homeowners association" filetype:pdf
+"Sky Valley" "Georgia" "homeowners association" filetype:pdf
+"Hiawassee" "Georgia" "homeowners association" filetype:pdf
+
+# --- South Atlanta + middle GA ---
+"Locust Grove" "Georgia" "homeowners association" "Declaration" filetype:pdf
+"Hampton" "Georgia" "homeowners association" "Declaration" filetype:pdf
+"Griffin" "Georgia" "homeowners association" "Declaration" filetype:pdf
+"Forsyth" "Georgia" "homeowners association" "Declaration" filetype:pdf
+"Milledgeville" "Georgia" "homeowners association" filetype:pdf
+"Dublin" "Georgia" "homeowners association" "Declaration" filetype:pdf
+"Vidalia" "Georgia" "homeowners association" filetype:pdf
+"Sandersville" "homeowners association" filetype:pdf
+
+# --- West GA ---
+"Newnan" "Georgia" "homeowners association" "Declaration of Covenants" filetype:pdf
+"Carrollton" "Georgia" "homeowners association" "Declaration of Covenants" filetype:pdf
+"LaGrange" "Georgia" "homeowners association" "Declaration of Covenants" filetype:pdf
+"West Point" "Georgia" "homeowners association" filetype:pdf
+"Bremen" "Georgia" "homeowners association" filetype:pdf
+
+# --- Owned-domain hints ---
+"hoa" inurl:.org "Georgia" "Declaration of Covenants" filetype:pdf
+"hoa" inurl:.com "Georgia" "Declaration of Covenants" filetype:pdf
+"homeowners association" inurl:.org "Georgia" filetype:pdf
+"homeowners association" inurl:.net "Georgia" filetype:pdf
+inurl:hoa.com "Georgia" "Declaration" filetype:pdf
+inurl:hoa.org "Georgia" "Bylaws" filetype:pdf
+
+# --- Architectural Standards / Modification / Design Review ---
+"Georgia" "homeowners association" "Architectural Standards" filetype:pdf
+"Georgia" "homeowners association" "Modification Standards" filetype:pdf
+"Georgia" "homeowners association" "Design Review" filetype:pdf
+"Georgia" "homeowners association" "ARC Guidelines" filetype:pdf
+"Georgia" "homeowners association" "Architectural Control" filetype:pdf
+
+# --- Subdivision-specific covenants ---
+"Subdivision" "Georgia" "Declaration of Covenants" filetype:pdf
+"Plantation" "Georgia" "Homeowners Association" "Covenants" filetype:pdf
+"Estates" "Georgia" "Homeowners Association" "Bylaws" filetype:pdf
+"Plantation" "Atlanta" "Homeowners Association" "Covenants" filetype:pdf
+
+# --- Owned independent HOA-domain second-pass ---
+"Georgia" "HOA documents" "bylaws" -eneighbors -fsresidential -hoaleader
+"Georgia" "governing documents" "homeowners association" -eneighbors -hoaleader
+"Atlanta" "HOA documents" -eneighbors -fsresidential -realmanage
+"Marietta" "homeowners association" documents -eneighbors -hoaleader
+"Peachtree City" "Homeowners Association" "Declaration" filetype:pdf

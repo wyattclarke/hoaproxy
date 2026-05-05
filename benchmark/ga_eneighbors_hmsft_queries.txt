@@ -1,0 +1,67 @@
+# GA eNeighbors + HOAMsoft (hmsft) targeted host queries.
+# Run after general source-family sweep. Mines Atlanta-metro communities
+# on these public-document hosts that produced the bulk of KS yield.
+
+# --- eNeighbors: public document URLs ---
+site:eneighbors.com "Georgia" "documents"
+site:eneighbors.com Georgia HOA covenants
+site:eneighbors.com/!h_ "Georgia"
+site:eneighbors.com "Atlanta" HOA
+site:eneighbors.com "Sandy Springs" HOA
+site:eneighbors.com "Alpharetta" HOA
+site:eneighbors.com "Roswell" HOA
+site:eneighbors.com "Marietta" HOA
+site:eneighbors.com "Lawrenceville" HOA
+site:eneighbors.com "Duluth" HOA
+site:eneighbors.com "Suwanee" HOA
+site:eneighbors.com "Cumming" HOA
+site:eneighbors.com "Woodstock" HOA
+site:eneighbors.com "Canton" HOA
+site:eneighbors.com "Decatur" Georgia HOA
+site:eneighbors.com "Smyrna" Georgia HOA
+site:eneighbors.com "Kennesaw" HOA
+site:eneighbors.com "Acworth" HOA
+site:eneighbors.com "Dunwoody" HOA
+site:eneighbors.com "Brookhaven" Georgia HOA
+
+# --- HOAMsoft / hmsft-doc ---
+inurl:hmsft-doc Georgia "Homeowners Association"
+inurl:hmsft-doc Georgia "Declaration"
+inurl:hmsft-doc Georgia "Bylaws"
+inurl:hmsft-doc Georgia "Covenants"
+inurl:hmsft-doc Atlanta HOA
+inurl:hmsft-doc Marietta HOA
+inurl:hmsft-doc Alpharetta HOA
+inurl:hmsft-doc Lawrenceville HOA
+site:pmtechsol.sfo2.cdn.digitaloceanspaces.com Georgia "Homeowners Association"
+site:pmtechsol.sfo2.cdn.digitaloceanspaces.com Georgia "Declaration"
+site:pmtechsol.sfo2.cdn.digitaloceanspaces.com "Atlanta" HOA
+site:pmtechsol.sfo2.cdn.digitaloceanspaces.com "Marietta" HOA
+
+# --- HOA Express / GoGladly / Nabr ---
+site:gogladly.com Georgia "Homeowners Association"
+site:gogladly.com/connect/document Georgia bylaws
+site:gogladly.com/connect/document Georgia covenants
+site:gogladly.com/connect/document Atlanta HOA
+inurl:/file/document-page/ Georgia "Homeowners Association"
+inurl:/file/document/ Georgia "homeowners association" covenants
+site:nabrnetwork.com Georgia "Homeowners Association"
+
+# --- Cobalt / TownSq / WeStreet hosts ---
+site:cobaltreks.com Georgia "Homeowners Association"
+site:townsq.io/about Georgia
+site:tops-soft.com Georgia "Homeowners Association"
+
+# --- Independent HOA-owned websites with documents page ---
+"Georgia" "homeowners association" inurl:documents
+"Georgia" "homeowners association" inurl:governing
+"Georgia" "homeowners association" inurl:covenants
+"Georgia" "homeowners association" inurl:bylaws
+"Atlanta" "homeowners association" inurl:documents
+"Marietta" "homeowners association" inurl:documents
+"Alpharetta" "homeowners association" inurl:documents
+"Roswell" "homeowners association" inurl:documents
+"Lawrenceville" "homeowners association" inurl:documents
+"Suwanee" "homeowners association" inurl:documents
+"Cumming" "homeowners association" inurl:documents
+"Woodstock" "homeowners association" inurl:documents
