@@ -172,6 +172,14 @@ Updated: 2026-05-05
   - Search calls: 60; raw results: 0; unique URLs: 0; raw leads: 0.
   - Queried Ghertner, Timmons, Association Management Inc., Cedar, Sentry, Kuester, CMG, PMI Williamson County, FCS, and related public upload/document hosts.
   - No PDFs banked. Count after pass remained 193 manifests, 223 PDFs.
+- 2026-05-05: Focused IRP `f15f4572/files/uploaded` sweep used `benchmark/tn_irp_f15f_source_queries_3.txt`.
+  - Raw search output: `benchmark/results/tn_serper_docpages_tn_serper_docpages_irp_f15f_3/`
+  - Search calls: 40; raw results: 240; unique URLs: 85; raw leads: 79.
+  - Exact GCS/source prefilter removed 21 already-banked URLs and found 0 signed URLs, leaving 58 new public direct PDFs.
+  - Deterministic PDF/text cleaning accepted 14.
+  - Compact OpenRouter repair kept all 14 with `deepseek/deepseek-v4-flash`; no fallback model was needed.
+  - Local normalization merged Breckenridge, Sawyer Green II, and Vineyard Grove into existing canonical manifests and named River Plantation Section VI before banking.
+  - Banked 14 PDFs with 0 skips. Count after pass: 198 manifests, 233 PDFs.
 
 ## Productive Source Families
 
@@ -206,6 +214,7 @@ Updated: 2026-05-05
 - SREG remains productive but noisier than PSMT; many exact-new PDFs are policies, FAQs, or construction/pool docs. Latest additions were Germantown Commons, Thomas Downs, Chelsea's Way, Sawyer Green II, and Millgate.
 - WMCO remains productive for direct PDFs but has many forms/applications/insurance docs. Latest additions included Townhomes of Andover, Clairmonte, Ivan Creek, Treemont Estates, Chestnut Bend, Glenellen Estates, plus Bonbrook and Millgate updates.
 - IRP CDN is productive but broad and noisy; without state-hint gating it finds many out-of-state CDN documents, so keep deterministic state/text filtering mandatory. Latest additions included Park Place Townhomes, Meadows of Spring Hill, Hamilton Church Manor, Walnut Ridge, Cottages at Sycamore Ridge, Poplar Ridge, Donelson Downs, Pennock Place, Four Maples, and Chapmans Retreat.
+- Focused `f15f4572/files/uploaded` IRP queries are still productive but duplicate-heavy after the broader IRP/SREG passes. Latest additions included Nashboro Woods, Brentwood Trace I, River Plantation Section VI, Greens at Legacy Townhomes, Oak Meadows, and extra governing documents for Thomas Downs, Breckenridge, Tywater, Millgate, Chapmans Retreat, Donelson Downs, Hawks Landing, Sawyer Green II, and Vineyard Grove.
 - Management-company domain probes for Ghertner/Timmons/AMI/Cedar/Sentry/Kuester/CMG/PMI/FCS returned no direct public PDFs; do not expand those domains unless a specific public source page is found first.
 
 ## False Positives / Reject Patterns
