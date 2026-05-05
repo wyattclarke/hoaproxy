@@ -269,6 +269,13 @@ Updated: 2026-05-05
   - No OpenRouter repair was used; retained metadata was normalized locally.
   - Initial banking supplied `website` fields and the writer expanded to extra public PDFs. Pool/form/map/rental object prefixes were removed and both manifests were rewritten to governing-only document lists. For direct-PDF curated leads, omit `website` unless broad site expansion is intended.
   - Final banked set: 3 Weddington Ridge rules/ARC/fines PDFs and 5 McKay's Mill CCRs/rules/fines/use-restriction PDFs. Count after cleanup: 259 manifests, 330 PDFs.
+- 2026-05-05: PSMT source-family extension used `benchmark/tn_psmt_source_extension_queries_6.txt`.
+  - Raw search output: `benchmark/results/tn_serper_docpages_tn_psmt_source_extension_6/`
+  - Search calls: 72; raw results: 309; unique URLs: 80; raw leads: 48, all on `psmtllc.com`.
+  - Exact GCS/source prefilter removed 22 already-banked URLs and found 0 signed URLs, leaving 26 new public direct PDFs.
+  - Deterministic PDF/text cleaning accepted 2; source-family local review kept 16 curated leads / 18 PDFs and rejected ambiguous numbered scans, quitclaim deeds, landscaping-only material, pool rules, and PSMT documents without a usable association identity.
+  - No OpenRouter repair was used; retained names/counties were normalized locally from filenames, extractable text, and existing bank manifests.
+  - Banked 18 PDFs with 0 skips and `homepage_fetched=false` for all leads by leaving `website` null. Additions/enrichments included Stream Valley, Burton Farms VI, Burton Farms, Oakleigh, Richland Downs, Patton Retreat, Breezeway, Stratford Hall, Caldwell Estates, Springhouse, Shelton Square, Clear Creek, Stewart Creek Farms, Stewart Landing, Arbor Crest, and The Columns on Main Street. Count after pass: 271 manifests, 348 PDFs.
 
 ## Productive Source Families
 
@@ -298,7 +305,7 @@ Updated: 2026-05-05
 - Broad `inurl:/file/document` searches have low marginal yield and high noise after the HOA Express-specific passes. Latest addition was The Springs Section I.
 - Public HOA document-page crawling can still produce finds when exploded to one PDF per lead and cleaned locally. Latest additions were Primm Farm, Richland Downs, Rarity Ridge, and Watermill.
 - Public document-page phrase extension added Maebry and Horse Creek Farms, but marginal yield dropped to 2 banked PDFs.
-- PSMT remains the best active source family after broad page crawling. Its 2025 upload paths are still yielding recorded CCRs/bylaws/amendments.
+- PSMT remains productive but is now duplicate-heavy after broad page crawling. Its 2025/2026 upload paths still yield recorded CCRs/bylaws/amendments/fine procedures when exact-source dedupe and source-family local review are applied.
 - Broader PSMT upload-month queries still produced bankable docs but with increasing duplicate/non-governing noise. Latest additions were Stonecrest, Eagle View Village, and extra Three Rivers/Stratford Hall docs.
 - SREG remains productive but noisier than PSMT; many exact-new PDFs are policies, FAQs, or construction/pool docs. Latest additions were Germantown Commons, Thomas Downs, Chelsea's Way, Sawyer Green II, and Millgate.
 - WMCO remains productive for direct PDFs but has many forms/applications/insurance docs. Latest additions included Townhomes of Andover, Clairmonte, Ivan Creek, Treemont Estates, Chestnut Bend, Glenellen Estates, plus Bonbrook and Millgate updates.
@@ -319,6 +326,7 @@ Updated: 2026-05-05
 - Real-estate/listing hosts such as LandHub, Showcase, Chicago Title, auction/property packet hosts.
 - Generic welcome packages, forms, applications, minutes, budgets, newsletters, and pool/lease documents.
 - Facility-specific rules, maps, release/waiver forms, clubhouse packets, rental contracts, and trail/pool/tennis-only documents should be removed even when discovered on a valid HOA-owned domain.
+- PSMT numbered scans with no extractable association identity should be rejected unless the title/snippet/filename clearly identifies the HOA and governing-document type.
 - Out-of-state hits triggered by city names like Franklin or Brentwood.
 - Signed or credentialed URLs from otherwise public-looking search results, especially AWS query strings containing `AWSAccessKeyId`, `Signature`, or `X-Amz-Signature`. Exclude these before model repair and banking.
 - Tellico Village `tgYYYYMMDD.pdf` Tell-E-Gram PDFs are newsletters and should be rejected even if they contain covenant/legal snippets.
