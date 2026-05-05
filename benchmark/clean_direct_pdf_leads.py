@@ -42,27 +42,45 @@ REQUEST_TIMEOUT = 20
 PDF_TIMEOUT = 60
 BANKABLE_CATEGORIES = {"ccr", "bylaws", "articles", "rules", "amendment", "resolution"}
 
-BLOCKED_HOST_RE = re.compile(
-    r"(^|\.)("
-    r"tn\.gov|caionline|legmt|pbcgov|tpucdockets|rutherfordcountytn|nashville\.gov|"
-    r"landhub|showcase|chicagotitle|era|realestate|parksauction|auction|"
-    r"zillow|redfin|realtor|trulia|apartments|rent|scribd|issuu|pdfcoffee|"
-    r"uml\.edu\.ni"
-    r")\b",
-    re.IGNORECASE,
-)
+# Hosts to always block regardless of which state we're running. Things that
+# are clearly not a public HOA governing-document source — real estate, social,
+# document-share sites, scrape farms.
+_UNIVERSAL_BLOCKED_HOSTS = [
+    "caionline", "landhub", "showcase", "chicagotitle", "era", "realestate",
+    "parksauction", "auction", "zillow", "redfin", "realtor", "trulia",
+    "apartments", "rent", "scribd", "issuu", "pdfcoffee", "uml\\.edu\\.ni",
+]
+
+# Per-state block lists: legislative + agenda/planning sites that consistently
+# return statute text or government-meeting PDFs instead of HOA documents.
+# Add entries when you discover a state-specific noisy host. The current
+# state's entries are *included* (we always want to filter our own state's
+# legislature/court out of the results).
+_STATE_BLOCKED_HOSTS: dict[str, list[str]] = {
+    "TN": [
+        "tn\\.gov", "legmt", "pbcgov", "tpucdockets", "rutherfordcountytn",
+        "nashville\\.gov",
+    ],
+    "GA": [
+        "legis\\.ga\\.gov", "ecorp\\.sos\\.ga", "luederlaw",
+    ],
+    "KS": [
+        "kslegislature", "ksrevenue\\.gov",
+    ],
+}
+
+
+def _build_blocked_host_re(args: argparse.Namespace) -> re.Pattern[str]:
+    """Universal hosts plus this run's state-specific blocked-host list."""
+    parts = list(_UNIVERSAL_BLOCKED_HOSTS)
+    parts.extend(_STATE_BLOCKED_HOSTS.get((args.state or "").upper(), []))
+    return re.compile(r"(^|\.)(" + "|".join(parts) + r")\b", re.IGNORECASE)
 JUNK_RE = re.compile(
     r"\b(minutes?|agenda|newsletter|budget|financial|audit|reserve study|"
     r"rental|lease|pool|welcome package|application|form|directory|roster|"
     r"violation|estoppel|closing|court|lawsuit|docket|bankruptcy|"
     r"legislative session report|overview of concerns|case\s+\d|"
     r"property information packet|listing|mls|for sale|handbook)\b",
-    re.IGNORECASE,
-)
-OUT_OF_STATE_RE = re.compile(
-    r"\b(florida|california|massachusetts|missouri|georgia|kentucky|north carolina|"
-    r"south carolina|alabama|mississippi|arkansas|virginia|texas|palm beach|"
-    r"holbrook,\s*ma|chicago title|pleasant prairie|brentwood hoa.*palm beach)\b",
     re.IGNORECASE,
 )
 ASSOC_RE = re.compile(
@@ -179,7 +197,7 @@ def _filename(url: str) -> str:
     return unquote(path)[:180]
 
 
-def _clean_name(raw: str) -> str | None:
+def _clean_name(raw: str, state_name: str | None = None) -> str | None:
     name = raw or ""
     name = re.sub(r"\s+", " ", name.replace("\n", " "))
     name = re.sub(r"(?i)^\s*\[?pdf\]?\s*", "", name)
@@ -195,8 +213,13 @@ def _clean_name(raw: str) -> str | None:
     name = re.sub(r"(?i)\bhome\s*owner'?s?\s+association\b", "Homeowners Association", name)
     name = re.sub(r"(?i)\bhomes\s+association\b", "Homes Association", name)
     name = re.sub(r"(?i)\bhomeowners?\s+association\b", "Homeowners Association", name)
-    name = re.sub(r"(?i)\s+(?:a|an)\s+tennessee\s+(?:nonprofit|not[- ]for[- ]profit|corporation).*$", "", name)
-    name = re.sub(r"(?i),?\s+(?:a\s+)?tennessee\s+(?:nonprofit|not[- ]for[- ]profit|corporation).*$", "", name)
+    # Strip trailing "<HOA>, a <state> nonprofit corporation ..." boilerplate
+    # for whichever state we're running. Skip when state_name is unset so
+    # callers that don't pass it (legacy sites, tests) don't trip.
+    if state_name:
+        s = re.escape(state_name)
+        name = re.sub(rf"(?i)\s+(?:a|an)\s+{s}\s+(?:nonprofit|not[- ]for[- ]profit|corporation).*$", "", name)
+        name = re.sub(rf"(?i),?\s+(?:a\s+)?{s}\s+(?:nonprofit|not[- ]for[- ]profit|corporation).*$", "", name)
     name = re.sub(r"(?i)\b(?:the\s+)?undersigned.*$", "", name)
     name = re.sub(r"(?i)^(?:of|for|and|the|charter|bylaws?|declaration|amended|restated|restrictive|covenants?|conditions|restrictions|rules|regulations)\s+", "", name)
     name = re.sub(r"(?i)\b(?:declaration|covenants?|conditions|restrictions?|bylaws?|rules?|regulations?|architectural|guidelines?|amendments?|recorded|final|searchable|pdf)\b", " ", name)
@@ -213,7 +236,7 @@ def _clean_name(raw: str) -> str | None:
     return name
 
 
-def _name_from_filename(filename: str) -> str | None:
+def _name_from_filename(filename: str, state_name: str | None = None) -> str | None:
     stem = re.sub(r"\.pdf$", "", filename, flags=re.IGNORECASE)
     stem = unquote(stem)
     stem = re.sub(r"[_+%-]+", " ", stem)
@@ -222,10 +245,10 @@ def _name_from_filename(filename: str) -> str | None:
         stem,
         maxsplit=1,
     )[0]
-    return _clean_name(stem)
+    return _clean_name(stem, state_name=state_name)
 
 
-def infer_name(row: dict, audit: dict | None, text: str, url: str) -> str | None:
+def infer_name(row: dict, audit: dict | None, text: str, url: str, args: argparse.Namespace | None = None) -> str | None:
     candidates: list[str] = []
     if audit:
         snippet = str(audit.get("snippet") or "")
@@ -246,15 +269,22 @@ def infer_name(row: dict, audit: dict | None, text: str, url: str) -> str | None
     ]:
         for match in re.finditer(pattern, text[:8000], re.IGNORECASE | re.DOTALL):
             candidates.append(match.group(1))
+    state_name = (args.state_name if args is not None else None) or None
+    state_abbrev = (args.state if args is not None else None) or ""
     candidates.append(str(row.get("name") or ""))
-    candidates.append(_name_from_filename(_filename(url)) or "")
+    candidates.append(_name_from_filename(_filename(url), state_name=state_name) or "")
     host = re.sub(r"^www\.", "", urlparse(url).netloc.lower()).split(".", 1)[0]
-    host = re.sub(r"(hoa|tn)$", "", host)
+    # Strip trailing "hoa" and the running state's two-letter abbrev (e.g. "tn")
+    # from hostname slugs so e.g. "fooga.com" -> "foo" for a GA run.
+    host_strip = "hoa"
+    if state_abbrev and len(state_abbrev) == 2:
+        host_strip = f"hoa|{state_abbrev.lower()}"
+    host = re.sub(rf"({host_strip})$", "", host)
     candidates.append(host.replace("-", " "))
 
     best: tuple[int, str] | None = None
     for candidate in candidates:
-        cleaned = _clean_name(candidate)
+        cleaned = _clean_name(candidate, state_name=state_name)
         if not cleaned:
             continue
         score = 0
@@ -303,6 +333,7 @@ def clean(args: argparse.Namespace) -> int:
     reject_path = Path(args.rejects)
     reject_path.parent.mkdir(parents=True, exist_ok=True)
     out_of_state_re = _build_out_of_state_re(args)
+    blocked_host_re = _build_blocked_host_re(args)
     with reject_path.open("w") as rejects:
         for row in rows:
             pdfs = row.get("pre_discovered_pdf_urls") or []
@@ -321,7 +352,7 @@ def clean(args: argparse.Namespace) -> int:
                 str(audit.get("snippet") or ""),
                 url,
             ])
-            if BLOCKED_HOST_RE.search(host) or JUNK_RE.search(metadata) or out_of_state_re.search(metadata):
+            if blocked_host_re.search(host) or JUNK_RE.search(metadata) or out_of_state_re.search(metadata):
                 print(json.dumps({"url": url, "reason": "metadata_reject", "metadata": metadata[:300]}, sort_keys=True), file=rejects)
                 continue
             pdf_bytes, skip = _download_pdf(session, url)
@@ -342,7 +373,7 @@ def clean(args: argparse.Namespace) -> int:
             if category not in BANKABLE_CATEGORIES:
                 print(json.dumps({"url": url, "reason": "category_reject", "category": category, "metadata": metadata[:300]}, sort_keys=True), file=rejects)
                 continue
-            name = infer_name(row, audit, text, url)
+            name = infer_name(row, audit, text, url, args)
             if not name:
                 print(json.dumps({"url": url, "reason": "name_unresolved", "metadata": metadata[:300]}, sort_keys=True), file=rejects)
                 continue
