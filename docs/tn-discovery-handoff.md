@@ -141,10 +141,17 @@ Updated: 2026-05-05
   - Exact GCS/source prefilter removed 20 already-banked URLs and found 0 signed URLs, leaving 30 new direct PDFs.
   - Deterministic PDF/text cleaning accepted 4; compact OpenRouter repair kept all 4 with `deepseek/deepseek-v4-flash`.
   - Banked 4 PDFs with 0 skips. Count after pass: 170 manifests, 191 PDFs.
+- 2026-05-05: SREG source-family sweep used `benchmark/tn_sreg_source_queries_2.txt`.
+  - Raw search output: `benchmark/results/tn_serper_docpages_tn_serper_docpages_sreg_2/`
+  - Search calls: 30; raw results: 202; unique URLs: 58; raw leads: 53.
+  - Exact GCS/source prefilter removed 11 already-banked URLs and found 0 signed URLs, leaving 42 new direct PDFs.
+  - Deterministic PDF/text cleaning accepted 5; compact OpenRouter repair kept all 5 with `deepseek/deepseek-v4-flash`.
+  - Banked 5 PDFs with 0 skips. Count after pass: 173 manifests, 195 PDFs.
 
 ## Productive Source Families
 
 - `psmtllc.com/wp-content/uploads/` direct PDFs: Jamison Place, Ridge at Carters Station, Clearview Acres, Walden Woods, Three Rivers, Muirwood, Maebry, The Springs Section I, Richland Downs, Stratford Hall, Staghorn, Hidden River, Saratoga Park, Burton Farms VI, Carter's Station, Breezeway, Carlton Landing, Crescent Ridge, Barton Hills, Stonecrest, Eagle View Village.
+- `sregtn.com/wp-content/uploads/` direct PDFs: Tywater, River Forest, Germantown Commons, Thomas Downs, Chelsea's Way, Sawyer Green II, Millgate, and related SREG-managed communities.
 - `wmco.net/wp-content/uploads/` / `wmco.net/assets/uploads/` direct PDFs: Barefoot Bay, Rutherford Green, Bonbrook, Stonecrest Brentwood, Highland View.
 - HOA-owned WordPress/static sites: Fox Run, White Plains, Hidden Harbor, Berryhill, Legacy Bay, Riverwalk, Savannah Ridge, Sedgefield.
 - `irp.cdn-website.com/.../files/uploaded/` direct PDFs: Brush Creek and Lee Crossing.
@@ -168,6 +175,7 @@ Updated: 2026-05-05
 - Public document-page phrase extension added Maebry and Horse Creek Farms, but marginal yield dropped to 2 banked PDFs.
 - PSMT remains the best active source family after broad page crawling. Its 2025 upload paths are still yielding recorded CCRs/bylaws/amendments.
 - Broader PSMT upload-month queries still produced bankable docs but with increasing duplicate/non-governing noise. Latest additions were Stonecrest, Eagle View Village, and extra Three Rivers/Stratford Hall docs.
+- SREG remains productive but noisier than PSMT; many exact-new PDFs are policies, FAQs, or construction/pool docs. Latest additions were Germantown Commons, Thomas Downs, Chelsea's Way, Sawyer Green II, and Millgate.
 
 ## False Positives / Reject Patterns
 
