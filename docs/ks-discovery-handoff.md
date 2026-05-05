@@ -7,7 +7,7 @@ User instruction: continue autonomously for KS. Do not stop at checkpoints. Comm
 ## Current State
 
 - Bank prefix: `gs://hoaproxy-bank/v1/KS/`
-- Current count: 766 manifests, 1,720 PDFs
+- Current count: 768 manifests, 1,723 PDFs
 - OpenRouter credits: about `$10.73 / $20` used, about `$9.27` remaining
 - Active KS work: continuing deterministic source-family scraping; no Gemini.
 - An unrelated NC benchmark process may be running; leave it alone.
@@ -87,6 +87,7 @@ Highest-yield source families:
 - A fresh eNeighbors search using broad `site:eneighbors.com` city/state queries, direct URL inspection, and local OCR banked 54 selected direct PDFs, then cleaned Missouri false positives caused by Kansas City border matches. Final count after cleanup: 764 manifests and 1,708 PDFs. New/enriched KS communities included Homestead Woods, Village at Deercreek, Windsor Hills, Indian Creek Estates, Autumn Park, Wilderness Valley, Tuscany Reserve, Whitehorse, Maple Brook Park, Leawood South, Avignon Villa Homes, Villas at Parkside, Fairway Hills, Northwood Trails, Wilshire, Forest View, Pavilions of Leawood, Fontainebleau, Reserve at Heritage, Wilderness, High Point at River Ridge Farms, Wilshire Farms, Farm at Garnet Hill, Links at LionsGate, Links Villas at LionsGate, Mills Farm, Cottages at Woodridge, Nottingham By The Green, Highlands Creek, Grey Oaks, Wedgewood, Woodsonia, Rock Creek Estates, Arbor Lake, and Estates of Prairie Haven. Deleted out-of-state KS records for Coves North, Embassy Park, Fountain Hills, Newcastle, and North Creek.
 - A broad non-eNeighbors search (`"Kansas" "HOA documents"`, city document queries, `-eneighbors`) plus deterministic direct-PDF cleaning raised KS to 765 manifests and 1,711 PDFs. Most hits were duplicates or enrichments, but the clean selected set included Villas of Falcon Valley, Southern Meadows, The Cedars, Dover Estates, Falcon Ridge Estates, Clearwater Creek, Normandy Place, Woodland Park, Red Oak Hills, and Mill Creek Meadows. This branch is lower-yield than eNeighbors at the current stage, but still useful for enrichment and occasional new manifests.
 - A direct Cobalt index refresh raised KS to 766 manifests and 1,720 PDFs. The Cobalt source is mostly Riley County enrichment at this point, but it found updated 2026 uploads for Brittnay Ridge, Brianna Court, Grand Mere, Vanesta, Irvine Acres, Kimball, Nelsons Ridge, Solheim, Westbank Townhomes, and Williamsburg. Manager index enumeration remains cheap and clean: parse the index, keep only bylaws/covenants/declarations/articles/rules/guidelines/amendments, skip contracts/plat maps/overviews, and direct-seed selected PDFs.
+- A late Wichita/Sedgwick direct-PDF pass over the tail of the generated Wichita query list raised KS to 768 manifests and 1,723 PDFs. It added/enriched Tylers Landing and West Ridge Estates. The query family is now low-volume, but county-focused direct PDF passes still beat broad statewide search for non-Johnson coverage.
 
 Lower-yield or avoid:
 
