@@ -85,6 +85,12 @@ Updated: 2026-05-05
   - Deterministic direct-PDF cleaning accepted 4; local manual filtering removed 2 Tellico Tell-E-Gram newsletter PDFs.
   - Compact OpenRouter name repair kept 2 with `deepseek/deepseek-v4-flash` after passing Serper audit snippets for state/name context.
   - Banked 2 PDFs with 0 skips. Count after pass: 145 manifests, 163 PDFs.
+- 2026-05-05: Builder/realtor host expansion used `benchmark/tn_builder_realtor_host_queries_2.txt`.
+  - Raw search output: `benchmark/results/tn_serper_docpages_tn_serper_docpages_builder_realtor_2/`
+  - Search calls: 60; raw results: 107; unique URLs: 67; raw leads: 17.
+  - Exact GCS source-URL prefilter removed 7 already-banked URLs and found 0 signed URLs, leaving 10 new public direct PDFs.
+  - Deterministic direct-PDF cleaning accepted 1. Compact OpenRouter repair returned a single kept decision for Calla Crossing, which was applied from the audit.
+  - Banked 1 PDF with 0 skips. Count after pass: 146 manifests, 164 PDFs.
 
 ## Productive Source Families
 
@@ -103,6 +109,7 @@ Updated: 2026-05-05
 - Secondary-metro city searches still produce useful finds when deduped and cleaned first. Latest additions included Vineyard Grove, Chandler Point, Tellico Village, Lakeview Estates, Middlebrook, Steeplechase, Shiloh Springs, Jackson Square, Ashberry Farms, and Canyons.
 - Public static-host expansion now has lower marginal yield but still added Clifftops, Sedman Hill Townhomes, Thrasher Landing, Townes at Horse Creek Farms, Grand Valley Lakes, McKay's Mill, Old Capitol Town, and Grandview.
 - Regional legal-phrase expansion appears low yield after prior passes. Latest additions were Shagbark and Jackson Creek.
+- Builder/realtor host expansion is mostly exhausted after prior passes. Latest addition was Calla Crossing; Lee Godfrey and Smithbilt searches now mostly duplicate or reject.
 
 ## False Positives / Reject Patterns
 
