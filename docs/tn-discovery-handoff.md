@@ -91,6 +91,13 @@ Updated: 2026-05-05
   - Exact GCS source-URL prefilter removed 7 already-banked URLs and found 0 signed URLs, leaving 10 new public direct PDFs.
   - Deterministic direct-PDF cleaning accepted 1. Compact OpenRouter repair returned a single kept decision for Calla Crossing, which was applied from the audit.
   - Banked 1 PDF with 0 skips. Count after pass: 146 manifests, 164 PDFs.
+- 2026-05-05: HOA Express-style document expansion used `benchmark/tn_hoaexpress_document_queries_2.txt`.
+  - Raw search output: `benchmark/results/tn_serper_docpages_tn_serper_docpages_hoaexpress_2/`
+  - Search calls: 56; raw results: 227; unique URLs: 118; raw leads: 44.
+  - Exact GCS source-URL prefilter removed 3 already-banked URLs and found 0 signed URLs, leaving 41 new public document endpoints.
+  - Deterministic PDF/text cleaning accepted 6; compact OpenRouter repair kept 4 and rejected a newsletter-style Fredericksburg candidate plus a generic HOAleader-style guide.
+  - Local normalization merged two River Sound name variants before banking.
+  - Banked 4 PDFs with 0 skips. Count after pass: 149 manifests, 168 PDFs.
 
 ## Productive Source Families
 
@@ -110,6 +117,7 @@ Updated: 2026-05-05
 - Public static-host expansion now has lower marginal yield but still added Clifftops, Sedman Hill Townhomes, Thrasher Landing, Townes at Horse Creek Farms, Grand Valley Lakes, McKay's Mill, Old Capitol Town, and Grandview.
 - Regional legal-phrase expansion appears low yield after prior passes. Latest additions were Shagbark and Jackson Creek.
 - Builder/realtor host expansion is mostly exhausted after prior passes. Latest addition was Calla Crossing; Lee Godfrey and Smithbilt searches now mostly duplicate or reject.
+- HOA Express-style `/file/document` and `/file/document-page` expansion remains worth targeted use. Latest additions were River Sound, Abbottsford, and Montgomery Cove.
 
 ## False Positives / Reject Patterns
 
