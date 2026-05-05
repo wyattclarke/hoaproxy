@@ -108,6 +108,7 @@ Highest-yield source families:
 - An out-of-state scan of remaining `_unknown-county` PDFs found no Mississippi. Removed clear Missouri/Colorado false positives for Claymont North, Spring Creek Meadows, Woodbridge, and Woodson Estates. Creekside was retained because the document is Johnson County, Kansas despite a Missouri corporation mention; it was repaired into Johnson County and the two old unknown Creekside prefixes were removed. Count after cleanup: 591 manifests and 1,419 PDFs.
 - A small county-prefix normalization removed duplicate `pottawatomie-county/wildcat-woods` after confirming the same PDF exists under `pottawatomie/wildcat-woods`. Count after cleanup: 590 manifests and 1,418 PDFs.
 - A focused HA-KC direct pass mostly rediscovered known docs but repaired Prairie Village Homes Association: the Johnson manifest had been empty while two unknown slugs had the bylaws PDFs. Rebanked under Johnson and removed the two unknown copies. Count after cleanup: 588 manifests and 1,417 PDFs. HA-KC still needs manual review because it also returns Missouri communities like Chateau Place.
+- An empty-manifest cleanup removed 140 KS stubs whose `documents` arrays were empty. These came from probes that found no public PDFs and should not count as scraped communities. Count after cleanup: 448 manifests with documents and 1,417 PDFs. Use this cleaned count going forward.
 
 Lower-yield or avoid:
 
