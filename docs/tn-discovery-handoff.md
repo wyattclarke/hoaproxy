@@ -110,6 +110,13 @@ Updated: 2026-05-05
   - Exact GCS source-URL prefilter removed 1 already-banked URL and found 0 signed URLs, leaving 18 new public direct PDFs.
   - Deterministic PDF/text cleaning accepted 0; most rejects were category rejects for municipal regulations, newsletters, grants, and planning materials.
   - No PDFs banked. Count after pass remained 151 manifests, 170 PDFs.
+- 2026-05-05: Broader `inurl:/file/document` endpoint expansion used `benchmark/tn_inurl_document_queries_2.txt`.
+  - Raw search output: `benchmark/results/tn_serper_docpages_tn_serper_docpages_inurl_document_2/`
+  - Search calls: 50; raw results: 376; unique URLs: 269; raw leads: 59.
+  - Exact GCS source-URL prefilter removed 8 already-banked URLs and found 0 signed URLs, leaving 51 new URLs.
+  - Deterministic PDF/text cleaning accepted 2; local manual filtering removed the recurring Fredericksburg newsletter/update candidate.
+  - Compact OpenRouter repair kept The Springs Section I; the model returned the kept decision under `candidates`, and the helper now supports that shape.
+  - Banked 1 PDF with 0 skips. Count after pass: 152 manifests, 171 PDFs.
 
 ## Productive Source Families
 
@@ -132,6 +139,7 @@ Updated: 2026-05-05
 - HOA Express-style `/file/document` and `/file/document-page` expansion remains worth targeted use. Latest additions were River Sound, Abbottsford, and Montgomery Cove.
 - HOA Express governing-term extension added River Plantation Section 1 and Villas at Lyons Crossing, but marginal yield dropped to 2 banked PDFs.
 - Civic/static CDN searches should not be expanded broadly. They mostly produce municipal packets, subdivision regulations, neighborhood newsletters, and grant material; the only prior bankable civic CDN-style hit was already deduped.
+- Broad `inurl:/file/document` searches have low marginal yield and high noise after the HOA Express-specific passes. Latest addition was The Springs Section I.
 
 ## False Positives / Reject Patterns
 
