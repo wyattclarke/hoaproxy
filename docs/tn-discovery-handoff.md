@@ -276,6 +276,13 @@ Updated: 2026-05-05
   - Deterministic PDF/text cleaning accepted 2; source-family local review kept 16 curated leads / 18 PDFs and rejected ambiguous numbered scans, quitclaim deeds, landscaping-only material, pool rules, and PSMT documents without a usable association identity.
   - No OpenRouter repair was used; retained names/counties were normalized locally from filenames, extractable text, and existing bank manifests.
   - Banked 18 PDFs with 0 skips and `homepage_fetched=false` for all leads by leaving `website` null. Additions/enrichments included Stream Valley, Burton Farms VI, Burton Farms, Oakleigh, Richland Downs, Patton Retreat, Breezeway, Stratford Hall, Caldwell Estates, Springhouse, Shelton Square, Clear Creek, Stewart Creek Farms, Stewart Landing, Arbor Crest, and The Columns on Main Street. Count after pass: 271 manifests, 348 PDFs.
+- 2026-05-05: WMCO source-family extension used `benchmark/tn_wmco_source_extension_queries_6.txt`.
+  - Raw search output: `benchmark/results/tn_serper_docpages_tn_wmco_source_extension_6/`
+  - Search calls: 64; raw results: 330; unique URLs: 80; raw leads: 63, all on `wmco.net`.
+  - Exact GCS/source prefilter removed 21 already-banked URLs and found 0 signed URLs, leaving 42 new public direct PDFs.
+  - Deterministic PDF/text cleaning accepted 12; source-family local review kept 15 curated leads / 21 PDFs and rejected Stonecrest letters, ARC applications/forms, insurance/rental packets, plat maps, office-park material, and ambiguous scans without an association identity.
+  - No OpenRouter repair was used; retained names/counties were normalized locally from filenames, extractable text, and existing bank manifests.
+  - Banked 21 PDFs with 0 skips and `homepage_fetched=false` for all leads by leaving `website` null. Additions/enrichments included Reid Hill Commons, Dallas Downs, Cottages at Innsbrooke, Chestnut Bend, Ivan Creek, Boyd Mill Estates, Fieldstone Farms, Sherwood Green Estates, Foxborough Square West, Chenoweth, Reserve at Spencer Creek, Spencer Hall, Benelli Park, Carriage Park, and Treemont Estates. Count after pass: 282 manifests, 369 PDFs.
 
 ## Productive Source Families
 
@@ -308,7 +315,7 @@ Updated: 2026-05-05
 - PSMT remains productive but is now duplicate-heavy after broad page crawling. Its 2025/2026 upload paths still yield recorded CCRs/bylaws/amendments/fine procedures when exact-source dedupe and source-family local review are applied.
 - Broader PSMT upload-month queries still produced bankable docs but with increasing duplicate/non-governing noise. Latest additions were Stonecrest, Eagle View Village, and extra Three Rivers/Stratford Hall docs.
 - SREG remains productive but noisier than PSMT; many exact-new PDFs are policies, FAQs, or construction/pool docs. Latest additions were Germantown Commons, Thomas Downs, Chelsea's Way, Sawyer Green II, and Millgate.
-- WMCO remains productive for direct PDFs but has many forms/applications/insurance docs. Latest additions included Townhomes of Andover, Clairmonte, Ivan Creek, Treemont Estates, Chestnut Bend, Glenellen Estates, plus Bonbrook and Millgate updates.
+- WMCO remains productive for direct PDFs but has many forms/applications/insurance/rental/letter PDFs. Latest additions included Reid Hill Commons, Dallas Downs, Cottages at Innsbrooke, Chestnut Bend, Ivan Creek, Boyd Mill Estates, Fieldstone Farms, Sherwood Green Estates, Foxborough Square West, Chenoweth, Reserve at Spencer Creek, Spencer Hall, Benelli Park, Carriage Park, and Treemont Estates.
 - IRP CDN is productive but broad and noisy; without state-hint gating it finds many out-of-state CDN documents, so keep deterministic state/text filtering mandatory. Latest additions included Park Place Townhomes, Meadows of Spring Hill, Hamilton Church Manor, Walnut Ridge, Cottages at Sycamore Ridge, Poplar Ridge, Donelson Downs, Pennock Place, Four Maples, and Chapmans Retreat.
 - Builder/CDN source families (`s3.amazonaws.com/buildercloud`, `d1e1jt2fj4r8r.cloudfront.net`, `travisclosehomes.com/s`, `boyle.com/wp-content/uploads`, `continentalchattanooga.com/wp-content/uploads`) remain useful after county owner-terminology sweeps. Latest additions/enrichments included Ivey Farms, Continental, Allelon, Spring Creek Ranch Residential, Ashton Fields, Hidden Harbor, Sedman Hill Townhomes, and Twin Lakes of Piperton. Keep local review strict because buildercloud results include non-TN Hamilton/Woodneath/Staley/Matanzas-style hits and Boyle results include sales contracts.
 - HOA-owned domain enrichment is useful for adding extra covenants/bylaws/policies to existing manifests, but marginal new-manifest yield is low after the first pass. Latest additions enriched Halle Plantation, Brentwood Hills, Estates of Brentwood, Oakmont, and Brentwood Park. Continue to reject fee sheets, clubhouse reservations, payment forms, minutes, and operational forms.
@@ -327,6 +334,7 @@ Updated: 2026-05-05
 - Generic welcome packages, forms, applications, minutes, budgets, newsletters, and pool/lease documents.
 - Facility-specific rules, maps, release/waiver forms, clubhouse packets, rental contracts, and trail/pool/tennis-only documents should be removed even when discovered on a valid HOA-owned domain.
 - PSMT numbered scans with no extractable association identity should be rejected unless the title/snippet/filename clearly identifies the HOA and governing-document type.
+- WMCO source-family review should reject member letters, ARC/change-request applications, insurance policy packets, rental/lease packets, plat maps, office-park documents, and scans with no usable association identity even when the filename contains a governing keyword.
 - Out-of-state hits triggered by city names like Franklin or Brentwood.
 - Signed or credentialed URLs from otherwise public-looking search results, especially AWS query strings containing `AWSAccessKeyId`, `Signature`, or `X-Amz-Signature`. Exclude these before model repair and banking.
 - Tellico Village `tgYYYYMMDD.pdf` Tell-E-Gram PDFs are newsletters and should be rejected even if they contain covenant/legal snippets.
