@@ -261,8 +261,8 @@ python scripts/prepare_bank_for_ingest.py \
 
 python scripts/prepare_bank_for_ingest.py \
   --state KS \
-  --bucket hoaproxy-bank \
-  --ready-bucket hoaproxy-ingest-ready \
+  --bank-bucket hoaproxy-bank \
+  --prepared-bucket hoaproxy-ingest-ready \
   --max-docai-cost-usd 25
 ```
 
@@ -288,4 +288,3 @@ curl -sS -H "Authorization: Bearer $JWT_SECRET" \
 - Do not reintroduce `/admin/bulk-import`.
 - Do not remove `/upload` or `/upload/anonymous`.
 - Do not import raw bank manifests directly into SQLite without the ingestion pipeline.
-

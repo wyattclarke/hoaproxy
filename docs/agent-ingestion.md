@@ -1,14 +1,18 @@
 # Agent-driven HOA ingestion
 
-This is the canonical reference for how new HOAs and their governing documents get into HOAproxy. There is one path: an LLM agent (Claude Code or equivalent) discovers an HOA, fetches a polygon, classifies its public documents locally, and POSTs them to `/upload` with structured metadata. The server is a trusted-but-verifying executor.
+This is the canonical reference for one-off HOA additions and normal website uploads. An LLM agent (Claude Code or equivalent) discovers an HOA, fetches a polygon, classifies its public documents locally, and POSTs them to `/upload` with structured metadata. The server is a trusted-but-verifying executor.
 
-If you're a fresh session figuring out how to add an HOA, read this doc top to bottom and you'll have the full contract. For the one-time cleanup of legacy data still left in the prod DB, see [`ops-cleanup.md`](ops-cleanup.md).
+Bulk scraped-bank ingestion uses a separate prepared GCS queue: the raw bank stays at `gs://hoaproxy-bank/v1/{STATE}/...`, a local/GCP worker writes OCR-ready bundles to `gs://hoaproxy-ingest-ready/v1/{STATE}/...`, and Render imports them through `POST /admin/ingest-ready-gcs`. See [`bank-to-live-ingestion.md`](bank-to-live-ingestion.md). Do not use `/upload` as a Render-side bulk OCR worker.
+
+If you're a fresh session figuring out how to add a single HOA or handle a public contributor upload, read this doc top to bottom and you'll have the full contract. For the one-time cleanup of legacy data still left in the prod DB, see [`ops-cleanup.md`](ops-cleanup.md).
 
 ## Mental model
 
 **Old model (deleted):** server is intelligent (classifier inside the pipeline, OCR cascade with fallbacks). Agent is dumb — it just fires `curl`. Per-corpus uploader scripts (`upload_alexandria_to_site.py`, `upload_trec_to_site.py`, etc.) shoveled bulk data through.
 
-**New model:** agent is intelligent (it already classifies "this is meeting minutes, not a CC&R" the way a human would). Server is a routing layer that trusts the agent's verdicts and runs cheap defense-in-depth checks. There is no queue, no batch importer, no per-corpus script. One HOA per request.
+**One-off model:** agent is intelligent (it already classifies "this is meeting minutes, not a CC&R" the way a human would). Server is a routing layer that trusts the agent's verdicts and runs cheap defense-in-depth checks. One HOA per request.
+
+**Bulk bank-drain model:** discovery agents preserve raw findings in GCS first. A prep worker filters and OCRs outside Render, writes prepared bundles with text sidecars, and the admin importer ingests only those prepared bundles. Missing sidecars fail; Render does not fall back to Document AI for this bulk path.
 
 ## The six-step loop
 
@@ -157,6 +161,23 @@ Returns the same shape as the CLI (without `recommendation` and exit codes — c
 When `url` is provided the server downloads it (max 25 MB) and inspects it server-side (PyPDF + classifier). When only `filename` is provided, classification falls back to the filename regex.
 
 `duplicate_of` is set when a document with the same SHA256 is already in the corpus, formatted as `"<HOA>/<relative_path>"`.
+
+### `POST /admin/ingest-ready-gcs`
+
+Admin-only bulk importer for prepared GCS bundles. Auth:
+`Authorization: Bearer <JWT_SECRET>`.
+
+```bash
+curl -sS -X POST \
+  "https://hoaproxy.org/admin/ingest-ready-gcs?state=KS&limit=5" \
+  -H "Authorization: Bearer $JWT_SECRET"
+```
+
+This endpoint reads `ready` bundles from
+`gs://hoaproxy-ingest-ready/v1/{STATE}/...`, claims them, downloads PDFs and
+text sidecars, and calls `ingest_pdf_paths()` with `pre_extracted_pages`.
+It never runs Render-side OCR. If `texts/{sha}.json` is missing or invalid, the
+bundle is marked `failed`.
 
 ## Categories
 

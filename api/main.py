@@ -53,6 +53,7 @@ from hoaware.auth import get_current_user, hash_password, verify_password, creat
 from hoaware.chunker import PageContent
 from hoaware.config import load_settings
 from hoaware.cost_tracker import COST_DOCAI_PER_PAGE, log_docai_usage
+from hoaware import prepared_ingest
 from hoaware.doc_classifier import (
     VALID_CATEGORIES,
     REJECT_PII,
@@ -3091,6 +3092,275 @@ def _require_admin(request: Request) -> None:
     auth_header = request.headers.get("Authorization", "")
     if not admin_key or auth_header != f"Bearer {admin_key}":
         raise HTTPException(status_code=403, detail="Forbidden")
+
+
+def _prepared_gcs_bucket(bucket_name: str | None = None):
+    from google.cloud import storage as gcs
+
+    client = gcs.Client()
+    return client.bucket(bucket_name or prepared_ingest.DEFAULT_PREPARED_BUCKET)
+
+
+def _prepared_target_pdf_path(
+    *,
+    hoa_dir: Path,
+    filename: str,
+    expected_sha256: str,
+    pdf_bytes: bytes,
+) -> Path:
+    safe_name = _safe_pdf_filename(filename)
+    actual_sha256 = hashlib.sha256(pdf_bytes).hexdigest()
+    if actual_sha256 != expected_sha256:
+        raise prepared_ingest.PreparedIngestError(
+            f"PDF checksum mismatch for {filename}: expected {expected_sha256}, got {actual_sha256}"
+        )
+
+    target = hoa_dir / safe_name
+    if target.exists():
+        existing_sha256 = hashlib.sha256(target.read_bytes()).hexdigest()
+        if existing_sha256 == expected_sha256:
+            return target
+        target = hoa_dir / f"{expected_sha256[:12]}-{safe_name}"
+    target.write_bytes(pdf_bytes)
+    return target
+
+
+def _prepared_bundle_location_fields(bundle: prepared_ingest.PreparedBundle) -> dict:
+    address = bundle.address or {}
+    geometry = bundle.geometry or {}
+    boundary_raw = geometry.get("boundary_geojson")
+    if isinstance(boundary_raw, dict):
+        boundary_input = json.dumps(boundary_raw)
+    elif isinstance(boundary_raw, str):
+        boundary_input = boundary_raw
+    else:
+        boundary_input = None
+    boundary_geojson = _parse_boundary_geojson(boundary_input)
+
+    latitude = geometry.get("latitude")
+    longitude = geometry.get("longitude")
+    try:
+        latitude = float(latitude) if latitude is not None else None
+        longitude = float(longitude) if longitude is not None else None
+    except (TypeError, ValueError):
+        latitude = None
+        longitude = None
+    if (latitude is None or longitude is None) and boundary_geojson:
+        center = _center_from_boundary_geojson(boundary_geojson)
+        if center:
+            latitude, longitude = center
+
+    metadata_type = (bundle.metadata_type or "").strip().lower() or None
+    if metadata_type not in {"hoa", "condo", "coop", "timeshare"}:
+        metadata_type = None
+
+    return {
+        "metadata_type": metadata_type,
+        "website_url": _normalize_website_url(bundle.website_url),
+        "street": (address.get("street") or None),
+        "city": (address.get("city") or None),
+        "state": ((address.get("state") or bundle.state).strip().upper()),
+        "postal_code": (address.get("postal_code") or None),
+        "country": ((address.get("country") or "US").strip().upper()),
+        "latitude": latitude,
+        "longitude": longitude,
+        "boundary_geojson": boundary_geojson,
+        "location_quality": (
+            _derive_location_quality(
+                has_boundary=bool(boundary_geojson),
+                street=address.get("street"),
+                postal_code=address.get("postal_code"),
+            )
+            if latitude is not None and longitude is not None
+            else None
+        ),
+    }
+
+
+@app.post("/admin/ingest-ready-gcs")
+def admin_ingest_ready_gcs(
+    request: Request,
+    state: str,
+    limit: int = 1,
+    dry_run: bool = False,
+    bucket_name: str | None = None,
+):
+    """Import prepared GCS bundles that already contain extracted text sidecars.
+
+    This path is intentionally separate from /upload. It never falls back to
+    server-side PDF extraction or DocAI; missing sidecars fail the bundle.
+    """
+    _require_admin(request)
+    try:
+        state_n = state.strip().upper()
+        if len(state_n) != 2 or not state_n.isalpha():
+            raise ValueError
+    except Exception:
+        raise HTTPException(status_code=400, detail="state must be a two-letter abbreviation")
+    if limit < 1 or limit > 50:
+        raise HTTPException(status_code=400, detail="limit must be between 1 and 50")
+
+    settings = load_settings()
+    if not settings.openai_api_key and not dry_run:
+        raise HTTPException(status_code=400, detail="OPENAI_API_KEY is required for ingestion")
+
+    bucket = _prepared_gcs_bucket(bucket_name)
+    prefixes = prepared_ingest.list_ready_bundle_prefixes(bucket, state=state_n, limit=limit)
+    results: list[dict] = []
+
+    for prefix in prefixes:
+        if not dry_run:
+            claimed = prepared_ingest.claim_ready_bundle(bucket, prefix)
+            if not claimed:
+                results.append({"prefix": prefix, "status": "skipped", "reason": "not_ready"})
+                continue
+        try:
+            bundle_payload = prepared_ingest.load_json_blob(
+                bucket, prepared_ingest.bundle_blob_name(prefix)
+            )
+            bundle = prepared_ingest.validate_bundle(bundle_payload, expected_state=state_n)
+            resolved_hoa = _resolve_hoa_name(bundle.hoa_name)
+
+            settings.docs_root.mkdir(parents=True, exist_ok=True)
+            hoa_dir = settings.docs_root / resolved_hoa
+            if not dry_run:
+                hoa_dir.mkdir(parents=True, exist_ok=True)
+
+            saved_paths: list[Path] = []
+            metadata_by_path: dict[Path, dict] = {}
+            imported_docai_pages = 0
+            for doc in bundle.documents:
+                pdf_uri = prepared_ingest.parse_gcs_uri(doc.pdf_gcs_path)
+                text_uri = prepared_ingest.parse_gcs_uri(doc.text_gcs_path)
+                if pdf_uri.bucket != bucket.name or text_uri.bucket != bucket.name:
+                    raise prepared_ingest.PreparedIngestError(
+                        "prepared document paths must point at the prepared queue bucket"
+                    )
+
+                sidecar_payload = prepared_ingest.load_json_blob(bucket, text_uri.blob)
+                pages, sidecar_docai_pages = prepared_ingest.validate_text_sidecar(
+                    sidecar_payload
+                )
+                imported_docai_pages += sidecar_docai_pages
+
+                if dry_run:
+                    continue
+
+                pdf_bytes = prepared_ingest.download_blob_bytes(bucket, pdf_uri.blob)
+                target = _prepared_target_pdf_path(
+                    hoa_dir=hoa_dir,
+                    filename=doc.filename,
+                    expected_sha256=doc.sha256,
+                    pdf_bytes=pdf_bytes,
+                )
+                saved_paths.append(target)
+                metadata_by_path[target] = {
+                    "category": doc.category,
+                    "text_extractable": doc.text_extractable,
+                    "source_url": doc.source_url,
+                    "pre_extracted_pages": pages,
+                    "docai_pages": sidecar_docai_pages,
+                }
+
+            if dry_run:
+                results.append(
+                    {
+                        "prefix": prefix,
+                        "status": "ready",
+                        "hoa": resolved_hoa,
+                        "documents": len(bundle.documents),
+                    }
+                )
+                continue
+
+            if any(
+                meta.get("pre_extracted_pages") is None
+                for meta in metadata_by_path.values()
+            ):
+                raise prepared_ingest.PreparedIngestError(
+                    "prepared bundle is missing text sidecars"
+                )
+
+            location = _prepared_bundle_location_fields(bundle)
+            with db.get_connection(settings.db_path) as conn:
+                db.upsert_hoa_location(
+                    conn,
+                    resolved_hoa,
+                    metadata_type=location["metadata_type"],
+                    website_url=location["website_url"],
+                    street=location["street"],
+                    city=location["city"],
+                    state=location["state"],
+                    postal_code=location["postal_code"],
+                    country=location["country"],
+                    latitude=location["latitude"],
+                    longitude=location["longitude"],
+                    boundary_geojson=location["boundary_geojson"],
+                    source="gcs_prepared_ingest",
+                    location_quality=location["location_quality"],
+                )
+
+            stats = ingest_pdf_paths(
+                resolved_hoa,
+                saved_paths,
+                settings=settings,
+                show_progress=False,
+                metadata_by_path=metadata_by_path,
+            )
+            for path, meta in metadata_by_path.items():
+                if meta.get("pre_extracted_pages") is not None:
+                    rel = path.relative_to(settings.docs_root).as_posix()
+                    pages_used = int(meta.get("docai_pages") or 0)
+                    if pages_used:
+                        log_docai_usage(pages_used, document=rel)
+
+            status = "imported" if stats.failed == 0 else "failed"
+            result = {
+                "prefix": prefix,
+                "status": status,
+                "hoa": resolved_hoa,
+                "processed": stats.processed,
+                "indexed": stats.indexed,
+                "skipped": stats.skipped,
+                "failed": stats.failed,
+                "docai_pages": imported_docai_pages,
+            }
+            prepared_ingest.update_bundle_status(
+                bucket,
+                prefix,
+                status=status,
+                error=None if status == "imported" else "ingest_pdf_paths reported failures",
+                extra={"import_result": result},
+            )
+            results.append(result)
+        except prepared_ingest.PreparedIngestError as exc:
+            if not dry_run:
+                try:
+                    prepared_ingest.update_bundle_status(
+                        bucket, prefix, status="failed", error=str(exc)
+                    )
+                except Exception:
+                    logger.exception("Failed to update prepared-ingest status for %s", prefix)
+            results.append({"prefix": prefix, "status": "failed", "error": str(exc)})
+        except Exception as exc:
+            logger.exception("Prepared GCS ingest failed for %s", prefix)
+            if not dry_run:
+                try:
+                    prepared_ingest.update_bundle_status(
+                        bucket, prefix, status="failed", error=str(exc)
+                    )
+                except Exception:
+                    logger.exception("Failed to update prepared-ingest status for %s", prefix)
+            results.append({"prefix": prefix, "status": "failed", "error": str(exc)})
+
+    return {
+        "state": state_n,
+        "bucket": bucket.name,
+        "dry_run": dry_run,
+        "requested_limit": limit,
+        "found": len(prefixes),
+        "results": results,
+    }
 
 
 class FixedCostRequest(BaseModel):
