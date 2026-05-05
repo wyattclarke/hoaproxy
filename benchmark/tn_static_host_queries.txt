@@ -1,0 +1,22 @@
+site:*.com/file/document Tennessee HOA "Bylaws"
+site:*.com/file/document Tennessee "Homeowners Association" "Covenants"
+site:*.org/file/document Tennessee HOA "Bylaws"
+site:*.org/file/document Tennessee "Homeowners Association" "Covenants"
+site:*.communitysite.com Tennessee HOA "governing documents"
+site:*.communitysite.com Tennessee "Homeowners Association" "Covenants" filetype:pdf
+site:*.files.wordpress.com Tennessee "Homeowners Association" "Bylaws" filetype:pdf
+site:*.files.wordpress.com Tennessee HOA "Covenants" filetype:pdf
+site:static1.squarespace.com Tennessee "Homeowners Association" "Covenants" filetype:pdf
+site:static1.squarespace.com Tennessee HOA "Bylaws" filetype:pdf
+site:*.squarespace.com/s/ Tennessee "Homeowners Association" "Covenants" filetype:pdf
+site:*.squarespace.com/s/ Tennessee HOA "Architectural" filetype:pdf
+site:cloudfront.net Tennessee "Homeowners Association" "Covenants" filetype:pdf
+site:cloudfront.net Tennessee HOA "Bylaws" filetype:pdf
+site:d15k2d11r6t6rl.cloudfront.net Tennessee HOA "Covenants" filetype:pdf
+site:*.org/documents Tennessee "Homeowners Association" "Bylaws" filetype:pdf
+site:*.org/documents Tennessee HOA "Covenants" filetype:pdf
+site:*.com/documents Tennessee "Homeowners Association" "Bylaws" filetype:pdf
+site:*.com/documents Tennessee HOA "Covenants" filetype:pdf
+site:*.org/downloads Tennessee "Homeowners Association" "Covenants" filetype:pdf
+site:*.com/downloads Tennessee HOA "Bylaws" filetype:pdf
+site:*.com/downloads Tennessee "Homeowners Association" "Declaration" filetype:pdf
