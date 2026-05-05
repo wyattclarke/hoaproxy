@@ -7,7 +7,7 @@ User instruction: continue autonomously for KS. Do not stop at checkpoints. Comm
 ## Current State
 
 - Bank prefix: `gs://hoaproxy-bank/v1/KS/`
-- Current count: 774 manifests, 1,731 PDFs
+- Current count: 777 manifests, 1,734 PDFs
 - OpenRouter credits: about `$10.73 / $20` used, about `$9.27` remaining
 - Active KS work: continuing deterministic source-family scraping; no Gemini.
 - An unrelated NC benchmark process may be running; leave it alone.
@@ -93,6 +93,7 @@ Highest-yield source families:
 - A zero-document-stub exact-name pass used existing KS stubs as targeted queries and raised KS to 772 manifests and 1,728 PDFs by filling Brooke Meadows. The method is useful for enrichment but low-yield: 100 exact queries over 25 zero-doc names produced one clean PDF.
 - A deeper HA-KC direct-file pass raised KS to 773 manifests and 1,729 PDFs by adding/enriching Whitetail and Blue Valley Riding. HA-KC still needs manual review because newsletters can contain enough legal words to fool deterministic classification; bank only direct restrictions/bylaws/declarations, not newsletters.
 - A GoDaddy/CommunitySite source-family pass raised KS to 774 manifests and 1,731 PDFs by adding/enriching West Ridge Estates, Battle Creek, West Glen, Canyon Creek Villas, and Quivira Falls. The cleaner also surfaced OK/FL reroutes and ARC forms; keep respecting detected-state reroutes for future non-KS banks, and manually reject forms/insurance/newsletters.
+- A hmsft/PMTech source-family refresh raised KS to 777 manifests and 1,734 PDFs. It added/enriched Villas at Southpointe, Crestwood Village, Deer Valley, Gleason Glen, Nottingham Downs Duplex, Prairie Brook, Prairie Point, Villas of St. Andrews, The Villages Condominium, and Reserve at Ravenwood. Continue to inspect first-page text for CDN URLs because the raw inferred names are often fragments.
 
 Lower-yield or avoid:
 
