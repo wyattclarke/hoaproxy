@@ -147,11 +147,19 @@ Updated: 2026-05-05
   - Exact GCS/source prefilter removed 11 already-banked URLs and found 0 signed URLs, leaving 42 new direct PDFs.
   - Deterministic PDF/text cleaning accepted 5; compact OpenRouter repair kept all 5 with `deepseek/deepseek-v4-flash`.
   - Banked 5 PDFs with 0 skips. Count after pass: 173 manifests, 195 PDFs.
+- 2026-05-05: WMCO source-family sweep used `benchmark/tn_wmco_source_queries_2.txt`.
+  - Raw search output: `benchmark/results/tn_serper_docpages_tn_serper_docpages_wmco_2/`
+  - Search calls: 30; raw results: 161; unique URLs: 59; raw leads: 55.
+  - Exact GCS/source prefilter removed 13 already-banked URLs and found 0 signed URLs, leaving 42 new direct PDFs.
+  - Deterministic PDF/text cleaning accepted 12; compact OpenRouter repair kept 8 with `deepseek/deepseek-v4-flash`.
+  - Local normalization merged Bonbrook into the existing Bonbrook manifest and normalized Glenellen Estates before banking.
+  - Banked 8 PDFs with 0 skips. Count after pass: 178 manifests, 203 PDFs.
 
 ## Productive Source Families
 
 - `psmtllc.com/wp-content/uploads/` direct PDFs: Jamison Place, Ridge at Carters Station, Clearview Acres, Walden Woods, Three Rivers, Muirwood, Maebry, The Springs Section I, Richland Downs, Stratford Hall, Staghorn, Hidden River, Saratoga Park, Burton Farms VI, Carter's Station, Breezeway, Carlton Landing, Crescent Ridge, Barton Hills, Stonecrest, Eagle View Village.
 - `sregtn.com/wp-content/uploads/` direct PDFs: Tywater, River Forest, Germantown Commons, Thomas Downs, Chelsea's Way, Sawyer Green II, Millgate, and related SREG-managed communities.
+- `wmco.net/wp-content/uploads/` and `wmco.net/assets/uploads/` direct PDFs: Barefoot Bay, Rutherford Green, Bonbrook, Stonecrest Brentwood, Highland View, Townhomes of Andover, Clairmonte, Ivan Creek, Treemont Estates, Chestnut Bend, Millgate, Glenellen Estates.
 - `wmco.net/wp-content/uploads/` / `wmco.net/assets/uploads/` direct PDFs: Barefoot Bay, Rutherford Green, Bonbrook, Stonecrest Brentwood, Highland View.
 - HOA-owned WordPress/static sites: Fox Run, White Plains, Hidden Harbor, Berryhill, Legacy Bay, Riverwalk, Savannah Ridge, Sedgefield.
 - `irp.cdn-website.com/.../files/uploaded/` direct PDFs: Brush Creek and Lee Crossing.
@@ -176,6 +184,7 @@ Updated: 2026-05-05
 - PSMT remains the best active source family after broad page crawling. Its 2025 upload paths are still yielding recorded CCRs/bylaws/amendments.
 - Broader PSMT upload-month queries still produced bankable docs but with increasing duplicate/non-governing noise. Latest additions were Stonecrest, Eagle View Village, and extra Three Rivers/Stratford Hall docs.
 - SREG remains productive but noisier than PSMT; many exact-new PDFs are policies, FAQs, or construction/pool docs. Latest additions were Germantown Commons, Thomas Downs, Chelsea's Way, Sawyer Green II, and Millgate.
+- WMCO remains productive for direct PDFs but has many forms/applications/insurance docs. Latest additions included Townhomes of Andover, Clairmonte, Ivan Creek, Treemont Estates, Chestnut Bend, Glenellen Estates, plus Bonbrook and Millgate updates.
 
 ## False Positives / Reject Patterns
 
