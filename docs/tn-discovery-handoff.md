@@ -254,6 +254,13 @@ Updated: 2026-05-05
   - Deterministic PDF/text cleaning accepted 9; local review kept 7 and rejected Fairvue fee information plus a River Sound clubhouse reservation form.
   - No OpenRouter repair was used; retained names/counties were normalized locally.
   - Banked 7 PDFs with 0 skips. Count after pass: 250 manifests, 311 PDFs.
+- 2026-05-05: Architectural/rules/policy terminology pass used `benchmark/tn_arch_rules_policy_queries_5.txt`.
+  - Raw search output: `benchmark/results/tn_serper_docpages_tn_arch_rules_policy_5/`
+  - Search calls: 44; raw results: 347; unique URLs: 274; raw leads hit the `--max-leads` cap at 180.
+  - Exact GCS/source prefilter removed 42 already-banked URLs and found 0 signed URLs, leaving 138 new public direct PDFs.
+  - Deterministic PDF/text cleaning accepted 27; local review kept 11 and rejected NC/MT/AL hits, newsletters, statutes, auctions, historic-district guidelines, meeting packets, and academic/legal PDFs.
+  - No OpenRouter repair was used; retained names/counties were normalized locally.
+  - Banked 11 PDFs with 0 skips. Count after pass: 257 manifests, 322 PDFs.
 
 ## Productive Source Families
 
@@ -290,6 +297,7 @@ Updated: 2026-05-05
 - IRP CDN is productive but broad and noisy; without state-hint gating it finds many out-of-state CDN documents, so keep deterministic state/text filtering mandatory. Latest additions included Park Place Townhomes, Meadows of Spring Hill, Hamilton Church Manor, Walnut Ridge, Cottages at Sycamore Ridge, Poplar Ridge, Donelson Downs, Pennock Place, Four Maples, and Chapmans Retreat.
 - Builder/CDN source families (`s3.amazonaws.com/buildercloud`, `d1e1jt2fj4r8r.cloudfront.net`, `travisclosehomes.com/s`, `boyle.com/wp-content/uploads`, `continentalchattanooga.com/wp-content/uploads`) remain useful after county owner-terminology sweeps. Latest additions/enrichments included Ivey Farms, Continental, Allelon, Spring Creek Ranch Residential, Ashton Fields, Hidden Harbor, Sedman Hill Townhomes, and Twin Lakes of Piperton. Keep local review strict because buildercloud results include non-TN Hamilton/Woodneath/Staley/Matanzas-style hits and Boyle results include sales contracts.
 - HOA-owned domain enrichment is useful for adding extra covenants/bylaws/policies to existing manifests, but marginal new-manifest yield is low after the first pass. Latest additions enriched Halle Plantation, Brentwood Hills, Estates of Brentwood, Oakmont, and Brentwood Park. Continue to reject fee sheets, clubhouse reservations, payment forms, minutes, and operational forms.
+- Architectural/rules/policy terminology is still productive but broad/noisy. Latest additions included Woods at Martin's Bend, Belle Meade Terrace, Nestledown Townhomes, Bellevue Commons, Cleveland Hall, Twin Creeks Village, Lake Tansi, plus policy/guideline enrichments for Calla Crossing, McKay's Mill, Rarity Ridge, and Barefoot Bay. Keep rejecting non-HOA historic guidelines, laws/statutes, annual meeting packets, newsletters, auction/property packets, and operational forms.
 - Focused `f15f4572/files/uploaded` IRP queries are still productive but duplicate-heavy after the broader IRP/SREG passes. Latest additions included Nashboro Woods, Brentwood Trace I, River Plantation Section VI, Greens at Legacy Townhomes, Oak Meadows, and extra governing documents for Thomas Downs, Breckenridge, Tywater, Millgate, Chapmans Retreat, Donelson Downs, Hawks Landing, Sawyer Green II, and Vineyard Grove.
 - Management-company domain probes for Ghertner/Timmons/AMI/Cedar/Sentry/Kuester/CMG/PMI/FCS returned no direct public PDFs; do not expand those domains unless a specific public source page is found first.
 - eNeighbors appears dry for the tested Williamson/Franklin/Brentwood/Spring Hill/Nolensville queries; do not treat it as a proven TN source family yet.
