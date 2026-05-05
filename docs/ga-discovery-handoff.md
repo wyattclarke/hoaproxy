@@ -114,8 +114,38 @@ Bank delta: +97 manifests / +100 PDFs / +5 county prefixes.
 Final coverage: 631 manifests, 759 PDFs, 84 county prefixes.
 OpenRouter spend in this pass: ~$0.13 (running total ~$11.03 of $20 cap).
 
+## Owned-Domain Depth + Find-Owned (run 1, 2026-05-05)
+
+Two depth passes ran after the host-family per-county sweep:
+
+1. `scripts/ga_owned_domain_depth.py` walked every GA manifest with a website already set + fewer than --target-pdfs PDFs and tried to crawl the documents page. Result: 510/631 manifests had no usable website (most leads came from CDN URLs), 22 already had ≥4 PDFs, 99 were probed, only +1 PDF banked. Low ROI as expected; left in the repo for future state-runs that bank more website-attached leads.
+
+2. `scripts/ga_find_owned_website.py` — much higher yield. For every banked GA HOA with fewer than --max-pdfs-already PDFs and a usable name, runs one Serper search ("<name> <county> Georgia HOA documents") and picks the first organic hit whose host (a) isn't a CDN/portal/legal/social and (b) contains the HOA's distinctive name in its host or path. Then probes the homepage so the existing probe pipeline crawls and banks any governing PDFs. Result: 472 manifests processed, 184 probed, **436 PDFs newly banked** (mean ~2.4 PDFs/probe), 287 had no convincing owned domain. Spend was Serper-only (no model) and added the bulk of GA's new depth. This is the most productive single pass we ran for depth.
+
+## Deep Legal-Phrase Pass #1 + #2
+
+`benchmark/ga_deep_legal_queries.txt` (and `_2`) ran statewide
+filetype:pdf queries with various recorded-document phrasings
+(non-profit corporation, Articles of Incorporation, Restated Bylaws,
+Amendment to Declaration, Master Deed, community-suffix variants like
+Ridge/Springs/Pointe). Probed without OpenRouter validation through
+`benchmark/clean_direct_pdf_leads.py`. Pass #1: 200 candidates -> 96
+cleaned -> 95 banked PDFs / +76 manifests (many with malformed slugs
+that the backfill then re-routed). Pass #2: 238 candidates -> clean+probe
+in flight at handoff time.
+
+## Backfill Round 2
+
+A second `scripts/ga_county_backfill.py` pass over the
+`_unknown-county/` manifests that grew during the depth +
+deep-legal-1 work: 37 moved to the right county, 11 collisions
+(would have overwritten an existing manifest at the destination),
+276 still unrouted. Bank now at 86 county prefixes.
+
 ## Useful Next Branches
 
-- Owned-domain whitelist preflight: walk every banked manifest with `website` set and only one PDF; preflight the documents page and bank only governing-doc URLs (declaration/bylaws/articles/amendment/rules/architectural). This is where NC's 4.05 PDFs/HOA average came from.
-- Second-pass backfill that also reads the PDF text and uses the model only when heuristics fail (cheap, finite scope).
-- Re-route the 248 still-unknown manifests that have a real HOA name + state (e.g. via Serper "<HOA name> <state> county" lookup).
+- Walk the 11 backfill-2 collision cases by hand: they're the same HOA banked under two slightly different names (one with a clean slug, one with a malformed legal-phrase slug). Merge the two manifests rather than picking one.
+- Run `find_owned_website` again with `--max-pdfs-already 4` to enrich HOAs that we previously enriched once but might still grow.
+- Run `find_owned_website` against the still-unknown county manifests using the HOA name only (no county hint) — sometimes the search nudges Google in a useful direction even without a county.
+- Owned-domain whitelist preflight: walk every banked manifest with `website` set and only one PDF; preflight the documents page and bank only governing-doc URLs. We tried this and it was low-ROI on the current bank because most websites we already crawled, but a second pass after find-owned added new websites might be worthwhile.
+- Second-pass backfill that also reads the PDF text and uses the model only when heuristics fail (cheap, finite scope) — for the remaining ~276 unrouted GA manifests.
