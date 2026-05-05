@@ -104,6 +104,12 @@ Updated: 2026-05-05
   - Exact GCS source-URL prefilter removed 4 already-banked URLs and found 0 signed URLs, leaving 19 new public document endpoints.
   - Deterministic PDF/text cleaning accepted 2; compact OpenRouter repair kept both with `deepseek/deepseek-v4-flash`.
   - Banked 2 PDFs with 0 skips. Count after pass: 151 manifests, 170 PDFs.
+- 2026-05-05: Civic/static CDN branch used `benchmark/tn_civic_static_queries_2.txt`.
+  - Raw search output: `benchmark/results/tn_serper_docpages_tn_serper_docpages_civic_static_2/`
+  - Search calls: 36; raw results: 157; unique URLs: 97; raw leads: 19.
+  - Exact GCS source-URL prefilter removed 1 already-banked URL and found 0 signed URLs, leaving 18 new public direct PDFs.
+  - Deterministic PDF/text cleaning accepted 0; most rejects were category rejects for municipal regulations, newsletters, grants, and planning materials.
+  - No PDFs banked. Count after pass remained 151 manifests, 170 PDFs.
 
 ## Productive Source Families
 
@@ -125,6 +131,7 @@ Updated: 2026-05-05
 - Builder/realtor host expansion is mostly exhausted after prior passes. Latest addition was Calla Crossing; Lee Godfrey and Smithbilt searches now mostly duplicate or reject.
 - HOA Express-style `/file/document` and `/file/document-page` expansion remains worth targeted use. Latest additions were River Sound, Abbottsford, and Montgomery Cove.
 - HOA Express governing-term extension added River Plantation Section 1 and Villas at Lyons Crossing, but marginal yield dropped to 2 banked PDFs.
+- Civic/static CDN searches should not be expanded broadly. They mostly produce municipal packets, subdivision regulations, neighborhood newsletters, and grant material; the only prior bankable civic CDN-style hit was already deduped.
 
 ## False Positives / Reject Patterns
 
@@ -135,3 +142,4 @@ Updated: 2026-05-05
 - Out-of-state hits triggered by city names like Franklin or Brentwood.
 - Signed or credentialed URLs from otherwise public-looking search results, especially AWS query strings containing `AWSAccessKeyId`, `Signature`, or `X-Amz-Signature`. Exclude these before model repair and banking.
 - Tellico Village `tgYYYYMMDD.pdf` Tell-E-Gram PDFs are newsletters and should be rejected even if they contain covenant/legal snippets.
+- `cdnsm5-hosted.civiclive.com/UserFiles` is mostly government/newsletter/grant material for TN; avoid except for exact known HOA bylaws URLs.
