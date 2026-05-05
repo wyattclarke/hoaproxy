@@ -453,7 +453,20 @@ def clean(args: argparse.Namespace) -> int:
             detected_state, detected_county = detect_state_county(text[:25000])
             if detected_state:
                 final_state = detected_state
-                final_county = detected_county or row.get("county")
+                # If we detected a county, use it. Otherwise: when the
+                # detected state matches the sweep target, fall back to
+                # the sweep's --default-county (it was a hint about
+                # which county we expected). When the detected state is
+                # *different* from the target, drop the sweep's county
+                # — it's a GA county and doesn't apply to the new state.
+                # Leave county null so a future state-specific backfill
+                # can route within that state.
+                if detected_county:
+                    final_county = detected_county
+                elif final_state == target_state:
+                    final_county = row.get("county")
+                else:
+                    final_county = None
             else:
                 # No PDF state evidence at all. Skip — banking under the
                 # sweep's target state with zero corroboration would be
