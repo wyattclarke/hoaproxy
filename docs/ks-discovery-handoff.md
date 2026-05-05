@@ -109,6 +109,7 @@ Highest-yield source families:
 - A small county-prefix normalization removed duplicate `pottawatomie-county/wildcat-woods` after confirming the same PDF exists under `pottawatomie/wildcat-woods`. Count after cleanup: 590 manifests and 1,418 PDFs.
 - A focused HA-KC direct pass mostly rediscovered known docs but repaired Prairie Village Homes Association: the Johnson manifest had been empty while two unknown slugs had the bylaws PDFs. Rebanked under Johnson and removed the two unknown copies. Count after cleanup: 588 manifests and 1,417 PDFs. HA-KC still needs manual review because it also returns Missouri communities like Chateau Place.
 - An empty-manifest cleanup removed 140 KS stubs whose `documents` arrays were empty. These came from probes that found no public PDFs and should not count as scraped communities. Count after cleanup: 448 manifests with documents and 1,417 PDFs. Use this cleaned count going forward.
+- A broad legal-phrase direct-PDF pass found 188 candidates and 39 local-cleaner accepts, but they were nearly all existing documents, forms, newsletters, generic legal papers, or out-of-state hits. One remaining unknown Bradford Place record was confirmed as Clay County, Missouri and removed. Count after cleanup: 447 manifests and 1,416 PDFs. Broad legal phrases are now mostly useful for cleanup, not net-new KS discovery.
 
 Lower-yield or avoid:
 
