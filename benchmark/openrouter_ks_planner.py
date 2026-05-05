@@ -169,6 +169,7 @@ def validate_batch(
         "rules": [
             f"Keep only plausible HOA, homes association, homeowners association, condo/townhome association, or property owners association leads in {state}.",
             scope_rule,
+            "REJECT voluntary neighborhood/civic associations and garden clubs that do not have recorded deed restrictions. Only mandatory associations created by recorded covenants (Declaration of Covenants, CC&Rs, Restrictive Covenants, Master Deed, Articles of Incorporation of an HOA) qualify. If the only signal is 'architectural guidelines' or 'design guidelines' with no mandatory-HOA evidence, reject.",
             "Reject generic legal-info pages, social posts, management-company marketing pages without a specific community, government pages, and malformed names.",
             "Reject nonprofit tax filings, ProPublica/IRS pages, real estate listings, law firm pages, newspaper articles, court/case-law pages, and generic HOA explainer pages.",
             "If the name is malformed but the URL/title clearly identifies a community, repair it.",
