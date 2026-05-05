@@ -7,7 +7,7 @@ User instruction: continue autonomously for KS. Do not stop at checkpoints. Comm
 ## Current State
 
 - Bank prefix: `gs://hoaproxy-bank/v1/KS/`
-- Current count: 772 manifests, 1,727 PDFs
+- Current count: 772 manifests, 1,728 PDFs
 - OpenRouter credits: about `$10.73 / $20` used, about `$9.27` remaining
 - Active KS work: continuing deterministic source-family scraping; no Gemini.
 - An unrelated NC benchmark process may be running; leave it alone.
@@ -90,6 +90,7 @@ Highest-yield source families:
 - A late Wichita/Sedgwick direct-PDF pass over the tail of the generated Wichita query list raised KS to 768 manifests and 1,723 PDFs. It added/enriched Tylers Landing and West Ridge Estates. The query family is now low-volume, but county-focused direct PDF passes still beat broad statewide search for non-Johnson coverage.
 - A Riley/Pottawatomie/Geary county pass raised KS to 771 manifests and 1,726 PDFs. It added Wildcat Woods, Lake Elbo Club, and The Reserve Community Association. This pass also showed the usual county-name ambiguity problem: many `Douglas`, `Riley`, or `Pottawatomie` queries retrieve out-of-state county material unless the query includes Kansas cities, Kansas state terms, and direct HOA phrases.
 - A Butler/Sedgwick county pass raised KS to 772 manifests and 1,727 PDFs by adding Timber Creek Estates. It was otherwise low-yield: one accepted-looking result was New Mexico `Eldorado` noise and another was commercial park covenants, so keep manual inspection in the loop for county passes.
+- A zero-document-stub exact-name pass used existing KS stubs as targeted queries and raised KS to 772 manifests and 1,728 PDFs by filling Brooke Meadows. The method is useful for enrichment but low-yield: 100 exact queries over 25 zero-doc names produced one clean PDF.
 
 Lower-yield or avoid:
 
