@@ -9,6 +9,7 @@ from api import main as api_main  # noqa: E402
 from api.main import app  # noqa: E402
 from hoaware import db, prepared_ingest  # noqa: E402
 from hoaware.config import load_settings  # noqa: E402
+from hoaware.doc_classifier import classify_from_text  # noqa: E402
 
 client = TestClient(app)
 
@@ -230,3 +231,79 @@ def test_admin_ingest_ready_gcs_fails_missing_sidecar_without_ingest(monkeypatch
 
     status = json.loads(bucket.blob(f"{prefix}/status.json").download_as_bytes())
     assert status["status"] == "failed"
+
+
+def test_nominatim_geometry_selection_prefers_neighborhood_polygon():
+    from scripts import prepare_bank_for_ingest as prep
+
+    selected = prep._select_nominatim_geometry([
+        {
+            "class": "boundary",
+            "type": "administrative",
+            "display_name": "Johnson County, Kansas",
+            "geojson": {"type": "Polygon", "coordinates": []},
+            "lat": "38.9",
+            "lon": "-94.8",
+        },
+        {
+            "class": "place",
+            "type": "neighbourhood",
+            "display_name": "Example Estates, Overland Park, Kansas",
+            "geojson": {"type": "Polygon", "coordinates": [[[]]]},
+            "lat": "38.91",
+            "lon": "-94.72",
+            "osm_id": 123,
+        },
+    ])
+    assert selected is not None
+    assert selected["location_quality"] == "polygon"
+    assert selected["osm_id"] == 123
+
+
+def test_geo_query_candidates_include_city_and_county():
+    from scripts import prepare_bank_for_ingest as prep
+
+    queries = prep._geo_query_candidates(
+        hoa_name="Example Estates Homeowners Association",
+        address={"city": "Overland Park", "county": "Johnson"},
+        state="KS",
+        county_slug="johnson",
+    )
+    assert "Example Estates Homeowners Association, Overland Park, KS" in queries
+    assert "Example Estates, Johnson County, KS" in queries
+
+
+def test_prepared_location_fields_honor_quality_hint():
+    sha = "b" * 64
+    payload = _bundle_payload(sha)
+    payload["geometry"] = {
+        "latitude": 38.91,
+        "longitude": -94.72,
+        "location_quality": "zip_centroid",
+    }
+    bundle = prepared_ingest.validate_bundle(payload, expected_state="KS")
+    fields = api_main._prepared_bundle_location_fields(bundle)
+    assert fields["latitude"] == 38.91
+    assert fields["longitude"] == -94.72
+    assert fields["location_quality"] == "zip_centroid"
+
+
+def test_classifier_recognizes_declaration_of_restrictions():
+    result = classify_from_text(
+        "DECLARATION OF RESTRICTIONS\n"
+        "This declaration establishes covenants and restrictions for the subdivision."
+    )
+    assert result is not None
+    assert result["category"] == "ccr"
+
+
+def test_first_page_review_uses_existing_text_before_docai():
+    from scripts import prepare_bank_for_ingest as prep
+
+    pdf_bytes = _make_text_pdf("DECLARATION OF RESTRICTIONS for Example Estates")
+    text, docai_pages = prep._extract_first_page_review_text(
+        pdf_bytes=pdf_bytes,
+        text_extractable=True,
+    )
+    assert "DECLARATION OF RESTRICTIONS" in text
+    assert docai_pages == 0

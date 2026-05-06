@@ -92,7 +92,7 @@ REJECT categories (PII risk — contain personal information):
 
 # Filename-based pre-filter for scanned PDFs (avoids Haiku calls)
 _VALID_FILENAME = re.compile(
-    r'covenant|cc.?r|bylaw|article|incorporat|declaration|'
+    r'covenant|restriction|cc.?r|bylaw|article|incorporat|declaration|'
     r'rule|regulation|guideline|architectural|design.?standard|'
     r'amendment|supplement|amend|restat|'
     r'resolution|policy|'
@@ -112,7 +112,7 @@ _REJECT_FILENAME = re.compile(
 
 # Map filename keywords to specific categories
 _FILENAME_CATEGORY_MAP = [
-    (re.compile(r'cc.?r|covenant|declaration', re.I), "ccr"),
+    (re.compile(r'cc.?r|covenant|restriction|declaration', re.I), "ccr"),
     (re.compile(r'bylaw', re.I), "bylaws"),
     (re.compile(r'article|incorporat', re.I), "articles"),
     (re.compile(r'rule|regulation|guideline|architectural|design.?standard', re.I), "rules"),
@@ -402,7 +402,16 @@ def classify_from_text(text: str, hoa_name: str = "") -> dict:
         return {"category": "government", "confidence": 0.85, "method": "regex"}
 
     # Valid patterns
-    if re.search(r'declaration\s+of\s+(?:protective\s+)?covenants|covenants,?\s+conditions,?\s+and\s+restrictions|cc\s*&\s*r', t):
+    if re.search(
+        r'declaration\s+of\s+(?:protective\s+)?(?:covenants?|restrictions?)|'
+        r'declaration\s+of\s+covenants?,?\s+conditions,?\s+and\s+restrictions|'
+        r'covenants,?\s+conditions,?\s+and\s+restrictions|'
+        r'conditions,?\s+covenants,?\s+and\s+restrictions|'
+        r'protective\s+covenants|'
+        r'restrictive\s+covenants|'
+        r'cc\s*&\s*r',
+        t,
+    ):
         return {"category": "ccr", "confidence": 0.95, "method": "regex"}
 
     if re.search(r'by-?laws?\s+of|article\s+[ivx\d]+.*(?:members|board|officers|meetings)', t):

@@ -3159,6 +3159,9 @@ def _prepared_bundle_location_fields(bundle: prepared_ingest.PreparedBundle) -> 
     metadata_type = (bundle.metadata_type or "").strip().lower() or None
     if metadata_type not in {"hoa", "condo", "coop", "timeshare"}:
         metadata_type = None
+    quality_hint = geometry.get("location_quality")
+    if quality_hint not in {"polygon", "address", "zip_centroid", "city_only", "unknown"}:
+        quality_hint = None
 
     return {
         "metadata_type": metadata_type,
@@ -3171,7 +3174,7 @@ def _prepared_bundle_location_fields(bundle: prepared_ingest.PreparedBundle) -> 
         "latitude": latitude,
         "longitude": longitude,
         "boundary_geojson": boundary_geojson,
-        "location_quality": (
+        "location_quality": quality_hint or (
             _derive_location_quality(
                 has_boundary=bool(boundary_geojson),
                 street=address.get("street"),

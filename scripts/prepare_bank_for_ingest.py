@@ -14,6 +14,7 @@ import json
 import os
 import sys
 import tempfile
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -29,7 +30,7 @@ from hoaware.bank import DEFAULT_BUCKET as DEFAULT_BANK_BUCKET
 from hoaware.bank import _inspect_pdf, slugify
 from hoaware.config import load_settings
 from hoaware.cost_tracker import COST_DOCAI_PER_PAGE
-from hoaware.doc_classifier import REJECT_JUNK, REJECT_PII
+from hoaware.doc_classifier import REJECT_JUNK, REJECT_PII, classify_from_text
 from hoaware.pdf_utils import MAX_PAGES_FOR_OCR, extract_pages
 from hoaware.prepared_ingest import (
     DEFAULT_PREPARED_BUCKET,
@@ -46,6 +47,17 @@ from hoaware.prepared_ingest import (
 )
 
 LOW_VALUE_CATEGORIES = {"minutes", "financial", "insurance"}
+NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
+OSM_POLYGON_TYPES = {
+    "neighbourhood",
+    "residential",
+    "subdivision",
+    "suburb",
+    "quarter",
+    "village",
+    "hamlet",
+    "locality",
+}
 
 
 def _json_dump(payload: dict[str, Any]) -> str:
@@ -73,12 +85,192 @@ def _load_json_blob(bucket, blob_name: str) -> dict[str, Any]:
     return json.loads(bucket.blob(blob_name).download_as_bytes())
 
 
+def _load_json_file(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _write_json_file(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+
+
 def _document_category(doc: dict[str, Any], precheck: dict[str, Any]) -> str | None:
     for key in ("category_hint", "suggested_category"):
         value = doc.get(key) or precheck.get(key)
         if isinstance(value, str) and value.strip():
             return value.strip().lower()
     return None
+
+
+def _compact_hoa_name(name: str) -> str:
+    tokens = [
+        "homeowners association",
+        "homeowners",
+        "home owners association",
+        "homes association",
+        "property owners association",
+        "owners association",
+        "community association",
+        "condominium association",
+        "association",
+        "hoa",
+        "inc.",
+        "inc",
+    ]
+    cleaned = " ".join(str(name or "").replace("&", " and ").split())
+    lowered = cleaned.lower()
+    for token in tokens:
+        lowered = lowered.replace(token, " ")
+    return " ".join(lowered.split()).title()
+
+
+def _geo_query_candidates(
+    *,
+    hoa_name: str,
+    address: dict[str, Any],
+    state: str,
+    county_slug: str,
+) -> list[str]:
+    city = str(address.get("city") or "").strip()
+    county = str(address.get("county") or county_slug.replace("-", " ")).strip()
+    full = " ".join(str(hoa_name or "").split())
+    compact = _compact_hoa_name(full)
+    bases = [full]
+    if compact and compact.casefold() != full.casefold():
+        bases.append(compact)
+
+    queries: list[str] = []
+    for base in bases:
+        if city:
+            queries.append(f"{base}, {city}, {state}")
+        if county:
+            queries.append(f"{base}, {county} County, {state}")
+        queries.append(f"{base}, {state}")
+
+    out: list[str] = []
+    seen: set[str] = set()
+    for query in queries:
+        key = query.casefold()
+        if key not in seen:
+            seen.add(key)
+            out.append(query)
+    return out[:6]
+
+
+def _nominatim_result_score(result: dict[str, Any]) -> int:
+    score = 0
+    geojson = result.get("geojson")
+    geo_type = geojson.get("type") if isinstance(geojson, dict) else None
+    if geo_type in {"Polygon", "MultiPolygon"}:
+        score += 100
+    elif geo_type:
+        score += 20
+    result_type = str(result.get("type") or "").lower()
+    result_class = str(result.get("class") or "").lower()
+    if result_type in OSM_POLYGON_TYPES:
+        score += 35
+    if result_class == "place":
+        score += 20
+    if result_class == "boundary" and result_type == "administrative":
+        score -= 50
+    try:
+        score += min(15, int(float(result.get("importance") or 0) * 20))
+    except Exception:
+        pass
+    return score
+
+
+def _select_nominatim_geometry(results: list[dict[str, Any]]) -> dict[str, Any] | None:
+    ranked = sorted(results, key=_nominatim_result_score, reverse=True)
+    for result in ranked:
+        geojson = result.get("geojson")
+        if not isinstance(geojson, dict) or geojson.get("type") not in {"Polygon", "MultiPolygon"}:
+            continue
+        result_type = str(result.get("type") or "").lower()
+        result_class = str(result.get("class") or "").lower()
+        if result_class == "boundary" and result_type == "administrative":
+            continue
+        if result_type not in OSM_POLYGON_TYPES and result_class != "place":
+            continue
+        lat = result.get("lat")
+        lon = result.get("lon")
+        return {
+            "boundary_geojson": geojson,
+            "latitude": float(lat) if lat is not None else None,
+            "longitude": float(lon) if lon is not None else None,
+            "location_quality": "polygon",
+            "geography_source": "nominatim",
+            "geography_confidence": "medium",
+            "geography_display_name": result.get("display_name"),
+            "osm_id": result.get("osm_id"),
+            "osm_type": result.get("osm_type"),
+            "osm_class": result.get("class"),
+            "osm_place_type": result.get("type"),
+        }
+    return None
+
+
+def _enrich_geometry_from_nominatim(
+    *,
+    hoa_name: str,
+    address: dict[str, Any],
+    geometry: dict[str, Any],
+    state: str,
+    county_slug: str,
+    cache: dict[str, Any],
+    user_agent: str,
+    delay_s: float,
+) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    if geometry.get("boundary_geojson") or (
+        geometry.get("latitude") is not None and geometry.get("longitude") is not None
+    ):
+        return geometry, None
+
+    import requests
+
+    for query in _geo_query_candidates(
+        hoa_name=hoa_name,
+        address=address,
+        state=state,
+        county_slug=county_slug,
+    ):
+        cache_key = f"nominatim:v1:{query}"
+        if cache_key in cache:
+            results = cache[cache_key]
+        else:
+            time.sleep(max(0.0, delay_s))
+            resp = requests.get(
+                NOMINATIM_URL,
+                params={
+                    "q": query,
+                    "format": "jsonv2",
+                    "polygon_geojson": 1,
+                    "addressdetails": 1,
+                    "limit": 5,
+                    "countrycodes": "us",
+                },
+                headers={"User-Agent": user_agent},
+                timeout=30,
+            )
+            resp.raise_for_status()
+            results = resp.json()
+            cache[cache_key] = results
+        if not isinstance(results, list):
+            continue
+        enriched = _select_nominatim_geometry(results)
+        if enriched:
+            return {**geometry, **enriched, "geography_query": query}, {
+                "query": query,
+                "display_name": enriched.get("geography_display_name"),
+                "osm_id": enriched.get("osm_id"),
+                "source": "nominatim",
+            }
+    return geometry, None
 
 
 def _live_checksums() -> set[str]:
@@ -133,6 +325,70 @@ def _reject_reason(
     if isinstance(page_count, int) and page_count > MAX_PAGES_FOR_OCR:
         return f"page_cap:{page_count}"
     return None
+
+
+def _page_cap_reason(precheck: dict[str, Any]) -> str | None:
+    page_count = precheck.get("page_count")
+    if isinstance(page_count, int) and page_count > MAX_PAGES_FOR_OCR:
+        return f"page_cap:{page_count}"
+    return None
+
+
+def _projected_docai_pages(precheck: dict[str, Any]) -> int:
+    value = precheck.get("est_docai_pages")
+    if isinstance(value, int):
+        return max(0, value)
+    try:
+        return max(0, int(value or 0))
+    except Exception:
+        pass
+    if precheck.get("text_extractable") is False:
+        try:
+            return max(0, int(precheck.get("page_count") or 0))
+        except Exception:
+            return 0
+    return 0
+
+
+def _extract_first_page_review_text(
+    *,
+    pdf_bytes: bytes,
+    text_extractable: bool | None,
+) -> tuple[str, int]:
+    """Return first-page text for relevance review, OCRing only page 1 if needed."""
+    settings = load_settings()
+    with tempfile.NamedTemporaryFile(suffix=".pdf") as tmp:
+        tmp.write(pdf_bytes)
+        tmp.flush()
+        path = Path(tmp.name)
+
+        if text_extractable is not False:
+            try:
+                from pypdf import PdfReader
+
+                reader = PdfReader(str(path))
+                if reader.pages:
+                    text = reader.pages[0].extract_text() or ""
+                    if text.strip():
+                        return text, 0
+            except Exception:
+                pass
+
+        if not (settings.enable_docai and settings.docai_project_id and settings.docai_processor_id):
+            return "", 0
+
+        from hoaware.docai import extract_with_document_ai
+
+        pages = extract_with_document_ai(
+            path,
+            project_id=settings.docai_project_id,
+            location=settings.docai_location,
+            processor_id=settings.docai_processor_id,
+            endpoint=settings.docai_endpoint,
+            max_pages_per_call=1,
+            page_numbers=[1],
+        )
+    return "\n".join(page.text for page in pages if page.text.strip()), len(pages)
 
 
 def _extract_sidecar(
@@ -214,6 +470,9 @@ def prepare(args: argparse.Namespace) -> int:
     prepared_bucket = client.bucket(args.prepared_bucket)
     live_shas = _live_checksums() if not args.skip_live_duplicate_check else set()
     already_prepared = _prepared_shas(prepared_bucket, state)
+    geo_cache: dict[str, Any] = {}
+    if not args.skip_geo_enrichment:
+        geo_cache = _load_json_file(args.geo_cache)
 
     manifest_prefix = f"{VERSION_PREFIX}/{state}/"
     if args.county:
@@ -253,6 +512,26 @@ def prepare(args: argparse.Namespace) -> int:
                 "reason": f"state_mismatch:{address_state}",
             })
             continue
+        geo_match = None
+        if not args.skip_geo_enrichment:
+            try:
+                geometry, geo_match = _enrich_geometry_from_nominatim(
+                    hoa_name=hoa_name,
+                    address=address,
+                    geometry=geometry,
+                    state=state,
+                    county_slug=county_slug,
+                    cache=geo_cache,
+                    user_agent=args.nominatim_user_agent,
+                    delay_s=args.nominatim_delay_s,
+                )
+                _write_json_file(args.geo_cache, geo_cache)
+            except Exception as exc:
+                _append_ledger(args.ledger, {
+                    "manifest_uri": manifest_uri,
+                    "decision": "geo_enrichment_error",
+                    "error": f"{type(exc).__name__}: {exc}",
+                })
 
         prepared_docs: list[dict[str, Any]] = []
         rejected_docs: list[dict[str, Any]] = []
@@ -289,6 +568,11 @@ def prepare(args: argparse.Namespace) -> int:
                     precheck = _inspect_pdf(pdf_bytes, filename, hoa_name)
 
                 category = _document_category(doc, precheck)
+                text_extractable = precheck.get("text_extractable")
+                sidecar: dict[str, Any] | None = None
+                docai_pages: int | None = None
+                unknown_ocr_reviewed = False
+                review_docai_pages = 0
                 reason = _reject_reason(
                     category=category,
                     precheck=precheck,
@@ -297,6 +581,33 @@ def prepare(args: argparse.Namespace) -> int:
                     prepared_shas=already_prepared,
                     sha256=sha256,
                 )
+                if reason == "unsupported_category:unknown" and not args.skip_unknown_ocr_review:
+                    unknown_ocr_reviewed = True
+                    cap_reason = _page_cap_reason(precheck)
+                    if cap_reason:
+                        reason = cap_reason
+                    elif total_projected_docai_cost + COST_DOCAI_PER_PAGE > args.max_docai_cost_usd:
+                        reason = "docai_budget"
+                    else:
+                        review_text, review_docai_pages = _extract_first_page_review_text(
+                            pdf_bytes=pdf_bytes,
+                            text_extractable=text_extractable,
+                        )
+                        total_projected_docai_cost += review_docai_pages * COST_DOCAI_PER_PAGE
+                        clf = classify_from_text(review_text, hoa_name) if review_text.strip() else None
+                        if clf:
+                            category = str(clf["category"]).strip().lower()
+                            precheck["suggested_category"] = category
+                            precheck["classification_method"] = f"first_page_review:{clf.get('method') or 'unknown'}"
+                            precheck["classification_confidence"] = clf.get("confidence")
+                        reason = _reject_reason(
+                            category=category,
+                            precheck=precheck,
+                            include_low_value=args.include_low_value,
+                            live_shas=live_shas,
+                            prepared_shas=already_prepared,
+                            sha256=sha256,
+                        )
                 if reason:
                     rejected_docs.append({"sha256": sha256, "source_url": source_url, "reason": reason})
                     _append_ledger(args.ledger, {
@@ -305,31 +616,34 @@ def prepare(args: argparse.Namespace) -> int:
                         "category": category,
                         "decision": "rejected",
                         "reason": reason,
+                        "unknown_ocr_reviewed": unknown_ocr_reviewed,
+                        "docai_pages": docai_pages or 0,
+                        "review_docai_pages": review_docai_pages,
                     })
                     continue
 
-                text_extractable = precheck.get("text_extractable")
-                projected_docai_pages = int(precheck.get("est_docai_pages") or 0)
-                projected_cost = projected_docai_pages * COST_DOCAI_PER_PAGE
-                if total_projected_docai_cost + projected_cost > args.max_docai_cost_usd:
-                    reason = "docai_budget"
-                    rejected_docs.append({"sha256": sha256, "source_url": source_url, "reason": reason})
-                    _append_ledger(args.ledger, {
-                        "manifest_uri": manifest_uri,
-                        "sha256": sha256,
-                        "category": category,
-                        "decision": "rejected",
-                        "reason": reason,
-                        "projected_docai_cost_usd": projected_cost,
-                    })
-                    continue
+                if sidecar is None or docai_pages is None:
+                    projected_docai_pages = _projected_docai_pages(precheck)
+                    projected_cost = projected_docai_pages * COST_DOCAI_PER_PAGE
+                    if total_projected_docai_cost + projected_cost > args.max_docai_cost_usd:
+                        reason = "docai_budget"
+                        rejected_docs.append({"sha256": sha256, "source_url": source_url, "reason": reason})
+                        _append_ledger(args.ledger, {
+                            "manifest_uri": manifest_uri,
+                            "sha256": sha256,
+                            "category": category,
+                            "decision": "rejected",
+                            "reason": reason,
+                            "projected_docai_cost_usd": projected_cost,
+                        })
+                        continue
 
-                sidecar, docai_pages = _extract_sidecar(
-                    pdf_bytes=pdf_bytes,
-                    sha256=sha256,
-                    text_extractable=text_extractable,
-                )
-                total_projected_docai_cost += docai_pages * COST_DOCAI_PER_PAGE
+                    sidecar, docai_pages = _extract_sidecar(
+                        pdf_bytes=pdf_bytes,
+                        sha256=sha256,
+                        text_extractable=text_extractable,
+                    )
+                    total_projected_docai_cost += docai_pages * COST_DOCAI_PER_PAGE
                 pdfs_by_sha[sha256] = pdf_bytes
                 sidecars_by_sha[sha256] = sidecar
                 already_prepared.add(sha256)
@@ -343,7 +657,9 @@ def prepare(args: argparse.Namespace) -> int:
                     "text_extractable": text_extractable,
                     "page_count": precheck.get("page_count") or len(sidecar["pages"]),
                     "docai_pages": docai_pages,
-                    "filter_reason": "valid_governing_doc",
+                    "filter_reason": "ocr_review_valid_governing_doc"
+                    if unknown_ocr_reviewed
+                    else "valid_governing_doc",
                 })
                 _append_ledger(args.ledger, {
                     "manifest_uri": manifest_uri,
@@ -354,6 +670,9 @@ def prepare(args: argparse.Namespace) -> int:
                     "page_count": precheck.get("page_count") or len(sidecar["pages"]),
                     "docai_pages": docai_pages,
                     "prepared_bucket": args.prepared_bucket,
+                    "geo_enriched": bool(geo_match),
+                    "unknown_ocr_reviewed": unknown_ocr_reviewed,
+                    "review_docai_pages": review_docai_pages,
                 })
             except Exception as exc:
                 rejected_docs.append({"sha256": sha256, "source_url": source_url, "reason": f"error:{type(exc).__name__}"})
@@ -392,6 +711,7 @@ def prepare(args: argparse.Namespace) -> int:
             "website_url": website.get("url"),
             "address": address,
             "geometry": geometry,
+            "geography_match": geo_match,
             "documents": prepared_docs,
             "rejected_documents": rejected_docs,
             "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
@@ -426,7 +746,34 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true", help="Validate and print bundles without writing GCS")
     parser.add_argument("--overwrite", action="store_true", help="Overwrite an existing prepared bundle")
     parser.add_argument("--include-low-value", action="store_true", help="Include minutes/financial/insurance docs")
+    parser.add_argument(
+        "--skip-unknown-ocr-review",
+        action="store_true",
+        help="Reject unknown-category PDFs without first-page OCR/text review",
+    )
     parser.add_argument("--skip-live-duplicate-check", action="store_true")
+    parser.add_argument(
+        "--skip-geo-enrichment",
+        action="store_true",
+        help="Do not query Nominatim/OSM for missing HOA boundary polygons before writing bundles",
+    )
+    parser.add_argument(
+        "--geo-cache",
+        type=Path,
+        default=Path("data/prepared_ingest_geo_cache.json"),
+        help="Local cache for Nominatim/OSM lookup responses",
+    )
+    parser.add_argument(
+        "--nominatim-delay-s",
+        type=float,
+        default=1.1,
+        help="Delay between uncached Nominatim requests",
+    )
+    parser.add_argument(
+        "--nominatim-user-agent",
+        default=os.environ.get("HOAPROXY_NOMINATIM_USER_AGENT", "HOAproxy prepared-ingest/1.0 (admin@hoaproxy.org)"),
+        help="User-Agent sent to Nominatim",
+    )
     parser.add_argument("--max-docai-cost-usd", type=float, default=10.0)
     parser.add_argument("--bank-bucket", default=os.environ.get("HOA_BANK_GCS_BUCKET", DEFAULT_BANK_BUCKET))
     parser.add_argument("--prepared-bucket", default=os.environ.get("HOA_PREPARED_GCS_BUCKET", DEFAULT_PREPARED_BUCKET))
@@ -441,6 +788,8 @@ def main() -> int:
         parser.error("--limit must be positive")
     if args.max_docai_cost_usd < 0:
         parser.error("--max-docai-cost-usd must be non-negative")
+    if args.nominatim_delay_s < 0:
+        parser.error("--nominatim-delay-s must be non-negative")
     return prepare(args)
 
 

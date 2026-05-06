@@ -37,6 +37,8 @@ Use three stages:
    - New GCS prefix, for example `gs://hoaproxy-ingest-ready/v1/{STATE}/{county}/{hoa-slug}/{bundle-id}/`.
    - Produced by a local or GCP worker, not Render.
    - Contains only filtered, approved, OCR-ready records.
+   - Enriches missing geography with cached OSM/Nominatim polygon lookup before
+     bundles are visible to Render.
 
 3. **Render importer**
    - Admin-only endpoint/worker reads prepared bundles from GCS.
@@ -130,7 +132,7 @@ Allowed statuses: `ready`, `claimed`, `imported`, `failed`, `skipped`.
 
 ## Filtering Rules
 
-The prep worker must filter before OCR.
+The prep worker must filter hard rejects before expensive OCR.
 
 Keep only:
 
@@ -152,6 +154,37 @@ Reject before OCR:
 
 Use bank `precheck.json` as a hint, not an authority. If missing or weak, re-run local precheck from the PDF bytes before deciding.
 
+Unknown category is a review state, not a final rejection. For otherwise
+plausible banked PDFs, OCR or extract only page 1, classify that text, and then
+either:
+
+- keep the document and run full-document extraction for the prepared sidecar;
+- reject it with a concrete reason such as `junk:*`, `pii:*`,
+  `unsupported_category:unknown`, `page_cap:*`, or `docai_budget`.
+
+This page-one review is still outside Render and is charged against the prep
+worker's DocAI budget.
+
+## Metadata and Geography Policy
+
+Discovery should bank raw metadata clues, not just PDFs. Required targets are:
+canonical name, aliases, metadata type, website URL, city, county, state,
+public street/ZIP when available, manager/platform hints, and per-field
+provenance.
+
+The prepared worker is responsible for turning those clues into live-site
+metadata before Render import:
+
+- Query cached Nominatim/OSM candidates from HOA name + city/county/state.
+- Accept credible neighborhood/subdivision polygons as `boundary_geojson`.
+- Set `geometry.location_quality="polygon"` for polygon results.
+- Do not promote city-only points to map-quality records.
+- If no polygon exists, use a separate ZIP-centroid cleanup based on document
+  ZIPs and post those with `location_quality="zip_centroid"`.
+
+Render must only import prepared metadata. It should not call Nominatim or run
+geographic cleanup during `/admin/ingest-ready-gcs`.
+
 ## OCR Policy
 
 Run OCR in the prep worker, not on Render.
@@ -159,7 +192,12 @@ Run OCR in the prep worker, not on Render.
 Recommended routing:
 
 - If PyPDF extracts meaningful text from enough pages: use PyPDF pages, `docai_pages=0`, `text_extractable=true`.
-- If first-page and sample text are blank/scanned: run DocAI for the whole document, `docai_pages=page_count`, `text_extractable=false`.
+- If first-page and sample text are blank/scanned but category is unknown:
+  OCR page 1 first for relevance review. Run full-document DocAI only after the
+  page-1 text classifies as germane.
+- If first-page and sample text are blank/scanned and category is already a keep
+  category: run DocAI for the whole document, `docai_pages=page_count`,
+  `text_extractable=false`.
 - If mixed: run PyPDF first and DocAI only blank pages, `text_extractable=null` or recorded as mixed in bundle metadata.
 
 The prep worker should maintain a local ledger with:
@@ -224,6 +262,8 @@ Do not weaken or remove the existing user-facing upload paths:
    - Runs local PyPDF/DocAI extraction.
    - Writes prepared bundles to GCS.
    - Writes local JSONL audit ledger.
+   - Resolves missing HOA polygons through cached Nominatim/OSM lookup unless
+     explicitly disabled.
 
 3. Add admin importer in `api/main.py`
    - `POST /admin/ingest-ready-gcs`.

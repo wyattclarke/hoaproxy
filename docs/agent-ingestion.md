@@ -12,7 +12,19 @@ If you're a fresh session figuring out how to add a single HOA or handle a publi
 
 **One-off model:** agent is intelligent (it already classifies "this is meeting minutes, not a CC&R" the way a human would). Server is a routing layer that trusts the agent's verdicts and runs cheap defense-in-depth checks. One HOA per request.
 
-**Bulk bank-drain model:** discovery agents preserve raw findings in GCS first. A prep worker filters and OCRs outside Render, writes prepared bundles with text sidecars, and the admin importer ingests only those prepared bundles. Missing sidecars fail; Render does not fall back to Document AI for this bulk path.
+**Bulk bank-drain model:** discovery agents preserve raw findings in GCS first.
+A prep worker filters and OCRs outside Render, writes prepared bundles with text
+sidecars, and the admin importer ingests only those prepared bundles. Missing
+sidecars fail; Render does not fall back to Document AI for this bulk path. In
+the curated bank, `unknown` is treated as "review needed": the prep worker
+extracts or OCRs page 1 before final rejection, then runs full-document OCR only
+for documents that classify as germane.
+
+For bulk state scrapes, discovery must also bank strong live-site metadata:
+city, county, state, website, management/platform hints, public street/ZIP when
+available, name aliases, and geography clues. The prepared worker runs cached
+OSM/Nominatim polygon lookup before Render import so new live profiles appear
+with the best available mapping. Render should not run geography cleanup.
 
 ## The six-step loop
 

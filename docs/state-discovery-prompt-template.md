@@ -57,6 +57,37 @@ For every sweep, apply these gates before model validation or bank writes:
 6. Use OpenRouter only on surviving compact public metadata: `name`, `source_url`, `title`, `snippet`, `filename`, deterministic category, and state/county hints.
 
 Keep these gates lightweight. Do not build a bespoke review process for every candidate; encode recurring rejects as deterministic filters, then move on.
+When a public PDF is otherwise plausible but category evidence is ambiguous,
+bank it with `suggested_category=null` rather than discarding it. The prepared
+worker will extract or OCR page 1 before making the final keep/reject decision.
+
+### Metadata collection requirements
+
+The live site depends on more than PDFs. Every banked HOA should include as many
+of these fields as public evidence supports:
+
+- Canonical HOA name plus aliases from source pages, PDFs, secretary-of-state records, or management portals.
+- `metadata_type`: HOA, condo, coop, or timeshare when clear.
+- `address.state`, `address.county`, `address.city`, and any public street or ZIP. Do not invent addresses.
+- `website.url`, platform/manager hints, and whether the site is login-walled.
+- Public source provenance for every metadata field.
+- Geography clues: subdivision/neighborhood name, city, county, ZIPs found in governing PDFs, plat/subdivision labels, and any public GIS or map link.
+- Direct governing-document source URLs and filenames.
+
+Do not stop at state-only metadata when city/county/website clues are available.
+The prepared ingest worker can resolve OSM/Nominatim polygons before Render
+import, but only if discovery captured enough locality evidence to query
+accurately.
+
+For future states, geography should be resolved before live import:
+
+1. Scrapers collect raw geography clues and bank them.
+2. `scripts/prepare_bank_for_ingest.py` runs cached Nominatim/OSM polygon lookup
+   for missing `geometry.boundary_geojson`.
+3. If no credible polygon exists, a post-prep ZIP centroid pass can use document
+   ZIPs and `/admin/backfill-locations`.
+4. Render imports only prepared metadata; it should not call Nominatim or run
+   geographic cleanup.
 
 ### Initial strategy
 
