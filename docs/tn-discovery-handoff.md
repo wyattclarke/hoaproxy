@@ -400,6 +400,13 @@ Updated: 2026-05-05
   - Search calls: 20; raw results: 1; unique URLs: 1; raw leads: 1 on the same CloudFront account path.
   - Exact GCS/source prefilter removed the single URL as already banked. No PDFs banked.
   - Treat this as a stop signal for broad Knox/Blount/Loudon/Sevier/Jefferson searches on this CloudFront account path unless a future query has a highly specific new community/source clue.
+- 2026-05-05: PSMT latest-upload follow-up used `benchmark/tn_psmt_latest_followup_queries_6.txt`.
+  - Raw search output: `benchmark/results/tn_serper_docpages_tn_psmt_latest_followup_6/`
+  - Search calls: 40; raw results: 96; unique URLs: 62; raw leads: 41 on `psmtllc.com/wp-content/uploads`.
+  - Exact GCS/source prefilter removed 28 already-banked URLs and found 0 signed URLs, leaving 13 new public direct PDFs.
+  - Deterministic PDF/text cleaning accepted 4. Compact OpenRouter repair used `deepseek/deepseek-v4-flash` first and `moonshotai/kimi-k2.6` only as bounded quality fallback for 4 low-confidence/rejected candidates; Kimi correctly rejected generic/no-name covenant/amendment candidates rather than upgrading them.
+  - Local review kept 6 curated governing PDFs and rejected model-kept non-governing documents: Liberty Heights pool rules, Breezeway late-fee procedure/letter, Arbor Crest quitclaim deed, plus generic/no-name scans and landscaping material.
+  - Banked 6 PDFs with 0 skips and `homepage_fetched=false` for all leads by leaving `website` null. Additions/enrichments included Stonecrest by-laws, Richmond's Retreat supplementary declaration, Liberty Heights general fine policy, Hidden Creek first amendment, Clear Creek second amendment, and Stewart Landing first amendment. Count after pass: 512 manifests, 652 PDFs.
 
 ## Productive Source Families
 
@@ -431,6 +438,7 @@ Updated: 2026-05-05
 - Public document-page phrase extension added Maebry and Horse Creek Farms, but marginal yield dropped to 2 banked PDFs.
 - PSMT remains productive but is now duplicate-heavy after broad page crawling. Its 2025/2026 upload paths still yield recorded CCRs/bylaws/amendments/fine procedures when exact-source dedupe and source-family local review are applied.
 - Broader PSMT upload-month queries still produced bankable docs but with increasing duplicate/non-governing noise. Latest additions were Stonecrest, Eagle View Village, and extra Three Rivers/Stratford Hall docs.
+- Latest PSMT upload queries still have modest yield after exact-source dedupe. A 2025/2026 follow-up added 6 PDFs but 28 of 41 raw leads were already banked, so keep PSMT in targeted mode and reject pool rules, late-fee letters, quitclaim deeds, generic scans, and landscaping/operational material.
 - SREG remains productive but noisier than PSMT/WMCO; many exact-new PDFs are policies, FAQs, payment instructions, PUD explainers, or construction/pool docs. Latest additions included Ashlyn, Byron Close, Glencourt, Simmons Ridge, River Forest, Deer Lake, Harborview at Cheswicke, Sheffield Square, Bixler Farms, Woodcrest, and Plumlee Townhomes, with several policy enrichments for existing manifests.
 - WMCO remains productive for direct PDFs but has many forms/applications/insurance/rental/letter PDFs. Latest additions included Reid Hill Commons, Dallas Downs, Cottages at Innsbrooke, Chestnut Bend, Ivan Creek, Boyd Mill Estates, Fieldstone Farms, Sherwood Green Estates, Foxborough Square West, Chenoweth, Reserve at Spencer Creek, Spencer Hall, Benelli Park, Carriage Park, and Treemont Estates.
 - IRP CDN is productive but broad and noisy; without state-hint gating it finds many out-of-state CDN documents, so keep deterministic state/text filtering mandatory. Latest additions included Park Place Townhomes, Meadows of Spring Hill, Hamilton Church Manor, Walnut Ridge, Cottages at Sycamore Ridge, Poplar Ridge, Donelson Downs, Pennock Place, Four Maples, and Chapmans Retreat.
