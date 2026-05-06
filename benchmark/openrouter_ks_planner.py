@@ -166,14 +166,36 @@ def _clean_county(value: Any) -> str | None:
     return county
 
 
-def validate_batch(
-    orc: OpenAI,
-    model: str,
+def _decisions_from_data(data: Any) -> list[Any]:
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict):
+        decisions = data.get("decisions", [])
+        return decisions if isinstance(decisions, list) else []
+    return []
+
+
+def _decisions_by_index(data: Any, batch_len: int) -> dict[int, dict[str, Any]]:
+    out: dict[int, dict[str, Any]] = {}
+    for decision in _decisions_from_data(data):
+        if not isinstance(decision, dict):
+            continue
+        try:
+            idx = int(decision.get("index", -1))
+        except (TypeError, ValueError):
+            continue
+        if 0 <= idx < batch_len:
+            out[idx] = decision
+    return out
+
+
+def _validation_prompt(
     batch: list[dict[str, Any]],
     *,
     state: str,
     county: str | None,
-) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    reason: str | None = None,
+) -> dict[str, Any]:
     # Per the playbook ("Out-Of-State And Out-Of-County Hits Are Free Wins,
     # Not Rejects"), border-metro hits get re-routed downstream — don't
     # reject at validation. Just note the focus county/state so the model
@@ -183,7 +205,7 @@ def validate_batch(
         if county
         else f"This run targets {state}. Prefer leads in {state}, but if a lead is clearly a mandatory HOA in another US state, KEEP it — the bank routes by the lead's own evidence."
     )
-    prompt = {
+    prompt: dict[str, Any] = {
         "task": "Validate noisy public-web leads before probing/banking HOA governing documents.",
         "state": state,
         "county_focus": county,
@@ -200,22 +222,42 @@ def validate_batch(
         ],
         "candidates": [_compact_candidate(row, idx) for idx, row in enumerate(batch)],
     }
-    data, usage = chat_json(orc, model, prompt, max_tokens=2200, operation="openrouter_ks_planner.validate_leads")
-    if isinstance(data, list):
-        decisions = data
-    elif isinstance(data, dict):
-        decisions = data.get("decisions", [])
-    else:
-        decisions = []
+    if reason:
+        prompt["quality_fallback_reason"] = reason
+    return prompt
+
+
+def _needs_quality_fallback(decision: dict[str, Any] | None, threshold: float) -> bool:
+    if not decision:
+        return True
+    try:
+        confidence = float(decision.get("confidence") or 0)
+    except (TypeError, ValueError):
+        confidence = 0
+    if not decision.get("keep"):
+        return True
+    if confidence < threshold:
+        return True
+    repaired = str(decision.get("repaired_name") or "").strip()
+    return len(repaired) < 4
+
+
+def _kept_from_decisions(
+    batch: list[dict[str, Any]],
+    decisions_by_index: dict[int, dict[str, Any]],
+    *,
+    model: str,
+    state: str,
+    county: str | None,
+    min_confidence: float,
+) -> list[dict[str, Any]]:
     kept: list[dict[str, Any]] = []
-    for decision in decisions:
-        if not isinstance(decision, dict) or not decision.get("keep"):
-            continue
-        idx = int(decision.get("index", -1))
-        if idx < 0 or idx >= len(batch):
+    for idx in range(len(batch)):
+        decision = decisions_by_index.get(idx)
+        if not decision or not decision.get("keep"):
             continue
         confidence = float(decision.get("confidence") or 0)
-        if confidence < 0.65:
+        if confidence < min_confidence:
             continue
         row = dict(batch[idx])
         repaired = str(decision.get("repaired_name") or row.get("name") or "").strip()
@@ -232,14 +274,39 @@ def validate_batch(
             row.pop("county", None)
         row["source"] = row.get("source") or f"openrouter-{model}-validated"
         row["validation"] = {
-            "model": model,
+            "model": str(decision.get("quality_fallback_model") or model),
+            "primary_model": str(decision.get("primary_model") or model),
+            "quality_fallback_from": decision.get("quality_fallback_from"),
             "confidence": confidence,
             "reason": str(decision.get("reason") or "")[:300],
             "target_state": state,
             "target_county": county,
         }
         kept.append(row)
-    return kept, {"usage": usage, "raw": data}
+    return kept
+
+
+def validate_batch(
+    orc: OpenAI,
+    model: str,
+    batch: list[dict[str, Any]],
+    *,
+    state: str,
+    county: str | None,
+    min_confidence: float = 0.65,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    prompt = _validation_prompt(batch, state=state, county=county)
+    data, usage = chat_json(orc, model, prompt, max_tokens=2200, operation="openrouter_ks_planner.validate_leads")
+    decisions_by_index = _decisions_by_index(data, len(batch))
+    kept = _kept_from_decisions(
+        batch,
+        decisions_by_index,
+        model=model,
+        state=state,
+        county=county,
+        min_confidence=min_confidence,
+    )
+    return kept, {"usage": usage, "raw": data, "decisions_by_index": decisions_by_index}
 
 
 def cmd_validate_leads(args: argparse.Namespace) -> int:
@@ -251,13 +318,87 @@ def cmd_validate_leads(args: argparse.Namespace) -> int:
     for start in range(0, len(rows), args.batch_size):
         batch = rows[start:start + args.batch_size]
         try:
-            kept, info = validate_batch(orc, model, batch, state=args.state, county=args.county)
+            kept, info = validate_batch(
+                orc,
+                model,
+                batch,
+                state=args.state,
+                county=args.county,
+                min_confidence=args.min_confidence,
+            )
+            if (
+                args.fallback_model
+                and args.fallback_model != model
+                and args.quality_fallback_max_candidates > 0
+            ):
+                primary_decisions = info.pop("decisions_by_index", {})
+                fallback_indices = [
+                    idx
+                    for idx in range(len(batch))
+                    if _needs_quality_fallback(primary_decisions.get(idx), args.quality_fallback_threshold)
+                ][: args.quality_fallback_max_candidates]
+                if fallback_indices:
+                    fallback_batch = [batch[idx] for idx in fallback_indices]
+                    fallback_prompt = _validation_prompt(
+                        fallback_batch,
+                        state=args.state,
+                        county=args.county,
+                        reason=(
+                            f"Quality fallback for candidates the primary model rejected, could not name, "
+                            f"or scored below {args.quality_fallback_threshold}."
+                        ),
+                    )
+                    try:
+                        fallback_data, fallback_usage = chat_json(
+                            orc,
+                            args.fallback_model,
+                            fallback_prompt,
+                            max_tokens=1800,
+                            operation="openrouter_ks_planner.validate_leads.quality_fallback",
+                        )
+                        fallback_decisions = _decisions_by_index(fallback_data, len(fallback_batch))
+                        merged_decisions = dict(primary_decisions)
+                        for fallback_idx, decision in fallback_decisions.items():
+                            merged_decisions[fallback_indices[fallback_idx]] = {
+                                **decision,
+                                "quality_fallback_model": args.fallback_model,
+                                "quality_fallback_from": model,
+                                "primary_model": model,
+                            }
+                        kept = _kept_from_decisions(
+                            batch,
+                            merged_decisions,
+                            model=model,
+                            state=args.state,
+                            county=args.county,
+                            min_confidence=args.min_confidence,
+                        )
+                        info["quality_fallback"] = {
+                            "fallback_model": args.fallback_model,
+                            "fallback_indices": fallback_indices,
+                            "usage": fallback_usage,
+                            "raw": fallback_data,
+                        }
+                    except Exception as fallback_exc:
+                        info["quality_fallback"] = {
+                            "fallback_model": args.fallback_model,
+                            "fallback_indices": fallback_indices,
+                            "error": str(fallback_exc),
+                        }
         except Exception as exc:
             if args.fallback_model and args.fallback_model != model:
                 try:
-                    kept, info = validate_batch(orc, args.fallback_model, batch, state=args.state, county=args.county)
+                    kept, info = validate_batch(
+                        orc,
+                        args.fallback_model,
+                        batch,
+                        state=args.state,
+                        county=args.county,
+                        min_confidence=args.min_confidence,
+                    )
                     info["fallback_from"] = model
                     info["model"] = args.fallback_model
+                    info.pop("decisions_by_index", None)
                 except Exception as fallback_exc:
                     kept = []
                     info = {
@@ -268,6 +409,8 @@ def cmd_validate_leads(args: argparse.Namespace) -> int:
             else:
                 kept = []
                 info = {"error": str(exc)}
+        else:
+            info.pop("decisions_by_index", None)
         kept_all.extend(kept)
         audit.append({"start": start, "count": len(batch), "kept": len(kept), **info})
     seen: set[tuple[str, str]] = set()
@@ -336,6 +479,9 @@ def main() -> int:
     validate.add_argument("--model", default=DEFAULT_MODEL)
     validate.add_argument("--fallback-model", default=FALLBACK_MODEL)
     validate.add_argument("--batch-size", type=int, default=20)
+    validate.add_argument("--min-confidence", type=float, default=0.65)
+    validate.add_argument("--quality-fallback-threshold", type=float, default=0.82)
+    validate.add_argument("--quality-fallback-max-candidates", type=int, default=8)
     validate.set_defaults(func=cmd_validate_leads)
 
     queries = sub.add_parser("county-queries")

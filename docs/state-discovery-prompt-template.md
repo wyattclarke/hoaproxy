@@ -26,7 +26,7 @@ Autonomously scrape public {state-name} HOA governing documents into the existin
 - Do not use Gemini. Blocklisted; too expensive for the yield (per the May 2026 Kansas activity export).
 - Do not use Qwen Flash variants (`qwen/qwen3.5-flash`, `qwen/qwen3.6-flash`) for bulk classification. They produced runaway hidden reasoning-token usage and are blocklisted by `HOA_CLASSIFIER_BLOCKLIST` / `HOA_DISCOVERY_MODEL_BLOCKLIST`.
 - Prefer deterministic search → fetch → preflight → bank over model calls. Use OpenRouter only for compact judgment tasks (county query generation, noisy lead validation, ambiguous PDF triage).
-- Primary model: `deepseek/deepseek-v4-flash`. Fallback when DeepSeek is rate-limited or returns malformed JSON: `moonshotai/kimi-k2.6`.
+- Primary model: `deepseek/deepseek-v4-flash`. Quality/availability fallback: `moonshotai/kimi-k2.6`, used only when DeepSeek errors or when DeepSeek rejects/cannot name/scores below the helper's quality threshold after deterministic gates.
 - Never send to any model: secrets, cookies, logged-in pages, resident data, private portal content, emails, payment data, or internal/work data. Models see only URL / title / snippet / compact candidate JSON.
 - Respect `robots.txt` (`HOA_DISCOVERY_RESPECT_ROBOTS=1`) and practical per-host delays.
 - Log all model usage to `data/model_usage.jsonl` (`HOA_MODEL_USAGE_LOG`). Do not log prompts, completions, document text, cookies, or API keys.

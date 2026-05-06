@@ -150,7 +150,7 @@ Current recommended models:
 
 - Default cheap triage/classification: `deepseek/deepseek-v4-flash`.
 - Strategy/query generation: `deepseek/deepseek-v4-flash`.
-- Strict lead validation fallback: `moonshotai/kimi-k2.6` when DeepSeek is rate-limited or malformed.
+- Strict lead validation quality/availability fallback: `moonshotai/kimi-k2.6` when DeepSeek is rate-limited/malformed, or for the bounded subset of compact candidates that DeepSeek rejects, cannot name, or scores below the helper's quality threshold after deterministic gates.
 - Do not use `google/gemini-3.1-pro-preview` for this workflow; the Kansas activity export showed it was too expensive for the yield.
 - Avoid bulk classifier use of `qwen/qwen3.5-flash` and `qwen/qwen3.6-flash`; the Kansas activity export showed runaway hidden reasoning-token usage.
 - Best judgment fallback: `anthropic/claude-opus-latest` / `anthropic/claude-opus-4.7`, used sparingly.

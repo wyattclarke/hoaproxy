@@ -69,6 +69,20 @@ def _decisions_from_data(data: Any) -> list[Any]:
     return []
 
 
+def _decisions_by_index(data: Any, batch_len: int) -> dict[int, dict[str, Any]]:
+    out: dict[int, dict[str, Any]] = {}
+    for decision in _decisions_from_data(data):
+        if not isinstance(decision, dict):
+            continue
+        try:
+            idx = int(decision.get("index", -1))
+        except (TypeError, ValueError):
+            continue
+        if 0 <= idx < batch_len:
+            out[idx] = decision
+    return out
+
+
 def _chat_json(client: OpenAI, model: str, prompt: dict[str, Any], *, operation: str) -> Any:
     assert_discovery_model_allowed(model)
     base_url = os.environ.get("OPENROUTER_BASE_URL", OPENROUTER_BASE_URL)
@@ -168,6 +182,44 @@ def _clean_model_name(value: str) -> str | None:
     return name
 
 
+def _prompt_for_batch(
+    batch: list[dict[str, Any]],
+    audit: dict[str, dict[str, Any]],
+    args: argparse.Namespace,
+    *,
+    reason: str | None = None,
+) -> dict[str, Any]:
+    prompt = {
+        "task": "Repair and validate HOA lead names for public governing-document banking.",
+        "state": args.state.upper(),
+        "rules": [
+            f"Keep only specific HOA/condo/townhome/property-owner associations in {args.state_name}.",
+            "Reject government reports, legal articles, real-estate listings, generic management pages, and candidates where the specific association name is not clear.",
+            "Repair names to the community association name only, e.g. 'Hidden Harbor Homeowners Association'.",
+            "Do not include document titles, boilerplate, county register language, URLs, cities, file hosts, or snippets in the repaired name.",
+            "Return decisions with index, keep, repaired_name, confidence 0-1, reason.",
+        ],
+        "candidates": [_candidate(row, audit.get(str(row.get("source_url") or ""), {}), idx) for idx, row in enumerate(batch)],
+    }
+    if reason:
+        prompt["quality_fallback_reason"] = reason
+    return prompt
+
+
+def _needs_quality_fallback(decision: dict[str, Any] | None, args: argparse.Namespace) -> bool:
+    if not decision:
+        return True
+    try:
+        confidence = float(decision.get("confidence") or 0)
+    except (TypeError, ValueError):
+        confidence = 0
+    if not decision.get("keep"):
+        return True
+    if confidence < args.quality_fallback_threshold:
+        return True
+    return _clean_model_name(str(decision.get("repaired_name") or "")) is None
+
+
 def repair(args: argparse.Namespace) -> int:
     rows = _read_jsonl(Path(args.input))
     audit = _audit_by_url(Path(args.audit)) if args.audit else {}
@@ -176,18 +228,7 @@ def repair(args: argparse.Namespace) -> int:
     audit_batches: list[dict[str, Any]] = []
     for start in range(0, len(rows), args.batch_size):
         batch = rows[start:start + args.batch_size]
-        prompt = {
-            "task": "Repair and validate HOA lead names for public governing-document banking.",
-            "state": args.state.upper(),
-            "rules": [
-                f"Keep only specific HOA/condo/townhome/property-owner associations in {args.state_name}.",
-                "Reject government reports, legal articles, real-estate listings, generic management pages, and candidates where the specific association name is not clear.",
-                "Repair names to the community association name only, e.g. 'Hidden Harbor Homeowners Association'.",
-                "Do not include document titles, boilerplate, county register language, URLs, cities, file hosts, or snippets in the repaired name.",
-                "Return decisions with index, keep, repaired_name, confidence 0-1, reason.",
-            ],
-            "candidates": [_candidate(row, audit.get(str(row.get("source_url") or ""), {}), idx) for idx, row in enumerate(batch)],
-        }
+        prompt = _prompt_for_batch(batch, audit, args)
         model = args.model
         try:
             data = _chat_json(client, model, prompt, operation="openrouter_repair_lead_names")
@@ -198,13 +239,60 @@ def repair(args: argparse.Namespace) -> int:
                 continue
             data = _chat_json(client, args.fallback_model, prompt, operation="openrouter_repair_lead_names")
             used_model = args.fallback_model
-        decisions = _decisions_from_data(data)
+        primary_decisions = _decisions_by_index(data, len(batch))
+        decisions_by_index = dict(primary_decisions)
+        fallback_info: dict[str, Any] | None = None
+        if (
+            used_model == model
+            and args.fallback_model
+            and args.fallback_model != model
+            and args.quality_fallback_max_candidates > 0
+        ):
+            fallback_indices = [
+                idx
+                for idx in range(len(batch))
+                if _needs_quality_fallback(primary_decisions.get(idx), args)
+            ][: args.quality_fallback_max_candidates]
+            if fallback_indices:
+                fallback_batch = [batch[idx] for idx in fallback_indices]
+                fallback_prompt = _prompt_for_batch(
+                    fallback_batch,
+                    audit,
+                    args,
+                    reason=(
+                        f"Quality fallback for candidates the primary model rejected, could not name, "
+                        f"or scored below {args.quality_fallback_threshold}."
+                    ),
+                )
+                try:
+                    fallback_data = _chat_json(
+                        client,
+                        args.fallback_model,
+                        fallback_prompt,
+                        operation="openrouter_repair_lead_names.quality_fallback",
+                    )
+                    fallback_decisions = _decisions_by_index(fallback_data, len(fallback_batch))
+                    for fallback_idx, decision in fallback_decisions.items():
+                        decisions_by_index[fallback_indices[fallback_idx]] = {
+                            **decision,
+                            "quality_fallback_model": args.fallback_model,
+                            "quality_fallback_from": model,
+                        }
+                    fallback_info = {
+                        "fallback_model": args.fallback_model,
+                        "fallback_indices": fallback_indices,
+                        "fallback_raw": fallback_data,
+                    }
+                except Exception as exc:
+                    fallback_info = {
+                        "fallback_model": args.fallback_model,
+                        "fallback_indices": fallback_indices,
+                        "fallback_error": str(exc),
+                    }
         kept_count = 0
-        for decision in decisions:
-            if not isinstance(decision, dict) or not decision.get("keep"):
-                continue
-            idx = int(decision.get("index", -1))
-            if idx < 0 or idx >= len(batch):
+        for idx in range(len(batch)):
+            decision = decisions_by_index.get(idx)
+            if not decision or not decision.get("keep"):
                 continue
             confidence = float(decision.get("confidence") or 0)
             if confidence < args.min_confidence:
@@ -217,7 +305,9 @@ def repair(args: argparse.Namespace) -> int:
             row["state"] = args.state.upper()
             row["source"] = f"openrouter-repaired-{args.state.lower()}"
             row["validation"] = {
-                "model": used_model,
+                "model": str(decision.get("quality_fallback_model") or (args.fallback_model if decision.get("quality_fallback_from") else used_model)),
+                "primary_model": used_model,
+                "quality_fallback_from": decision.get("quality_fallback_from"),
                 "confidence": confidence,
                 "reason": str(decision.get("reason") or "")[:240],
             }
@@ -236,7 +326,10 @@ def repair(args: argparse.Namespace) -> int:
             payload["validation"] = row["validation"]
             kept.append(payload)
             kept_count += 1
-        audit_batches.append({"start": start, "count": len(batch), "kept": kept_count, "model": used_model, "raw": data})
+        audit_row = {"start": start, "count": len(batch), "kept": kept_count, "model": used_model, "raw": data}
+        if fallback_info:
+            audit_row["quality_fallback"] = fallback_info
+        audit_batches.append(audit_row)
     seen: set[tuple[str, str]] = set()
     deduped: list[dict[str, Any]] = []
     for row in kept:
@@ -267,6 +360,8 @@ def main() -> int:
     parser.add_argument("--fallback-model", default=DEFAULT_FALLBACK)
     parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument("--min-confidence", type=float, default=0.7)
+    parser.add_argument("--quality-fallback-threshold", type=float, default=0.82)
+    parser.add_argument("--quality-fallback-max-candidates", type=int, default=6)
     args = parser.parse_args()
     return repair(args)
 

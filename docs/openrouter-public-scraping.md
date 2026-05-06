@@ -19,6 +19,7 @@ HOA_ENABLE_LLM_CLASSIFIER="1"
 HOA_CLASSIFIER_API_BASE_URL="https://openrouter.ai/api/v1"
 HOA_CLASSIFIER_API_KEY="${OPENROUTER_API_KEY}"
 HOA_CLASSIFIER_MODEL="deepseek/deepseek-v4-flash"
+# Kimi is reserved for bounded fallback/second-pass judgment, not bulk classification.
 # HOA_CLASSIFIER_FALLBACK_MODEL="moonshotai/kimi-k2.6"
 HOA_CLASSIFIER_BLOCKLIST="qwen/qwen3.5-flash,qwen/qwen3.6-flash"
 HOA_MODEL_USAGE_LOG="data/model_usage.jsonl"
@@ -63,6 +64,12 @@ python scripts/hoa_precheck.py --url "https://example.org/document.pdf" --hoa "E
 
 The LLM prompt receives only URL, title/filename/anchor metadata, and a short
 text snippet. It returns JSON with category, confidence, and a short rationale.
+
+For discovery helpers, `deepseek/deepseek-v4-flash` is the first-pass compact
+judgment model. `moonshotai/kimi-k2.6` is a bounded quality fallback for
+candidates DeepSeek rejects, cannot name, or scores below the configured
+quality threshold after deterministic gates. Do not run both models over whole
+ungated batches.
 
 Every LLM classifier call appends a metadata-only row to `HOA_MODEL_USAGE_LOG`
 (`data/model_usage.jsonl` by default): model, endpoint, generation id, token
