@@ -471,6 +471,9 @@ Updated: 2026-05-06
 - 2026-05-06: Bradley/Marion-scoped Travis Close recovery used `benchmark/tn_bradley_travisclose_ccr_queries_9.txt` and `benchmark/tn_marion_travisclose_ccr_queries_9.txt`, with generated output under `benchmark/results/tn_serper_docpages_tn_{bradley,marion}_travisclose_ccr_9/`.
   - Bradley Serper returned 4 direct-PDF leads and Marion returned 1. Local finalization skipped Peachtree Estates and Shelley-Johnson as existing earlier manifests and kept the three new Bradley rows with public Bradley/Cleveland Tennessee snippets.
   - Final banking set had 3 vetted direct PDFs. Probe output reported 3 banked / 0 skipped across 3 manifest paths. Count after pass: 685 manifests, 959 PDFs. Additions included Parkstone Village I and II, Deer Run, and Neuchatel Estates.
+- 2026-05-06: Sequatchie/Bledsoe/Rhea/Meigs-scoped Travis Close recovery used `benchmark/tn_{sequatchie,bledsoe,rhea,meigs}_travisclose_ccr_queries_9.txt`, with generated output under `benchmark/results/tn_serper_docpages_tn_{sequatchie,bledsoe,rhea,meigs}_travisclose_ccr_9/`.
+  - County-scoped Serper returned 1 Sequatchie lead, 0 Bledsoe leads, 1 Rhea lead, and 1 Meigs lead. Local finalization skipped Town and Country Estates because it already existed under Rhea and kept the two new snippet-backed Sequatchie/Meigs rows.
+  - Final banking set had 2 vetted direct PDFs. Probe output reported 2 banked / 0 skipped across 2 manifest paths. Count after pass: 687 manifests, 961 PDFs. Additions included Stone Creek Cabins and Espalier Bay.
 
 ## Productive Source Families
 
