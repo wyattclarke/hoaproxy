@@ -386,29 +386,8 @@ def cmd_validate_leads(args: argparse.Namespace) -> int:
                             "error": str(fallback_exc),
                         }
         except Exception as exc:
-            if args.fallback_model and args.fallback_model != model:
-                try:
-                    kept, info = validate_batch(
-                        orc,
-                        args.fallback_model,
-                        batch,
-                        state=args.state,
-                        county=args.county,
-                        min_confidence=args.min_confidence,
-                    )
-                    info["fallback_from"] = model
-                    info["model"] = args.fallback_model
-                    info.pop("decisions_by_index", None)
-                except Exception as fallback_exc:
-                    kept = []
-                    info = {
-                        "error": str(exc),
-                        "fallback_model": args.fallback_model,
-                        "fallback_error": str(fallback_exc),
-                    }
-            else:
-                kept = []
-                info = {"error": str(exc)}
+            kept = []
+            info = {"error": str(exc)}
         else:
             info.pop("decisions_by_index", None)
         kept_all.extend(kept)
@@ -453,13 +432,7 @@ def cmd_county_queries(args: argparse.Namespace) -> int:
         "max_queries": args.count,
     }
     model = args.model
-    try:
-        data, usage = chat_json(orc, model, prompt, max_tokens=3200, operation="openrouter_ks_planner.county_queries")
-    except Exception:
-        if not args.fallback_model or args.fallback_model == model:
-            raise
-        model = args.fallback_model
-        data, usage = chat_json(orc, model, prompt, max_tokens=3200, operation="openrouter_ks_planner.county_queries")
+    data, usage = chat_json(orc, model, prompt, max_tokens=3200, operation="openrouter_ks_planner.county_queries")
     queries = [str(q).strip() for q in data.get("queries", []) if str(q).strip()]
     Path(args.output).write_text("\n".join(queries[: args.count]) + "\n")
     print(json.dumps({"model": model, "queries": len(queries[: args.count]), "output": args.output, "usage": usage}))
@@ -477,7 +450,7 @@ def main() -> int:
     validate.add_argument("--state", default="KS")
     validate.add_argument("--county")
     validate.add_argument("--model", default=DEFAULT_MODEL)
-    validate.add_argument("--fallback-model", default=FALLBACK_MODEL)
+    validate.add_argument("--fallback-model", default=FALLBACK_MODEL, help="Bounded quality fallback model; never used to retry a whole failed batch.")
     validate.add_argument("--batch-size", type=int, default=20)
     validate.add_argument("--min-confidence", type=float, default=0.65)
     validate.add_argument("--quality-fallback-threshold", type=float, default=0.82)
@@ -489,7 +462,7 @@ def main() -> int:
     queries.add_argument("--state", default="KS")
     queries.add_argument("--county", required=True)
     queries.add_argument("--model", default=DEFAULT_MODEL)
-    queries.add_argument("--fallback-model", default=FALLBACK_MODEL)
+    queries.add_argument("--fallback-model", default=None, help=argparse.SUPPRESS)
     queries.add_argument("--count", type=int, default=40)
     queries.set_defaults(func=cmd_county_queries)
 

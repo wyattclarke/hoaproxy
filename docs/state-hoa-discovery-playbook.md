@@ -168,8 +168,7 @@ OPENROUTER_TIMEOUT_SECONDS=80 python benchmark/openrouter_ks_planner.py county-q
   --county {County} \
   --count 30 \
   --output benchmark/results/{state-lower}_{county-lower}_deepseek_queries.txt \
-  --model deepseek/deepseek-v4-flash \
-  --fallback-model moonshotai/kimi-k2.6
+  --model deepseek/deepseek-v4-flash
 ```
 
 Example (Kansas, Sedgwick County) — translate names for your target state:
@@ -179,8 +178,7 @@ OPENROUTER_TIMEOUT_SECONDS=80 python benchmark/openrouter_ks_planner.py county-q
   --county Sedgwick \
   --count 30 \
   --output benchmark/results/ks_sedgwick_deepseek_queries.txt \
-  --model deepseek/deepseek-v4-flash \
-  --fallback-model moonshotai/kimi-k2.6
+  --model deepseek/deepseek-v4-flash
 ```
 
 The discovery scripts block Gemini and Qwen Flash by default through
