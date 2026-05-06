@@ -444,6 +444,9 @@ Updated: 2026-05-06
 - 2026-05-06: The Harbour HOA Express follow-up used the public site homepage and the direct `/file/document-page/...pdf` packet discovered in the Sullivan/Kingsport gap sweep, with generated output under `benchmark/results/tn_theharbour_hoaexpress_followup_7/`.
   - Public page context resolved the generic `Table of Contents` PDF to The Harbour in Butler, Tennessee. PDF text showed a 91-page governing packet with bylaws, reinstated/amended charter, restrictions/reservations, common-area regulations, sewage requirements, plat, ARC guidelines, and a short-term-rental ruling.
   - Final banking set had 1 vetted direct PDF. Probe output reported 1 banked / 0 skipped under `TN/johnson/harbour-subdivision`. Count after pass: 625 manifests, 885 PDFs.
+- 2026-05-06: No-cost HOA Express leftover re-mining scanned existing TN result files for unused `/file/document-page/...pdf` URLs, with generated output under `benchmark/results/tn_hoaexpress_leftover_remining_7/`.
+  - Existing result-set mining found 14 unique HOA Express-style direct PDFs, of which 3 exact URLs were already banked. Deterministic cleaning accepted 2; local public-homepage/search-audit review recovered 6 more scanned or low-text governing PDFs without additional Serper calls.
+  - Final banking set had 8 vetted direct PDFs. Probe output reported 8 banked / 0 skipped across 4 manifest paths. Count after pass: 629 manifests, 893 PDFs. Additions/enrichments included Fredericksburg Townhomes, Wellington Farms, River Plantation Section Eleven Condominiums, and Lakewood Ranches.
 
 ## Productive Source Families
 
@@ -471,6 +474,7 @@ Updated: 2026-05-06
 - HOA Express-style `/file/document` and `/file/document-page` expansion remains worth targeted use. Latest additions were River Sound, Abbottsford, and Montgomery Cove.
 - HOA Express governing-term extension added River Plantation Section 1 and Villas at Lyons Crossing, but marginal yield dropped to 2 banked PDFs.
 - HOA Express public packets can have generic PDF titles such as `Table of Contents`; use public page context plus first-page text before rejecting. The Harbour packet was bankable once the homepage resolved the association and the PDF text showed bylaws/charter/restrictions/ARC content.
+- Re-mining existing result sets for unbanked HOA Express direct PDF URLs is worthwhile and costs no Serper/OpenRouter budget. The latest leftover pass recovered Fredericksburg Townhomes, Wellington Farms, River Plantation Section Eleven Condominiums, and Lakewood Ranches. Use homepage titles to route county/city and reject obvious out-of-state HOA Express sites such as Lookout Mountain, Georgia or Springfield, Virginia.
 - Civic/static CDN searches should not be expanded broadly. They mostly produce municipal packets, subdivision regulations, neighborhood newsletters, and grant material; the only prior bankable civic CDN-style hit was already deduped.
 - Broad `inurl:/file/document` searches have low marginal yield and high noise after the HOA Express-specific passes. Latest addition was The Springs Section I.
 - Public HOA document-page crawling can still produce finds when exploded to one PDF per lead and cleaned locally. Latest additions were Primm Farm, Richland Downs, Rarity Ridge, and Watermill.
