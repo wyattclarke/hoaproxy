@@ -468,6 +468,9 @@ Updated: 2026-05-06
   - Serper returned 15 Travis Close direct-PDF leads with Hamilton/Chattanooga/Ooltewah/Signal Mountain snippets. Exact/current-source filtering removed 1; GCS filename/basename alias dedupe removed 5 more, leaving 9 snippet-backed candidates.
   - Deterministic cleaning rejected the 9 candidates because filenames lacked category words or contained generic foreclosure/court language, but the public snippets clearly identified Hamilton County Tennessee restrictions/associations. Local finalization banked the 6 safest rows and skipped unknown-county duplicate risks (Reunion, Arbor Cove, Dogwood Grove). A bad first Mountain Oaks slug from `Homeowner's` was corrected and the bad prefix was removed.
   - Final banking set had 6 vetted direct PDFs. Probe output reported 6 banked / 0 skipped across 6 manifest paths, with several rows enriching existing Hamilton manifests. Count after pass: 682 manifests, 956 PDFs. Additions/enrichments included Grey Hawk Trails, Mountain Oaks Village, The Enclave at Riverview, Falling Water Heights, Andover Place, and Elder Cove.
+- 2026-05-06: Bradley/Marion-scoped Travis Close recovery used `benchmark/tn_bradley_travisclose_ccr_queries_9.txt` and `benchmark/tn_marion_travisclose_ccr_queries_9.txt`, with generated output under `benchmark/results/tn_serper_docpages_tn_{bradley,marion}_travisclose_ccr_9/`.
+  - Bradley Serper returned 4 direct-PDF leads and Marion returned 1. Local finalization skipped Peachtree Estates and Shelley-Johnson as existing earlier manifests and kept the three new Bradley rows with public Bradley/Cleveland Tennessee snippets.
+  - Final banking set had 3 vetted direct PDFs. Probe output reported 3 banked / 0 skipped across 3 manifest paths. Count after pass: 685 manifests, 959 PDFs. Additions included Parkstone Village I and II, Deer Run, and Neuchatel Estates.
 
 ## Productive Source Families
 
