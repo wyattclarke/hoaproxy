@@ -3108,7 +3108,13 @@ def _prepared_target_pdf_path(
     expected_sha256: str,
     pdf_bytes: bytes,
 ) -> Path:
-    safe_name = _safe_pdf_filename(filename)
+    prepared_name = filename.strip() if filename else ""
+    if not prepared_name.lower().endswith(".pdf"):
+        stem = Path(prepared_name).name.strip() if prepared_name else ""
+        if not stem or stem in {".", ".."}:
+            stem = expected_sha256[:12]
+        prepared_name = f"{stem}.pdf"
+    safe_name = _safe_pdf_filename(prepared_name)
     actual_sha256 = hashlib.sha256(pdf_bytes).hexdigest()
     if actual_sha256 != expected_sha256:
         raise prepared_ingest.PreparedIngestError(

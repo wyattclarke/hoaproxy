@@ -264,6 +264,8 @@ def prepare(args: argparse.Namespace) -> int:
                 continue
             sha256 = str(doc.get("sha256") or "").lower()
             filename = doc.get("filename") or f"{sha256}.pdf"
+            if not str(filename).lower().endswith(".pdf"):
+                filename = f"{Path(str(filename)).name or sha256[:12]}.pdf"
             source_url = doc.get("source_url")
             doc_gcs_path = doc.get("gcs_path")
             precheck_blob = None
