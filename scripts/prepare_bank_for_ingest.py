@@ -306,6 +306,7 @@ def _reject_reason(
     live_shas: set[str],
     prepared_shas: set[str],
     sha256: str,
+    hard_only: bool = False,
 ) -> str | None:
     if sha256 in live_shas:
         return "duplicate:live"
@@ -315,22 +316,17 @@ def _reject_reason(
         return f"pii:{category}"
     if category in REJECT_JUNK:
         return f"junk:{category}"
+    page_count = precheck.get("page_count")
+    if isinstance(page_count, int) and page_count > MAX_PAGES_FOR_OCR:
+        return f"page_cap:{page_count}"
+    if hard_only:
+        return None
     if category in LOW_VALUE_CATEGORIES and not include_low_value:
         return f"low_value:{category}"
     if category not in PREPARED_KEEP_CATEGORIES and not (
         include_low_value and category in LOW_VALUE_CATEGORIES
     ):
         return f"unsupported_category:{category or 'unknown'}"
-    page_count = precheck.get("page_count")
-    if isinstance(page_count, int) and page_count > MAX_PAGES_FOR_OCR:
-        return f"page_cap:{page_count}"
-    return None
-
-
-def _page_cap_reason(precheck: dict[str, Any]) -> str | None:
-    page_count = precheck.get("page_count")
-    if isinstance(page_count, int) and page_count > MAX_PAGES_FOR_OCR:
-        return f"page_cap:{page_count}"
     return None
 
 
@@ -571,7 +567,7 @@ def prepare(args: argparse.Namespace) -> int:
                 text_extractable = precheck.get("text_extractable")
                 sidecar: dict[str, Any] | None = None
                 docai_pages: int | None = None
-                unknown_ocr_reviewed = False
+                page_one_reviewed = False
                 review_docai_pages = 0
                 reason = _reject_reason(
                     category=category,
@@ -580,15 +576,15 @@ def prepare(args: argparse.Namespace) -> int:
                     live_shas=live_shas,
                     prepared_shas=already_prepared,
                     sha256=sha256,
+                    hard_only=True,
                 )
-                if reason == "unsupported_category:unknown" and not args.skip_unknown_ocr_review:
-                    unknown_ocr_reviewed = True
-                    cap_reason = _page_cap_reason(precheck)
-                    if cap_reason:
-                        reason = cap_reason
-                    elif total_projected_docai_cost + COST_DOCAI_PER_PAGE > args.max_docai_cost_usd:
+                skip_page_one_review = args.skip_page_one_review or args.skip_unknown_ocr_review
+                if not reason and not skip_page_one_review:
+                    projected_review_cost = 0.0 if text_extractable is True else COST_DOCAI_PER_PAGE
+                    if total_projected_docai_cost + projected_review_cost > args.max_docai_cost_usd:
                         reason = "docai_budget"
                     else:
+                        page_one_reviewed = True
                         review_text, review_docai_pages = _extract_first_page_review_text(
                             pdf_bytes=pdf_bytes,
                             text_extractable=text_extractable,
@@ -608,6 +604,15 @@ def prepare(args: argparse.Namespace) -> int:
                             prepared_shas=already_prepared,
                             sha256=sha256,
                         )
+                elif not reason:
+                    reason = _reject_reason(
+                        category=category,
+                        precheck=precheck,
+                        include_low_value=args.include_low_value,
+                        live_shas=live_shas,
+                        prepared_shas=already_prepared,
+                        sha256=sha256,
+                    )
                 if reason:
                     rejected_docs.append({"sha256": sha256, "source_url": source_url, "reason": reason})
                     _append_ledger(args.ledger, {
@@ -616,7 +621,7 @@ def prepare(args: argparse.Namespace) -> int:
                         "category": category,
                         "decision": "rejected",
                         "reason": reason,
-                        "unknown_ocr_reviewed": unknown_ocr_reviewed,
+                        "page_one_reviewed": page_one_reviewed,
                         "docai_pages": docai_pages or 0,
                         "review_docai_pages": review_docai_pages,
                     })
@@ -657,8 +662,8 @@ def prepare(args: argparse.Namespace) -> int:
                     "text_extractable": text_extractable,
                     "page_count": precheck.get("page_count") or len(sidecar["pages"]),
                     "docai_pages": docai_pages,
-                    "filter_reason": "ocr_review_valid_governing_doc"
-                    if unknown_ocr_reviewed
+                    "filter_reason": "page_one_review_valid_governing_doc"
+                    if page_one_reviewed
                     else "valid_governing_doc",
                 })
                 _append_ledger(args.ledger, {
@@ -671,7 +676,7 @@ def prepare(args: argparse.Namespace) -> int:
                     "docai_pages": docai_pages,
                     "prepared_bucket": args.prepared_bucket,
                     "geo_enriched": bool(geo_match),
-                    "unknown_ocr_reviewed": unknown_ocr_reviewed,
+                    "page_one_reviewed": page_one_reviewed,
                     "review_docai_pages": review_docai_pages,
                 })
             except Exception as exc:
@@ -747,9 +752,14 @@ def main() -> int:
     parser.add_argument("--overwrite", action="store_true", help="Overwrite an existing prepared bundle")
     parser.add_argument("--include-low-value", action="store_true", help="Include minutes/financial/insurance docs")
     parser.add_argument(
+        "--skip-page-one-review",
+        action="store_true",
+        help="Skip first-page text/OCR review before final low-value or unsupported-category rejection",
+    )
+    parser.add_argument(
         "--skip-unknown-ocr-review",
         action="store_true",
-        help="Reject unknown-category PDFs without first-page OCR/text review",
+        help=argparse.SUPPRESS,
     )
     parser.add_argument("--skip-live-duplicate-check", action="store_true")
     parser.add_argument(

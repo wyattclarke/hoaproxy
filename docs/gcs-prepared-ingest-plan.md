@@ -154,16 +154,17 @@ Reject before OCR:
 
 Use bank `precheck.json` as a hint, not an authority. If missing or weak, re-run local precheck from the PDF bytes before deciding.
 
-Unknown category is a review state, not a final rejection. For otherwise
-plausible banked PDFs, OCR or extract only page 1, classify that text, and then
-either:
+For curated banked PDFs, category filtering after the hard gates is provisional.
+Every otherwise plausible candidate should OCR or extract only page 1, classify
+that text, and then either:
 
 - keep the document and run full-document extraction for the prepared sidecar;
 - reject it with a concrete reason such as `junk:*`, `pii:*`,
   `unsupported_category:unknown`, `page_cap:*`, or `docai_budget`.
 
 This page-one review is still outside Render and is charged against the prep
-worker's DocAI budget.
+worker's DocAI budget. Known duplicates, PII, obvious junk, wrong-state records,
+and over-cap PDFs remain pre-review hard rejects.
 
 ## Metadata and Geography Policy
 
@@ -192,9 +193,10 @@ Run OCR in the prep worker, not on Render.
 Recommended routing:
 
 - If PyPDF extracts meaningful text from enough pages: use PyPDF pages, `docai_pages=0`, `text_extractable=true`.
-- If first-page and sample text are blank/scanned but category is unknown:
-  OCR page 1 first for relevance review. Run full-document DocAI only after the
-  page-1 text classifies as germane.
+- If first-page and sample text are blank/scanned and the candidate survived
+  hard rejects: OCR page 1 first for relevance review. Run full-document DocAI
+  only after the page-1 text classifies as germane or confirms the existing keep
+  category.
 - If first-page and sample text are blank/scanned and category is already a keep
   category: run DocAI for the whole document, `docai_pages=page_count`,
   `text_extractable=false`.

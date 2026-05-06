@@ -16,9 +16,10 @@ If you're a fresh session figuring out how to add a single HOA or handle a publi
 A prep worker filters and OCRs outside Render, writes prepared bundles with text
 sidecars, and the admin importer ingests only those prepared bundles. Missing
 sidecars fail; Render does not fall back to Document AI for this bulk path. In
-the curated bank, `unknown` is treated as "review needed": the prep worker
-extracts or OCRs page 1 before final rejection, then runs full-document OCR only
-for documents that classify as germane.
+the curated bank, every non-duplicate, non-PII, non-obvious-junk candidate gets
+page-one text review before low-value or unsupported rejection is final; the
+prep worker then runs full-document OCR only for documents that classify as
+germane.
 
 For bulk state scrapes, discovery must also bank strong live-site metadata:
 city, county, state, website, management/platform hints, public street/ZIP when

@@ -57,9 +57,10 @@ For every sweep, apply these gates before model validation or bank writes:
 6. Use OpenRouter only on surviving compact public metadata: `name`, `source_url`, `title`, `snippet`, `filename`, deterministic category, and state/county hints.
 
 Keep these gates lightweight. Do not build a bespoke review process for every candidate; encode recurring rejects as deterministic filters, then move on.
-When a public PDF is otherwise plausible but category evidence is ambiguous,
+When a public PDF survives the hard rejects but category evidence is ambiguous,
 bank it with `suggested_category=null` rather than discarding it. The prepared
-worker will extract or OCR page 1 before making the final keep/reject decision.
+worker will extract or OCR page 1 of every non-duplicate, non-PII,
+non-obvious-junk candidate before making the final keep/reject decision.
 
 ### Metadata collection requirements
 

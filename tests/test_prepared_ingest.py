@@ -307,3 +307,22 @@ def test_first_page_review_uses_existing_text_before_docai():
     )
     assert "DECLARATION OF RESTRICTIONS" in text
     assert docai_pages == 0
+
+
+def test_reject_reason_defers_low_value_and_unknown_until_after_page_one_review():
+    from scripts import prepare_bank_for_ingest as prep
+
+    common = {
+        "precheck": {"page_count": 2},
+        "include_low_value": False,
+        "live_shas": set(),
+        "prepared_shas": set(),
+        "sha256": "c" * 64,
+    }
+    assert prep._reject_reason(category="minutes", hard_only=True, **common) is None
+    assert prep._reject_reason(category=None, hard_only=True, **common) is None
+    assert prep._reject_reason(category="minutes", hard_only=False, **common) == "low_value:minutes"
+    assert (
+        prep._reject_reason(category=None, hard_only=False, **common)
+        == "unsupported_category:unknown"
+    )

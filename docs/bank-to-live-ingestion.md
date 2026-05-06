@@ -31,11 +31,12 @@ Common reasons a banked HOA does not become a prepared live bundle:
 - OCR budget cap or extraction error
 - wrong-state evidence
 
-Unknown category is not itself a final rejection for banked PDFs. If the file is
-not a duplicate, junk/PII, wrong-state, or over the page/cost cap, the worker
-reviews first-page text before deciding. For scanned PDFs that means OCRing only
-page 1, classifying that text, and running full-document OCR only if the page-1
-review identifies a germane governing document.
+Low-value or unsupported category is not itself a final rejection for banked
+PDFs. If the file is not a duplicate, junk/PII, wrong-state, or over the
+page/cost cap, the worker reviews first-page text before deciding. For scanned
+PDFs that means OCRing only page 1, classifying that text, and running
+full-document OCR only if the page-1 review identifies a germane governing
+document.
 
 ## Prepared Bundle Shape
 
@@ -131,11 +132,11 @@ Useful options:
 - `--skip-geo-enrichment` disables OSM/Nominatim lookup.
 - `--prepared-bucket hoaproxy-ingest-ready` overrides the queue bucket.
 
-The worker filters hard rejects before OCR: PII, junk, page-cap violations,
-wrong-state evidence, exact duplicates, and known unsupported categories. A
-curated-bank document with unknown category gets a page-one review before final
-rejection. This protects OCR spend while avoiding blind drops of relevant
-scanned governing documents.
+The worker filters hard rejects before OCR: PII, obvious junk, page-cap
+violations, wrong-state evidence, and exact duplicates. Every remaining
+curated-bank candidate gets a page-one review before low-value or unsupported
+rejection is final. This protects OCR spend while avoiding blind drops of
+relevant scanned governing documents.
 
 ## Import on Render
 
