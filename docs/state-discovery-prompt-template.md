@@ -31,7 +31,32 @@ Autonomously scrape public {state-name} HOA governing documents into the existin
 - Respect `robots.txt` (`HOA_DISCOVERY_RESPECT_ROBOTS=1`) and practical per-host delays.
 - Log all model usage to `data/model_usage.jsonl` (`HOA_MODEL_USAGE_LOG`). Do not log prompts, completions, document text, cookies, or API keys.
 - Commit reusable code and docs after each milestone with a descriptive message, then keep scraping. Do not commit `benchmark/results/`, `benchmark/run_benchmark.sh`, or `benchmark/task.txt`.
-- **Use cheaper subagents (Sonnet) wherever possible to conserve quota.** Reserve the orchestrator (Opus) for judgment-heavy steps: deciding which source family to chase next, reading new false-positive patterns out of validator audits, scoping the next pivot. Delegate the mechanical work to Sonnet via the Agent tool — building per-county query files, mirroring shell scripts to a new state, parsing public datasets (Sunbiz, gazetteers, ZIP→county maps), tagging rows, running long scrape/probe/validate batches in the background, and writing per-county summary updates to the handoff doc. Launch independent Sonnet agents in parallel when possible. The orchestrator's job is to plan and verify; the subagents do the typing.
+
+### Model and subagent right-sizing
+
+Use the strongest main-agent reasoning only for orchestration and hard judgment: choosing the next county/source-family branch, resolving novel false-positive patterns, deciding whether a new class of documents is bankable, and reviewing milestone summaries before commit/handoff.
+
+When the harness supports subagents, you are explicitly authorized to use them autonomously to reduce main-agent cost. Delegate bounded, non-overlapping work:
+
+- Explorer: inspect one county or one host family and return likely query/source patterns.
+- Runner: execute deterministic search/dedupe/clean/probe commands for one county/source family.
+- Curator: review compact public metadata after deterministic gates and propose keep/reject/name repairs.
+- Verifier: check bank counts, probe output, handoff consistency, and dirty git scope.
+
+Use low/medium reasoning for subagents unless the assigned task is genuinely ambiguous. Subagents may run deterministic scripts and prepare curated JSONL, but they must not override safety rules or send secrets, cookies, logged-in pages, resident/private data, emails, payment data, internal/work data, or full unreviewed document text to any model.
+
+### Mandatory workflow gates
+
+For every sweep, apply these gates before model validation or bank writes:
+
+1. Refresh exact-source dedupe against live GCS manifests for `{STATE}`.
+2. Reject signed, credentialed, private, portal, payment, resident, login, and obvious internal URLs.
+3. Reject obvious non-governing document types: newsletters, minutes, budgets, forms, applications, directories, facility/pool docs, real-estate listings, court packets, and government planning packets.
+4. Require governing-document evidence from the filename, URL, title/snippet, page text, or extracted PDF text.
+5. Require state/county evidence, or reroute to the correct state/county when clear.
+6. Use OpenRouter only on surviving compact public metadata: `name`, `source_url`, `title`, `snippet`, `filename`, deterministic category, and state/county hints.
+
+Keep these gates lightweight. Do not build a bespoke review process for every candidate; encode recurring rejects as deterministic filters, then move on.
 
 ### Initial strategy
 
@@ -50,11 +75,26 @@ Autonomously scrape public {state-name} HOA governing documents into the existin
    - `"{City}" "architectural guidelines" HOA filetype:pdf`
    - source-family searches for management portals and public document hosts that prove productive (eNeighbors, Cobalt, HOAMsoft / hmsft-doc, GoGladly, HOA Express, municipal `DocumentCenter/View`, BuilderCloud / S3, WordPress uploads, etc.)
 4. Preflight candidate pages and direct PDFs. Only bank governing PDFs: declarations, CC&Rs, bylaws, articles of incorporation, amendments, rules / regulations, architectural / design guidelines, resolutions.
-5. Avoid newsletters, meeting minutes, budgets, forms, pool documents, directories, violation letters, real estate listings, court / government planning packets, and out-of-state hits. When using same-host crawl on document-rich HOA websites, preflight links and pass only whitelisted governing PDFs as `pre_discovered_pdf_urls` — see "owned-site pass" lessons in the playbook.
+5. Avoid newsletters, meeting minutes, budgets, forms, pool documents, directories, violation letters, real estate listings, court / government planning packets, and out-of-scope hits. Do not reject out-of-state mandatory-HOA documents when the correct state/county is clear; reroute and bank under the correct prefix. When using same-host crawl on document-rich HOA websites, preflight links and pass only whitelisted governing PDFs as `pre_discovered_pdf_urls` — see "owned-site pass" lessons in the playbook.
 6. Whenever a source family proves productive, stop using the model on it and scrape that family deterministically.
 7. Maintain `docs/{state-lower}-discovery-handoff.md` with bank counts (before / after / running), source families attempted, query files used, false-positive patterns to block, model spend or token usage when available, and next branches. Commit it as you go so progress is recoverable across context resets.
 
-### Pivot rule
+### Autonomous loop and stop rules
+
+Run the state as an autonomous queue:
+
+1. Seed the top HOA-density counties from `{METRO_LIST}`.
+2. For each county, run deterministic search, dedupe, clean/preflight, compact validation only if needed, bank, count, update handoff, and continue.
+3. When a productive source family appears, create a source-family branch and run it with county/state routing.
+4. After two successful sweeps in one source family, promote it to deterministic mode and stop using models on it except for compact name repair.
+5. Commit reusable query/handoff milestones, then immediately continue.
+
+Per-branch stop rules:
+
+- If exact-source dedupe leaves fewer than 5 candidates from about 20 search calls, stop that branch.
+- If two consecutive sweeps in one family produce fewer than 3 new manifests and fewer than 10 PDFs, deprioritize that family.
+- If a county has two consecutive dry query angles, move to the next county.
+- If a source family becomes mostly mirrors, record it as duplicate-heavy and pivot.
 
 If county sweeps are dry, pivot to host-family expansion (see playbook section "Host-Focused Expansion"). If a source family stops adding new manifests, pivot to legal-phrase searches over recorded documents (`Register of Deeds`, `{state-name} not-for-profit corporation`, `Articles of Incorporation`, `Amendment to Declaration`, `Restated Bylaws`, `Supplemental Declaration`). When all of those flatten, run owned-domain whitelisted preflights against any HOA-owned websites surfaced earlier.
 
