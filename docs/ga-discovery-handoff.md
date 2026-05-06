@@ -142,21 +142,28 @@ deep-legal-1 work: 37 moved to the right county, 11 collisions
 (would have overwritten an existing manifest at the destination),
 276 still unrouted. Bank now at 86 county prefixes.
 
-## Final Run Stats (2026-05-05)
+## Final Run Stats (2026-05-06)
 
-After all passes (initial county sweep, host-family per-county over top
-40 metros, deep legal-phrase #1 + #2, county/city .gov + resort sweep,
-find-owned rounds 2 + 3, owned-domain depth, three backfill passes):
+After all passes — initial county sweep, host-family per-county over
+top 40 metros, deep legal-phrase #1 + #2, county/city .gov + resort
+sweep, find-owned rounds 2 + 3 + 4, owned-domain depth, atlanta-condo
+sweep, LLM-assisted backfill, three heuristic backfills, plus the v2
+deep per-county sweep over 79 GA counties with cross-state re-routing
+enabled:
 
-- **770 manifests / 1461 PDFs / 87 county prefixes**
-- ~1.90 PDFs / HOA average (vs. NC=4.05, TN=1.13, KS=2.40)
-- ~$0.30 OpenRouter spent during this run (running total $11.06 of
-  the $20 cap — leaves ~$8.94 for the next state).
-- ~296 manifests still under `_unknown-county/` (mostly malformed
-  legal-phrase-extracted names that the heuristic backfill can't pin
-  to a county; safe per the breadth-over-polish stance).
-- 35 backfill collision cases (same HOA banked under both a clean
-  slug and a malformed legal-phrase slug) need a manual merge pass.
+- **GA bank: 1843 manifests / 2746 PDFs / 97 county prefixes**
+- 309 manifests still under `_unknown-county/` (mostly text-non-extractable
+  scanned PDFs with no city/county hint anywhere — those need future
+  Serper-based address lookup or DocAI OCR to route).
+- ~1.49 PDFs / HOA average (vs. NC=4.05, TN=1.13, KS=2.40).
+- **40 US state buckets** populated: AL, AR, AZ, CA, CO, DE, FL, GA,
+  HI, IA, ID, IL, IN, KS, KY, LA, MD, MI, MN, MS, MT, NC, NE, NH, NJ,
+  NM, NV, NY, OH, OK, OR, PA, SC, TN, TX, UT, VA, WA, WI, WY. Each is
+  a free win from cross-state re-routing in the v2 sweep — those
+  states won't have to rediscover those HOAs when their own state
+  passes start.
+- $17.69 OpenRouter spent ($2.31 remaining of the $20 cap; the v2
+  driver's per-county DeepSeek validation was the main cost).
 
 ## Useful Next Branches
 
