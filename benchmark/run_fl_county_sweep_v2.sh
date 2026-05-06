@@ -118,8 +118,8 @@ python benchmark/scrape_state_serper_docpages.py \
   --default-county "$COUNTY" \
   --run-id "$SERPER_RUN" \
   --queries-file "$QUERIES" \
-  --max-queries 800 --results-per-query 10 --pages-per-query 1 \
-  --max-leads 800 --min-score 5 --search-delay 0.25 \
+  --max-queries 5000 --results-per-query 10 --pages-per-query 1 \
+  --max-leads 5000 --min-score 5 --search-delay 0.25 \
   --include-direct-pdfs
 
 LEADS="$ROOT/benchmark/results/fl_serper_docpages_${SERPER_RUN}/leads.jsonl"

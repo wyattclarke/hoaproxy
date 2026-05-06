@@ -49,3 +49,17 @@ Starting budget: ~$8 of $20 cap remaining as of GA pass. User cleared additional
 - 2026-05-05: Mis-routed manifest cleanup complete. 11 of 22 recovered to correct FL counties (broward, st-johns, collier, palm-beach, alachua, clay, duval, seminole, walton-FL); 11 unrecoverable junk (garbled OCR names, regulatory boilerplate, attorney CVs) moved to `_unknown-county/`. `scripts/fl_repair_misrouted_manifests.py` is idempotent.
 - 2026-05-05: Driver B launched in background (`run_all_fl_counties_v2.sh`). Started Miami-Dade with 34 cities, --max-queries 800, --max-leads 800. Expected ~17 min Serper + validate + clean + probe per county.
 - 2026-05-05: Drivers A and C scaffolded but not yet run. A targets top 20 counties × Sunbiz HOA names (~30k queries, ~$30 Serper). C targets 9 verified management-company domains × 7 patterns = 63 queries, ~$1.50 Serper. Holding both until Driver B finishes its first county to avoid concurrent Serper hammering.
+- 2026-05-05: Lifted `--max-queries` cap from 800 to 5000 in `run_fl_county_sweep_v2.sh` (effectively uncapped — no FL county's query file exceeds ~1100). Killed the in-flight Miami-Dade run + restarted from scratch with a small smoke-test on Sumter (The Villages) instead, since Sumter's ~190-query file completes the full pipeline in ~10 min and gives a faster validation gate on whether the FL pipeline works end-to-end.
+
+## Action plan when Sumter smoke test completes
+
+When the Monitor fires `SUMTER_PROCESS_EXITED` (or earlier `banked=N` / `Traceback`):
+
+1. **Inspect**: read `benchmark/results/fl_county_v2_Sumter/{validated.jsonl,cleaned.jsonl,probe.jsonl}` line counts; check `gsutil ls 'gs://hoaproxy-bank/v1/FL/sumter/' 2>/dev/null | wc -l` for new manifests.
+2. **If banks > 0** (pipeline works):
+   - Launch full Driver B in OS background: `bash benchmark/run_all_fl_counties_v2.sh` — runs all 36 counties starting from Miami-Dade. Will re-run Sumter at #36 (tiny cost; bank dedups via slug merge).
+   - Launch Driver C in OS background concurrently: `bash benchmark/run_fl_mgmt_host_sweep.sh` — 63 queries × 7 patterns, ~3–5 min total.
+   - After Driver B is ~5 counties in (~2 hours), launch Driver A: `bash benchmark/run_all_fl_sunbiz_counties.sh` — top 20 counties × Sunbiz HOA names. Stagger to avoid simultaneous DeepSeek validate calls.
+3. **If banks = 0 but pipeline ran clean** (no Traceback): unusual; means Sumter genuinely had no banks despite The Villages. Still launch full Driver B since the pipeline is sound; investigate Sumter's Sunbiz / search results separately.
+4. **If pipeline crashed**: debug the error (likely candidates: validator JSON parse, paramount cleaner regex on FL phrasings, probe robots.txt mismatch). Fix in code, retry Sumter, do not launch the full driver until the smoke passes.
+5. **Always**: append per-county summary lines to this handoff doc as banks land. Watch for Serper / DeepSeek rate-limit signals in logs and back off if needed.
