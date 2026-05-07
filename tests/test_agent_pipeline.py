@@ -215,6 +215,40 @@ def test_upload_accepts_valid_per_file_metadata():
     assert body["queued"] is True
 
 
+def test_admin_backfill_place_centroid_is_visible_on_map():
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        db.get_or_create_hoa(conn, "Mapped Place HOA")
+        conn.commit()
+
+    r = client.post(
+        "/admin/backfill-locations",
+        headers={"Authorization": "Bearer test-secret-for-ci"},
+        json={
+            "records": [
+                {
+                    "hoa": "Mapped Place HOA",
+                    "city": "Olathe",
+                    "state": "KS",
+                    "latitude": 38.89843,
+                    "longitude": -94.85907,
+                    "source": "serper_places",
+                    "location_quality": "place_centroid",
+                }
+            ]
+        },
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["matched"] == 1
+
+    r = client.get("/hoas/map-points", params={"state": "KS"})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert len(body) == 1
+    assert body[0]["hoa"] == "Mapped Place HOA"
+    assert body[0]["location_quality"] == "place_centroid"
+
+
 # ---------- /agent/precheck ----------
 
 def test_precheck_with_filename_only_classifies():

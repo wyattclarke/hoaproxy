@@ -3162,7 +3162,7 @@ def _prepared_bundle_location_fields(bundle: prepared_ingest.PreparedBundle) -> 
     if metadata_type not in {"hoa", "condo", "coop", "timeshare"}:
         metadata_type = None
     quality_hint = geometry.get("location_quality")
-    if quality_hint not in {"polygon", "address", "zip_centroid", "city_only", "unknown"}:
+    if quality_hint not in {"polygon", "address", "place_centroid", "zip_centroid", "city_only", "unknown"}:
         quality_hint = None
 
     return {
@@ -4118,14 +4118,14 @@ def admin_backfill_locations(request: Request, body: dict):
         ...
       ]}
 
-    Allowed location_quality values: polygon, address, zip_centroid,
-    city_only, unknown. Pass "city_only" to demote a stale lat/lon (so the
-    map filter excludes it) without nulling it.
+    Allowed location_quality values: polygon, address, place_centroid,
+    zip_centroid, city_only, unknown. Pass "city_only" to demote a stale
+    lat/lon (so the map filter excludes it) without nulling it.
     """
     _require_admin(request)
     settings = load_settings()
     records = body.get("records") or []
-    valid_quality = {"polygon", "address", "zip_centroid", "city_only", "unknown"}
+    valid_quality = {"polygon", "address", "place_centroid", "zip_centroid", "city_only", "unknown"}
     matched = 0
     not_found = 0
     bad_quality = 0

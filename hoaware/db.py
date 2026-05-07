@@ -505,8 +505,8 @@ def get_connection(db_path: Path) -> sqlite3.Connection:
     _ensure_table_column(conn, "hoa_locations", "metadata_type", "TEXT")
     _ensure_table_column(conn, "hoa_locations", "website_url", "TEXT")
     _ensure_table_column(conn, "hoa_locations", "boundary_geojson", "TEXT")
-    # Quality of the lat/lon: polygon | address | zip_centroid | city_only | unknown
-    # Map filter shows polygon/address/zip_centroid; hides city_only and NULL.
+    # Quality of the lat/lon: polygon | address | place_centroid | zip_centroid | city_only | unknown
+    # Map filter shows polygon/address/place_centroid/zip_centroid; hides city_only and NULL.
     _ensure_table_column(conn, "hoa_locations", "location_quality", "TEXT")
     # M6 migrations
     _ensure_table_column(conn, "hoas", "board_email", "TEXT")
@@ -834,8 +834,9 @@ def list_hoa_map_points(
     """Lightweight query returning only fields needed for map markers.
 
     Includes HOAs with either a polygon OR a vicinity-grade point. Vicinity-grade
-    means location_quality is set to 'address' (street-level geocode) or
-    'zip_centroid' (ZIP code centroid, ~1-3mi accuracy). Excludes the bulk-import
+    means location_quality is set to 'address' (street-level geocode),
+    'place_centroid' (subdivision/neighborhood/place result), or 'zip_centroid'
+    (ZIP code centroid, ~1-3mi accuracy). Excludes the bulk-import
     legacy state where location_quality is NULL or 'city_only' — those are
     city-center geocodes that would stack hundreds of pins on a single point.
     Polygon-less HOAs without a quality flag remain searchable by name through
@@ -843,7 +844,7 @@ def list_hoa_map_points(
     """
     params: list[Any] = []
     where_clauses: list[str] = [
-        "(l.boundary_geojson IS NOT NULL OR l.location_quality IN ('polygon', 'address', 'zip_centroid'))",
+        "(l.boundary_geojson IS NOT NULL OR l.location_quality IN ('polygon', 'address', 'place_centroid', 'zip_centroid'))",
         "l.latitude IS NOT NULL",
         "l.longitude IS NOT NULL",
     ]
