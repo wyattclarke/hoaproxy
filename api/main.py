@@ -4198,6 +4198,169 @@ def admin_backfill_locations(request: Request, body: dict):
     }
 
 
+@app.post("/admin/rename-hoa")
+def admin_rename_hoa(request: Request, body: dict):
+    """Rename an HOA in place, or merge it into an existing one if the new
+    name is already taken.
+
+    Body shape:
+      {"renames": [{"hoa_id": 123, "new_name": "..."}], "dry_run": false}
+      OR a single rename via {"hoa_id": 123, "new_name": "...", "dry_run": false}
+
+    Behavior:
+      - If `new_name` does not match another HOA, this is a pure rename
+        (UPDATE hoas.name). Documents/chunks/locations stay attached.
+      - If `new_name` matches an existing HOA (target), this becomes a merge:
+        documents whose relative_path is unique to the source are reattached
+        to the target. Duplicate documents on the source are dropped (the
+        target's row wins). Chunks follow their documents via FK; the vec0
+        partition key is rewritten by re-touching chunks.embedding so the
+        chunks_vec_update trigger re-derives hoa_id from documents.hoa_id.
+        Source's hoa_locations is kept only if target has none. Source row
+        is finally deleted.
+
+    Returns counts and per-rename outcomes. Idempotent: renaming to the
+    current name is a no-op.
+    """
+    _require_admin(request)
+    import sqlite3
+    settings = load_settings()
+    items = body.get("renames")
+    if not items:
+        if "hoa_id" in body and "new_name" in body:
+            items = [{"hoa_id": body["hoa_id"], "new_name": body["new_name"]}]
+    if not isinstance(items, list) or not items:
+        raise HTTPException(status_code=400, detail="renames[] required")
+    dry_run = bool(body.get("dry_run") or False)
+
+    results: list[dict] = []
+    renamed = merged = noop = errors = 0
+
+    with db.get_connection(settings.db_path) as conn:
+        for entry in items:
+            try:
+                source_id = int(entry.get("hoa_id"))
+            except Exception:
+                results.append({"status": "error", "reason": "bad hoa_id"})
+                errors += 1
+                continue
+            new_name = (entry.get("new_name") or "").strip()
+            if not new_name or len(new_name) > 200:
+                results.append({"hoa_id": source_id, "status": "error", "reason": "bad new_name"})
+                errors += 1
+                continue
+
+            src = conn.execute(
+                "SELECT id, name FROM hoas WHERE id = ?", (source_id,)
+            ).fetchone()
+            if not src:
+                results.append({"hoa_id": source_id, "status": "error", "reason": "not_found"})
+                errors += 1
+                continue
+            old_name = str(src["name"])
+            if old_name == new_name:
+                results.append({"hoa_id": source_id, "status": "noop", "name": new_name})
+                noop += 1
+                continue
+
+            target = conn.execute(
+                "SELECT id FROM hoas WHERE name = ?", (new_name,)
+            ).fetchone()
+            try:
+                if target is None or int(target["id"]) == source_id:
+                    if not dry_run:
+                        conn.execute("UPDATE hoas SET name = ? WHERE id = ?", (new_name, source_id))
+                    results.append({
+                        "hoa_id": source_id,
+                        "status": "renamed",
+                        "old_name": old_name,
+                        "new_name": new_name,
+                    })
+                    renamed += 1
+                else:
+                    target_id = int(target["id"])
+                    if dry_run:
+                        results.append({
+                            "hoa_id": source_id,
+                            "status": "would_merge",
+                            "old_name": old_name,
+                            "new_name": new_name,
+                            "target_id": target_id,
+                        })
+                        continue
+                    # Move documents the target doesn't already have
+                    conn.execute(
+                        """
+                        UPDATE documents SET hoa_id = ?
+                        WHERE hoa_id = ?
+                          AND relative_path NOT IN (
+                            SELECT relative_path FROM documents WHERE hoa_id = ?
+                          )
+                        """,
+                        (target_id, source_id, target_id),
+                    )
+                    # Re-touch embeddings so chunks_vec_update re-derives hoa_id
+                    conn.execute(
+                        """
+                        UPDATE chunks SET embedding = embedding
+                        WHERE document_id IN (SELECT id FROM documents WHERE hoa_id = ?)
+                          AND embedding IS NOT NULL AND length(embedding) > 0
+                        """,
+                        (target_id,),
+                    )
+                    # Drop any leftover documents on the source (duplicate paths)
+                    conn.execute("DELETE FROM documents WHERE hoa_id = ?", (source_id,))
+                    # Move location iff target has none
+                    has_target_loc = conn.execute(
+                        "SELECT 1 FROM hoa_locations WHERE hoa_id = ?", (target_id,)
+                    ).fetchone()
+                    if has_target_loc is None:
+                        conn.execute(
+                            "UPDATE hoa_locations SET hoa_id = ? WHERE hoa_id = ?",
+                            (target_id, source_id),
+                        )
+                    else:
+                        conn.execute("DELETE FROM hoa_locations WHERE hoa_id = ?", (source_id,))
+                    # Other FK-bearing tables: drop source-side rows so the
+                    # final hoas DELETE doesn't get blocked.
+                    for sql in (
+                        "DELETE FROM membership_claims WHERE hoa_id = ?",
+                        "DELETE FROM delegates WHERE hoa_id = ?",
+                        "DELETE FROM proxy_assignments WHERE hoa_id = ?",
+                        "DELETE FROM proxy_audit WHERE hoa_id = ?",
+                        "DELETE FROM proposals WHERE hoa_id = ?",
+                        "DELETE FROM meetings WHERE hoa_id = ?",
+                    ):
+                        try:
+                            conn.execute(sql, (source_id,))
+                        except sqlite3.OperationalError:
+                            pass
+                    conn.execute("DELETE FROM hoas WHERE id = ?", (source_id,))
+                    results.append({
+                        "hoa_id": source_id,
+                        "status": "merged",
+                        "old_name": old_name,
+                        "new_name": new_name,
+                        "target_id": target_id,
+                    })
+                    merged += 1
+            except sqlite3.IntegrityError as exc:
+                results.append({"hoa_id": source_id, "status": "error", "reason": str(exc)})
+                errors += 1
+
+        if not dry_run:
+            conn.commit()
+
+    return {
+        "dry_run": dry_run,
+        "renamed": renamed,
+        "merged": merged,
+        "noop": noop,
+        "errors": errors,
+        "results": results,
+    }
+
+
 @app.post("/admin/extract-doc-zips")
 def admin_extract_doc_zips(request: Request, state: str | None = None, limit: int = 5000):
     """Scan each HOA's chunked text for postal-code mentions and return the
