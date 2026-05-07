@@ -202,7 +202,10 @@ def _ask_llm(client: OpenAI, model: str, name: str, text: str) -> dict[str, Any]
         )
     except Exception as exc:
         return {"_error": str(exc)}
-    raw = (resp.choices[0].message.content or "").strip()
+    choices = getattr(resp, "choices", None) or []
+    if not choices:
+        return {"_error": "empty_choices"}
+    raw = (choices[0].message.content or "").strip()
     try:
         return json.loads(raw)
     except json.JSONDecodeError:
@@ -307,6 +310,8 @@ def main() -> int:
             skipped.append(decision)
         if i % 10 == 0:
             print(f"  processed {i}/{len(dirty)}", file=sys.stderr)
+            # incremental flush so a mid-run crash doesn't lose progress
+            out_path.write_text("\n".join(json.dumps(d, sort_keys=True) for d in decisions))
         time.sleep(args.sleep_s)
 
     out_path.write_text("\n".join(json.dumps(d, sort_keys=True) for d in decisions))

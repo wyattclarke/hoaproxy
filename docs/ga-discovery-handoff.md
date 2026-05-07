@@ -191,6 +191,87 @@ enabled:
 - $17.69 OpenRouter spent ($2.31 remaining of the $20 cap; the v2
   driver's per-county DeepSeek validation was the main cost).
 
+## Live Launch (2026-05-07)
+
+After landing the prepared bundles into the live site and running the
+post-import map-cleanup loop:
+
+- **Bank → prepared:** 1,800 manifests / 2,688 PDFs banked → 1,340
+  prepared bundles (96.2% of valid manifests). 50 `_unknown-county/`
+  bundles were marked `failed` before import; 1 more was rejected by the
+  API (`Invalid HOA name`).
+- **Prepared → live:** 1,289 imported (one ~50-bundle batch timed out
+  client-side mid-run but Render finished server-side, so the count is
+  intact). Resulted in 1,153 live HOAs / 2,081 docs / 58,139 chunks.
+- **OCR/filter accept rate:** 73.8% — 2,074 of 2,811 evaluated docs
+  passed page-1/full-text review. Top reject reasons:
+  duplicate (347), junk (128), low_value (114), unsupported_category
+  (96), pii (46), page_cap (6).
+
+### Map cleanup
+
+- Pre-import polygons (Nominatim during prepare): 186
+- Post-import OCR ZIP centroids (Census ZCTA): +218
+- Post-import Serper Places (pass 1, min-score 0.65): +148 address +
+  95 place_centroid
+- Post-import Serper Places (pass 2, min-score 0.55): +17 address + 8
+  place_centroid
+- Took live map coverage from 0% → 57.8% pre-rename.
+
+### Name cleanup (rename + merge endpoint)
+
+Built `/admin/rename-hoa` with merge-on-collision (8 unit tests).
+Driver `state_scrapers/ga/scripts/clean_dirty_hoa_names.py` flags 180
+dirty live names (16% of imported) using a heuristic
+(lowercase-starts, shouting OCR fragments like `BY-LAWS OF`,
+sentence-fragment prefixes, very long names) and asks DeepSeek
+(Kimi-K2.6 fallback) to extract the canonical name from the first
+~3.5k chars of indexed OCR text.
+
+- Scanned: 180
+- High-confidence proposals (≥0.7): 118
+- Skipped as opaque: 62 (LLM returned null or low confidence)
+- Applied: 106 in-place renames + 12 merges (0 errors)
+- Net live count moved from 1,153 → 1,139 because 14 dirty rows merged
+  into pre-existing canonical rows.
+
+### Post-rename Serper retry
+
+Re-running Serper Places against the now-canonicalized names found 31
+more matches (19 address + 12 place_centroid).
+
+### Final live numbers (2026-05-07)
+
+- **Live HOAs:** 1,139
+- **Live documents:** 2,055
+- **Live chunks:** 57,510 (0 HOAs with chunk_count = 0)
+- **Map points:** 686 (**60.2% mapped**)
+  - boundary_geojson (Nominatim polygon): 162
+  - point only (zip_centroid + address + place_centroid): 524
+  - unmapped: 453
+- Final report: `state_scrapers/ga/results/final_state_report.json`
+
+### Known gaps after launch
+
+- 487 → 453 HOAs remain unmapped. Most are profiles whose docs contain
+  no recognizable place name even after rename — typically OCR'd
+  fragments where the canonical name itself was unrecoverable.
+- 11 specific PDFs (8 HOAs: Iron Gate / Bulloch, Martin's Landing /
+  Fulton, Windsong Manor / Cherokee, Magnolia Ridge / Fayette,
+  Hampshire Village / Cobb, Blue Jay Commons / Effingham, plus
+  duplicates) were prepared *only* under `_unknown-county/` and were
+  therefore lost when that prefix was marked `failed` before import.
+  The real-county bank manifests still exist; recovering them needs a
+  targeted re-prepare with `--skip-live-duplicate-check` after
+  deleting the failed `_unknown-county/` bundles.
+- 54 of GA's 159 counties have zero manifests in the bank — small
+  rural counties never reached by the per-county sweep. Not a
+  launch-blocker but a future widening pass would help.
+- 62 dirty names remain because the LLM couldn't infer a canonical
+  name from the document text. These are documents whose page-1 text
+  is a generic disclosure form or a fragment that happens to contain
+  the words "homeowners association" without naming a specific HOA.
+
 ## Useful Next Branches
 
 - **Manual merge of backfill collisions** (35 cases now): take the clean-slug manifest as canonical, copy any missing PDFs from the malformed-slug version, then delete the malformed copy. Each is a 2-minute manual diff.
