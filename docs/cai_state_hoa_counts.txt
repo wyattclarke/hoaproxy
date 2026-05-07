@@ -1,0 +1,53 @@
+| State / DC           | CAI estimate of community associations |
+| -------------------- | -------------------------------------: |
+| Alabama              |                                 >3,000 |
+| Alaska               |                                 <1,000 |
+| Arizona              |                                 10,200 |
+| Arkansas             |                                 <1,000 |
+| California           |                                 51,250 |
+| Colorado             |                                 11,700 |
+| Connecticut          |                                  5,150 |
+| Delaware             |                                 <1,500 |
+| District of Columbia |                                 <1,500 |
+| Florida              |                                 50,100 |
+| Georgia              |                                 11,300 |
+| Hawaii               |                                  1,600 |
+| Idaho                |                                 <3,000 |
+| Illinois             |                                 19,750 |
+| Indiana              |                                  5,200 |
+| Iowa                 |                                 <3,000 |
+| Kansas               |                                 <2,000 |
+| Kentucky             |                                  2,500 |
+| Louisiana            |                                  2,200 |
+| Maine                |                                 <2,000 |
+| Maryland             |                                  7,200 |
+| Massachusetts        |                                 11,600 |
+| Michigan             |                                  8,700 |
+| Minnesota            |                                  8,000 |
+| Mississippi          |                                 <1,000 |
+| Missouri             |                                  5,750 |
+| Montana              |                                 >2,000 |
+| Nebraska             |                                 <1,200 |
+| Nevada               |                                  3,800 |
+| New Hampshire        |                                 <2,500 |
+| New Jersey           |                                  7,200 |
+| New Mexico           |                                 <1,500 |
+| New York             |                                 14,500 |
+| North Carolina       |                                 15,050 |
+| North Dakota         |                                   <750 |
+| Ohio                 |                                  8,800 |
+| Oklahoma             |                                 <2,000 |
+| Oregon               |                                  4,150 |
+| Pennsylvania         |                                  7,150 |
+| Rhode Island         |                                 <1,250 |
+| South Carolina       |                                  7,500 |
+| South Dakota         |                                   <600 |
+| Tennessee            |                                  5,400 |
+| Texas                |                                 22,900 |
+| Utah                 |                                  3,700 |
+| Vermont              |                                 <1,500 |
+| Virginia             |                                  9,200 |
+| Washington           |                                 10,900 |
+| West Virginia        |                                 <1,000 |
+| Wisconsin            |                                  5,650 |
+| Wyoming              |                                   <750 |
