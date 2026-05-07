@@ -67,7 +67,7 @@ STOP_TOKENS = {
 }
 
 BAD_CATEGORY_RE = re.compile(
-    r"assisted living|senior|apartment|real estate agent|realtor|"
+    r"assisted living|senior|apartment|"
     r"property management|management company|law firm|attorney|city government",
     re.I,
 )
@@ -162,9 +162,7 @@ def _acceptance(hoa: dict[str, Any], place: dict[str, Any], min_score: float) ->
         return None
 
     bad_category = bool(BAD_CATEGORY_RE.search(category) or BAD_CATEGORY_RE.search(title))
-    if bad_category and score < 1.0:
-        return None
-    if bad_category and len(_tokens(_compact_name(str(hoa["hoa"])))) <= 1:
+    if bad_category:
         return None
 
     return {
