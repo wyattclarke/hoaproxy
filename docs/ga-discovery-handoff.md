@@ -142,6 +142,32 @@ deep-legal-1 work: 37 moved to the right county, 11 collisions
 (would have overwritten an existing manifest at the destination),
 276 still unrouted. Bank now at 86 county prefixes.
 
+## Post-Hoc Cleanup (2026-05-06)
+
+After the v2 sweep finished, two cleanup passes ran on the
+`_unknown-county/` backlog (309 manifests):
+
+1. `scripts/ga_cleanup_unknown_county.py` — combines LLM name-repair
+   (DeepSeek, only fired when the current name looks malformed) with a
+   Serper address-lookup fallback (one search per HOA, scans organic
+   results for an explicit GA county or known city). Routed 120
+   manifests; flagged 41 collisions; left 148 truly stuck.
+
+2. `scripts/ga_purge_collision_orphans.py` — cleaned up the 41
+   collision cases. 21 were pure duplicates (deleted). 20 had unique
+   PDFs the canonical manifest didn't have; merged those PDFs into the
+   canonical doc-{sha[:12]}/ folders, appended their records to the
+   canonical manifest, then deleted the orphan.
+
+Net cleanup: -52% `_unknown-county/` manifests (309 → 148), +3 county
+prefixes (97 → 100), 11 unique PDFs merged into existing manifests,
+and 41 duplicate manifests removed.
+
+The 148 still-stuck manifests are scanned PDFs with no extractable
+text and no usable city/county hint in their URL or name. Future
+recovery would require DocAI OCR (~$0.05/page) or a paid Google Maps /
+property-records API for address lookup.
+
 ## Final Run Stats (2026-05-06)
 
 After all passes — initial county sweep, host-family per-county over
@@ -151,8 +177,8 @@ sweep, LLM-assisted backfill, three heuristic backfills, plus the v2
 deep per-county sweep over 79 GA counties with cross-state re-routing
 enabled:
 
-- **GA bank: 1843 manifests / 2746 PDFs / 97 county prefixes**
-- 309 manifests still under `_unknown-county/` (mostly text-non-extractable
+- **GA bank: 1802 manifests / 2689 PDFs / 100 county prefixes** (post-cleanup; pre-cleanup was 1843/2746/97)
+- 148 manifests still under `_unknown-county/` (down from 309 after the post-hoc cleanup) (mostly text-non-extractable
   scanned PDFs with no city/county hint anywhere — those need future
   Serper-based address lookup or DocAI OCR to route).
 - ~1.49 PDFs / HOA average (vs. NC=4.05, TN=1.13, KS=2.40).
