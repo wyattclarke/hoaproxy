@@ -825,3 +825,88 @@ Additional field for provenance tracking:
 | `/admin/costs/docai-alert` | GET | Set DocAI spend alert threshold | `?threshold_usd=N&hours=24&notify=true` |
 | `/hoas/summary` | GET | Live HOA count by state | `?state=XX` |
 | `/hoas/map-points` | GET | Live map coordinates by state | `?state=XX`; use to verify no out-of-state points |
+
+---
+
+## Appendix D — Per-State Launch Packet
+
+This table assigns every remaining jurisdiction a primary discovery recommendation based on Phase 2's decision matrix and existing per-state experience. Verify the recommendation in Phase 1 preflight (10-minute spike); pivot if the recommended source is closed, paywalled, or yields zero hits in two short sweeps. **Tentative** is implicit for any not-started row — only DE/FL/GA/KS/RI/TN have lived experience.
+
+| State | CAI | Tier | Status | Primary discovery | Notes |
+|---|---|---|---|---|---|
+| AK | <1,000 | 0 | not-started | SoS-first | Alaska Div. of Corporations; sparse population |
+| AL | >3,000 | 1 | not-started | keyword-Serper | Southern county-recorder pattern |
+| AR | <1,000 | 0 | not-started | keyword-Serper | County recorders publish; SoS may be thin |
+| AZ | 10,200 | 3 | not-started | keyword-Serper | Maricopa/Pima dominate |
+| CA | 51,250 | 4 | not-started | custom-plan | Own state-specific plan; multi-month, $500+ |
+| CO | 11,700 | 3 | not-started | keyword-Serper | Front Range concentrates HOAs |
+| CT | 5,150 | 2 | in-progress | SoS-first | Active session; do not modify |
+| DC | <1,500 | 0 | not-started | open-portal | DC Recorder of Deeds is unified municipal |
+| DE | <1,500 | 0 | done | open-portal | Sussex Landmark open portal; Serper supplement |
+| FL | 50,100 | 4 | done | sunbiz-style | Sunbiz bulk + per-county Serper; canonical Tier 4 |
+| GA | 11,300 | 3 | done | keyword-Serper | Per-county Serper; canonical Tier 3 |
+| HI | 1,600 | 1 | not-started | condo-registry | HI Bureau of Conveyances; condo-heavy |
+| IA | <3,000 | 1 | not-started | keyword-Serper | County recorders |
+| ID | <3,000 | 1 | not-started | keyword-Serper | County recorders |
+| IL | 19,750 | 3 | not-started | keyword-Serper | Cook/DuPage heavy |
+| IN | 5,200 | 2 | in-progress | keyword-Serper | Active session; do not modify |
+| KS | <2,000 | 1 | done | keyword-Serper | Per-county Serper; canonical Tier 1 keyword run |
+| KY | 2,500 | 1 | not-started | keyword-Serper | Southern county-recorder pattern |
+| LA | 2,200 | 1 | not-started | keyword-Serper | Parish-based (not counties); adapt slugs |
+| MA | 11,600 | 3 | not-started | SoS-first | NE pattern; aggregator alternative |
+| MD | 7,200 | 2 | not-started | keyword-Serper | DC metro concentrates HOAs |
+| ME | <2,000 | 1 | not-started | SoS-first | NE small-state pattern |
+| MI | 8,700 | 2 | not-started | keyword-Serper | Large metros |
+| MN | 8,000 | 2 | not-started | keyword-Serper | County recorders |
+| MO | 5,750 | 2 | not-started | keyword-Serper | County recorders |
+| MS | <1,000 | 0 | not-started | keyword-Serper | County recorders dominant in the South |
+| MT | >2,000 | 1 | not-started | SoS-first | Sparse population |
+| NC | 15,050 | 3 | not-started | aggregator | Closing Carolina + CASNC primary |
+| ND | <750 | 0 | not-started | SoS-first | Small universe; simple |
+| NE | <1,200 | 0 | not-started | SoS-first | Small-state pattern |
+| NH | <2,500 | 1 | not-started | SoS-first | NE small-state pattern |
+| NJ | 7,200 | 2 | not-started | keyword-Serper | Aggregator candidates exist (NJ HOA dirs) |
+| NM | <1,500 | 0 | not-started | keyword-Serper | NM HOA Act registration also possible |
+| NV | 3,800 | 1 | not-started | keyword-Serper | Concentrated in Clark/Washoe |
+| NY | 14,500 | 3 | not-started | keyword-Serper | NYC condo + suburbs |
+| OH | 8,800 | 2 | not-started | keyword-Serper | County recorders |
+| OK | <2,000 | 1 | not-started | keyword-Serper | Southern county-recorder pattern |
+| OR | 4,150 | 2 | not-started | keyword-Serper | County recorders |
+| PA | 7,150 | 2 | not-started | keyword-Serper | County recorders + condo |
+| RI | <1,250 | 0 | done | SoS-first | SoS-first canonical Tier 0/1 |
+| SC | 7,500 | 2 | partial | keyword-Serper | Only benchmarks done |
+| SD | <600 | 0 | not-started | SoS-first | Tiny universe |
+| TN | 5,400 | 2 | done | keyword-Serper | Per-county Serper; canonical Tier 2 keyword run |
+| TX | 22,900 | 3 | not-started | sunbiz-style | TX SoS bulk + per-county Serper (FL pattern) |
+| UT | 3,700 | 1 | not-started | keyword-Serper | County recorders + LDS-region notes |
+| VA | 9,200 | 2 | not-started | keyword-Serper | Has legal corpus already loaded |
+| VT | <1,500 | 0 | not-started | SoS-first | NE small-state pattern (RI-style) |
+| WA | 10,900 | 3 | not-started | keyword-Serper | County recorders |
+| WI | 5,650 | 2 | not-started | keyword-Serper | County recorders |
+| WV | <1,000 | 0 | not-started | keyword-Serper | County recorders; SoS adequacy unverified |
+| WY | <750 | 0 | not-started | SoS-first | Sparse population |
+
+### Per-Tier Cost Defaults
+
+```
+Tier 0:  --max-docai-cost-usd  5    expected wall time 4-12 h
+Tier 1:  --max-docai-cost-usd 10    expected wall time 1-2 days
+Tier 2:  --max-docai-cost-usd 30    expected wall time 3-5 days, phased
+Tier 3:  --max-docai-cost-usd 75    operator-supervised; multi-week
+Tier 4:  custom-plan; expect $500+
+```
+
+### Parallel-Batch Budget Arithmetic
+
+Running 4 Tier-0 sessions in parallel at $5 each = $20 total DocAI. The GCP `hoaware` project monthly cap is $600 (auto-shutoff via stop-billing Cloud Function); 4 × $5 × 30 days = $600 ceiling — plan accordingly. The Render-side `/upload` daily cap (`DAILY_DOCAI_BUDGET_USD=20`) only affects pages OCR'd through `/upload`; this pipeline OCRs in `prepare_bank_for_ingest.py` against GCP directly.
+
+### Per-State Launch Checklist
+
+Copy-paste at the start of each session:
+
+1. Confirm state assignment from Appendix D table.
+2. Read `state_scrapers/_template/README.md` for the runner skeleton; copy to `state_scrapers/{state}/`.
+3. Verify Phase 1 preflight passes (GCS, DocAI, Serper, admin token).
+4. Confirm per-tier `--max-docai-cost-usd` is set in the runner before applying.
+5. Tag `--run-id` with both `{state}_{YYYYMMDD_HHMMSS}` and the agent name (`claude` or `codex`) for cross-batch attribution.
+6. Run autonomously; produce Phase 10 retrospective at `state_scrapers/{state}/notes/retrospective.md`.
