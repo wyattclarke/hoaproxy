@@ -131,3 +131,20 @@ Per-branch stop rules:
 If county sweeps are dry, pivot to host-family expansion (see playbook section "Host-Focused Expansion"). If a source family stops adding new manifests, pivot to legal-phrase searches over recorded documents (`Register of Deeds`, `{state-name} not-for-profit corporation`, `Articles of Incorporation`, `Amendment to Declaration`, `Restated Bylaws`, `Supplemental Declaration`). When all of those flatten, run owned-domain whitelisted preflights against any HOA-owned websites surfaced earlier.
 
 Stop only when source families are genuinely exhausted, the OpenRouter credit budget is exhausted, or the user explicitly asks for status.
+
+### Final state narrative requirement
+
+When a state reaches the live site, write a final narrative retrospective in the
+state-specific artifact directory, for example
+`state_scrapers/{state-lower}/results/<run_id>/{state-lower}_scrape_retrospective.md`.
+This is mandatory for every new state. It must be useful to future state
+scrapers, not just a status report. Include:
+
+- What worked, what failed, and which source families should or should not be
+  reused.
+- Final raw-bank, prepared-ingest, live-site, document, chunk, map-coverage, and
+  out-of-bounds map counts.
+- A cost estimate per HOA scraped, explicitly including Serper, OpenRouter, and
+  DocAI, plus the assumptions used when exact metering is unavailable.
+- The main false-positive classes and the cleanup steps needed before the state
+  was safe to call done.
