@@ -45,7 +45,7 @@ from __future__ import annotations
 import argparse, glob, json, os, re, sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[3]
 
 # HOA/condo name pattern.  Inclusive of: HOA, POA, condo, townhome, master,
 # property owners, homeowners, villas-of-X-association etc.  Avoid matching

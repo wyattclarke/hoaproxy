@@ -27,7 +27,7 @@ export HOA_DISCOVERY_RESPECT_ROBOTS=1
 export PYTHONUNBUFFERED=1
 
 # Build targeted per-HOA-name queries from the Sunbiz seed.
-python scripts/fl_build_sunbiz_county_queries.py \
+python state_scrapers/fl/scripts/fl_build_sunbiz_county_queries.py \
   --county "$SLUG" \
   --output "$QUERIES" \
   --max-queries-per-county 1500

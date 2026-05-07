@@ -16,7 +16,7 @@ import re
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[3]
 SUNBIZ_PATH = ROOT / "data" / "fl_sunbiz_hoas_geocoded.jsonl"
 
 # Strip these suffixes before quoting the name.

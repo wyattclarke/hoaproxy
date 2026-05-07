@@ -13,7 +13,7 @@ import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[3]
 INPUT = ROOT / "data" / "fl_sunbiz_hoas_geocoded.jsonl"
 OUTPUT = ROOT / "data" / "fl_top_management_companies.json"
 
