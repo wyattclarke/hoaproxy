@@ -9,7 +9,7 @@ response if blocked, out of budget, or asked for status.
 ## Current State
 
 - Bank prefix: `gs://hoaproxy-bank/v1/VT/`
-- Initial bank count: `0` manifests, `0` PDFs.
+- Current clean bank count: `17` manifests, `21` PDFs.
 - Run ID: `vt_20260507_224836_codex`
 - Tier/budget: Tier 0; `--max-docai-cost-usd 5`.
 - Discovery branch: SoS-first preflight failed headlessly; fallback is
@@ -31,31 +31,49 @@ available without bypassing CAPTCHA.
 | Source family | Queries run | Net manifests | Net PDFs | Yield | Status |
 |---|---:|---:|---:|---|---|
 | Vermont SoS API | 1 API payload probe | 0 | 0 | zero | blocked by CAPTCHA/Imperva |
-| County Serper fallback | pending | pending | pending | pending | active |
+| County Serper fallback | 88 Serper calls | 17 | 21 | low but usable | stopped under low-yield rule |
+| SNHA source-family sweep | 4 Serper calls | 0 | 1 enrichment | low | exhausted |
 
 ## Productive Sources
 
-None yet. Prioritize Chittenden, Rutland, Washington, Bennington, and Lamoille
-first because density is likely highest around Burlington, resort condos, and
-Montpelier/Stowe.
+- Direct-only curated leads in `leads/vt_curated_repair_leads.jsonl`,
+  `leads/vt_curated_direct_reprobe_leads.jsonl`,
+  `leads/vt_curated_second_wave_leads.jsonl`, and
+  `leads/vt_curated_snha_enrichment_leads.jsonl`.
+- Productive communities came from public HOA/condo sites, resort-community
+  document hosts, and municipal development-review attachments where the PDF
+  text clearly named the association.
+- Strongest final sources: Smugglers' Notch/SNHA condominium documents,
+  Eastridge Acres/Sunrise PDFs, Chimney Hill/Haystack Highlands CDN PDFs,
+  Quechee Lakes auction packet PDFs, and direct municipal attachments for
+  Hillview Heights / Old Morgan Orchard.
 
 ## Dry Sources
 
 - Direct Vermont SoS API calls are blocked headlessly.
+- Broad county searches were very noisy: municipal plans, zoning bylaws,
+  regional plans, hazard mitigation plans, permit packets, real-estate due
+  diligence packets, court filings, legislative PDFs, and out-of-state county
+  overlap dominated the raw results.
+- Automatic probing was too permissive on the first Chittenden/Rutland pass and
+  banked municipal packets. Those prefixes were deleted from GCS and replaced
+  by direct-only curated leads.
 
 ## Stop Reasons by Branch
 
 - SoS-first: stopped at preflight because public search requires CAPTCHA and
   direct API calls return Imperva 403.
+- County Serper fallback: stopped after all 14 counties plus one SNHA
+  source-family sweep. Net was 17 clean manifests / 21 PDFs, and the remaining
+  collect-only candidates were >80% government, real-estate, court, or generic
+  planning documents.
 
 ## Next Branches
 
-1. Run county Serper fallback with conservative per-county lead caps and
-   `--require-state-hint`.
-2. Probe only public governing-document candidates; skip portals, resident
-   pages, newsletters, minutes, forms, and real-estate packets.
-3. After banking, run `prepare_bank_for_ingest.py` with `--max-docai-cost-usd 5`.
-4. Write `final_state_report.json` and the mandatory retrospective before exit.
+1. Run `prepare_bank_for_ingest.py` through the VT runner with
+   `--max-docai-cost-usd 5`.
+2. Import prepared VT bundles into live through `/admin/ingest-ready-gcs`.
+3. Verify live counts/map coverage and write the mandatory retrospective.
 
 ## Useful Commands
 
