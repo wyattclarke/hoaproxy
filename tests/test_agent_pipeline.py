@@ -8,6 +8,7 @@ Covers:
 """
 
 import io
+import json
 import os
 import tempfile
 
@@ -247,6 +248,66 @@ def test_admin_backfill_place_centroid_is_visible_on_map():
     assert len(body) == 1
     assert body[0]["hoa"] == "Mapped Place HOA"
     assert body[0]["location_quality"] == "place_centroid"
+
+
+def test_admin_backfill_can_clear_stale_spatial_fields():
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        db.upsert_hoa_location(
+            conn,
+            "Stale Cross State HOA",
+            city="Austin",
+            state="TX",
+            latitude=30.26,
+            longitude=-97.74,
+            boundary_geojson=json.dumps(
+                {
+                    "type": "Polygon",
+                    "coordinates": [[[-97.75, 30.25], [-97.74, 30.25], [-97.74, 30.26], [-97.75, 30.25]]],
+                }
+            ),
+            location_quality="polygon",
+        )
+
+    r = client.post(
+        "/admin/backfill-locations",
+        headers={"Authorization": "Bearer test-secret-for-ci"},
+        json={
+            "records": [
+                {
+                    "hoa": "Stale Cross State HOA",
+                    "city": "Nashville",
+                    "state": "TN",
+                    "source": "location_cleanup",
+                    "location_quality": "city_only",
+                    "clear_coordinates": True,
+                    "clear_boundary_geojson": True,
+                }
+            ]
+        },
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["matched"] == 1
+
+    with db.get_connection(settings.db_path) as conn:
+        row = conn.execute(
+            """
+            SELECT l.latitude, l.longitude, l.boundary_geojson, l.location_quality, l.state
+            FROM hoa_locations l
+            JOIN hoas h ON h.id = l.hoa_id
+            WHERE h.name = ?
+            """,
+            ("Stale Cross State HOA",),
+        ).fetchone()
+    assert row["state"] == "TN"
+    assert row["latitude"] is None
+    assert row["longitude"] is None
+    assert row["boundary_geojson"] is None
+    assert row["location_quality"] == "city_only"
+
+    r = client.get("/hoas/map-points", params={"state": "TN"})
+    assert r.status_code == 200, r.text
+    assert all(point["hoa"] != "Stale Cross State HOA" for point in r.json())
 
 
 # ---------- /agent/precheck ----------

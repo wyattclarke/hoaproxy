@@ -3294,6 +3294,24 @@ def admin_ingest_ready_gcs(
 
             location = _prepared_bundle_location_fields(bundle)
             with db.get_connection(settings.db_path) as conn:
+                existing_location = conn.execute(
+                    """
+                    SELECT l.state
+                    FROM hoa_locations l
+                    JOIN hoas h ON h.id = l.hoa_id
+                    WHERE lower(h.name) = lower(?)
+                    """,
+                    (resolved_hoa,),
+                ).fetchone()
+                has_new_spatial = (
+                    location["latitude"] is not None
+                    and location["longitude"] is not None
+                ) or bool(location["boundary_geojson"])
+                clear_stale_spatial = (
+                    not has_new_spatial
+                    and existing_location is not None
+                    and (existing_location["state"] or "").upper() != location["state"]
+                )
                 db.upsert_hoa_location(
                     conn,
                     resolved_hoa,
@@ -3309,6 +3327,8 @@ def admin_ingest_ready_gcs(
                     boundary_geojson=location["boundary_geojson"],
                     source="gcs_prepared_ingest",
                     location_quality=location["location_quality"],
+                    clear_coordinates=clear_stale_spatial,
+                    clear_boundary_geojson=clear_stale_spatial,
                 )
 
             stats = ingest_pdf_paths(
@@ -4119,8 +4139,9 @@ def admin_backfill_locations(request: Request, body: dict):
       ]}
 
     Allowed location_quality values: polygon, address, place_centroid,
-    zip_centroid, city_only, unknown. Pass "city_only" to demote a stale
-    lat/lon (so the map filter excludes it) without nulling it.
+    zip_centroid, city_only, unknown. Pass "city_only" plus
+    clear_coordinates/clear_boundary_geojson to demote stale cross-state map
+    geometry when a later state import has no trustworthy location evidence.
     """
     _require_admin(request)
     settings = load_settings()
@@ -4184,6 +4205,8 @@ def admin_backfill_locations(request: Request, body: dict):
                 boundary_geojson=normalized_boundary,
                 source=(entry.get("source") or None),
                 location_quality=quality,
+                clear_coordinates=bool(entry.get("clear_coordinates")),
+                clear_boundary_geojson=bool(entry.get("clear_boundary_geojson")),
             )
             matched += 1
             if quality:

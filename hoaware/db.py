@@ -1210,6 +1210,8 @@ def upsert_hoa_location(
     boundary_geojson: str | None = None,
     source: str | None = None,
     location_quality: str | None = None,
+    clear_coordinates: bool = False,
+    clear_boundary_geojson: bool = False,
 ) -> None:
     hoa_id = get_or_create_hoa(conn, hoa_name)
     existing = conn.execute(
@@ -1256,9 +1258,9 @@ def upsert_hoa_location(
             state = COALESCE(?, state),
             postal_code = COALESCE(?, postal_code),
             country = COALESCE(?, country),
-            latitude = COALESCE(?, latitude),
-            longitude = COALESCE(?, longitude),
-            boundary_geojson = COALESCE(?, boundary_geojson),
+            latitude = CASE WHEN ? THEN NULL ELSE COALESCE(?, latitude) END,
+            longitude = CASE WHEN ? THEN NULL ELSE COALESCE(?, longitude) END,
+            boundary_geojson = CASE WHEN ? THEN NULL ELSE COALESCE(?, boundary_geojson) END,
             source = COALESCE(?, source),
             location_quality = COALESCE(?, location_quality),
             updated_at = CURRENT_TIMESTAMP
@@ -1273,8 +1275,11 @@ def upsert_hoa_location(
             state,
             postal_code,
             country,
+            1 if clear_coordinates else 0,
             latitude,
+            1 if clear_coordinates else 0,
             longitude,
+            1 if clear_boundary_geojson else 0,
             boundary_geojson,
             source,
             location_quality,
