@@ -167,6 +167,47 @@ $54 budget for 1,800 manifests; actual spend was $65 because the
 post-hoc `_unknown-county/` recovery pass needed extra OCR. That
 overrun is small and the formula is still the right starting target.
 
+## Round 3: signature-based dedup + permissive LLM
+
+After round 2, the user spotted that:
+- "Ballentine Pointe HOA" and "Ballentine Pointe Homeowners
+  Association, Inc." were two separate live entries for the same HOA.
+- "ation ... ... Subdivision as of the date of this ... with the
+  Georgia Property Owners Association" (id=14035) was still on live
+  because the LLM had refused to invent a name when the doc never
+  spelled out "Homeowners Association".
+
+`state_scrapers/ga/scripts/dedup_and_clean_ga.py` does both fixes in
+one pass:
+
+1. **Suffix-stripped signature dedup.** Lower-case, strip
+   non-word chars, drop common suffix tokens (`homeowners`,
+   `association`, `inc`, `condominium`, `the`, `at`, `of`, `georgia`,
+   …) and group by the remainder. Only signatures of length ≥ 4 chars
+   participate, so single-word generic roots ("village", "highlands")
+   don't get auto-merged. For each group ≥ 2, ask the LLM to decide
+   "same HOA?" using city / doc count / chunk count as context, and
+   pick a canonical name + keep_id. Apply by renaming keep first
+   (so the canonical name exists), then merging the rest into it.
+
+2. **Permissive name prompt.** When the strict prompt returns null
+   because the doc body never says "X Homeowners Association"
+   verbatim, the permissive prompt allows inferring
+   "&lt;Subdivision Name&gt; Homeowners Association" as long as the
+   subdivision name appears unambiguously. id=14035 → "River Station
+   Homeowners Association" was exactly this pattern.
+
+Round-3 results:
+- 64 dedup groups + 59 still-dirty names → 21 renamed + **65 merged**
+  + 53 noop (mostly the `keep_id` already at canonical) + 0 errors.
+- Live count: 1,137 → 1,072.
+- Re-running Serper Places against the now-canonicalized names found
+  16 more matches.
+
+Across all four cleanup rounds combined: **145 in-place renames + 79
+merges + 0 errors** — i.e. roughly 13% of live GA HOAs at landing
+needed either a rename or a merge.
+
 ## OCR efficiency
 
 DocAI is the dominant cost (60% of GA spend), so the right thing to
@@ -229,9 +270,10 @@ How to do better next time:
 ```
 2,688  PDFs banked
 2,074  PDFs accepted by prepare/OCR (73.8%)
-2,055  PDFs live (after dedupe on import)
-1,139  HOAs live
-  686  HOAs on the map (60.2%)
+2,054  PDFs live (after dedupe on import + later HOA merges)
+1,072  HOAs live (after rename + dedup cleanup)
+  653  HOAs on the map (60.9%)
+57,482 chunks indexed
 ```
 
 Final report: `state_scrapers/ga/results/final_state_report.json`.
