@@ -142,6 +142,7 @@ Keep only:
 - `rules`
 - `amendment`
 - `resolution`
+- `plat`
 
 Reject before OCR:
 

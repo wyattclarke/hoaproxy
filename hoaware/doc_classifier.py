@@ -15,6 +15,7 @@ Categories:
     rules            — Rules & Regulations / Architectural Guidelines / Design Standards
     amendment        — Amendments or Supplements to governing docs
     resolution       — Board Resolutions / Policy changes
+    plat             — Recorded plats / subdivision plats
     minutes          — Meeting Minutes / Newsletter
     financial        — Budget / Financial Statement / Assessment Schedule
     insurance        — Insurance Certificate / Policy
@@ -55,7 +56,7 @@ load_dotenv(_REPO_ROOT / ".env", override=False)
 
 VALID_CATEGORIES = {
     "ccr", "bylaws", "articles", "rules", "amendment",
-    "resolution", "minutes", "financial", "insurance",
+    "resolution", "plat", "minutes", "financial", "insurance",
 }
 REJECT_JUNK = {"court", "tax", "government", "real_estate", "unrelated"}
 REJECT_PII = {"membership_list", "ballot", "violation"}
@@ -73,6 +74,7 @@ VALID categories (documents to keep):
 - rules: Rules & Regulations, Architectural Guidelines, Design Standards, Community Guidelines
 - amendment: Amendments or Supplements to any governing document
 - resolution: Board Resolutions, formal policy changes
+- plat: Recorded plats, subdivision plats, final plats tied to the community
 - minutes: Meeting Minutes, Newsletters, Annual Meeting summaries
 - financial: Budgets, Financial Statements, Assessment Schedules, Reserve Studies
 - insurance: Insurance Certificates, Liability Policies
@@ -96,6 +98,7 @@ _VALID_FILENAME = re.compile(
     r'rule|regulation|guideline|architectural|design.?standard|'
     r'amendment|supplement|amend|restat|'
     r'resolution|policy|'
+    r'plat|subdivision.?plat|final.?plat|recorded.?plat|'
     r'minute|meeting|'
     r'budget|financial|reserve.?stud|assessment|'
     r'insurance|certificate|management.?cert',
@@ -118,6 +121,7 @@ _FILENAME_CATEGORY_MAP = [
     (re.compile(r'rule|regulation|guideline|architectural|design.?standard', re.I), "rules"),
     (re.compile(r'amendment|supplement|amend|restat', re.I), "amendment"),
     (re.compile(r'resolution', re.I), "resolution"),
+    (re.compile(r'plat|subdivision.?plat|final.?plat|recorded.?plat', re.I), "plat"),
     (re.compile(r'minute|meeting', re.I), "minutes"),
     (re.compile(r'budget|financial|reserve.?stud|assessment', re.I), "financial"),
     (re.compile(r'insurance|certificate|management.?cert', re.I), "insurance"),
@@ -391,17 +395,8 @@ def classify_from_text(text: str, hoa_name: str = "") -> dict:
         if re.search(r'(?:dear\s+(?:mr|mrs|ms|homeowner)|property\s+address)', t):
             return {"category": "violation", "confidence": 0.8, "method": "regex"}
 
-    # Junk patterns
-    if re.search(r'(?:bankruptcy|district)\s+court|plaintiff|defendant|docket\s+no', t):
-        return {"category": "court", "confidence": 0.9, "method": "regex"}
-
-    if re.search(r'form\s+990|return\s+of\s+organization\s+exempt|internal\s+revenue', t):
-        return {"category": "tax", "confidence": 0.9, "method": "regex"}
-
-    if re.search(r'(?:planning|city)\s+commission|city\s+council\s+agenda|environmental\s+impact', t):
-        return {"category": "government", "confidence": 0.85, "method": "regex"}
-
-    # Valid patterns
+    # Valid patterns. These run before junk fallbacks because recorded governing
+    # instruments often mention city approvals, courts, or filing offices.
     if re.search(
         r'declaration\s+of\s+(?:protective\s+)?(?:covenants?|restrictions?)|'
         r'declaration\s+of\s+covenants?,?\s+conditions,?\s+and\s+restrictions|'
@@ -414,7 +409,13 @@ def classify_from_text(text: str, hoa_name: str = "") -> dict:
     ):
         return {"category": "ccr", "confidence": 0.95, "method": "regex"}
 
-    if re.search(r'by-?laws?\s+of|article\s+[ivx\d]+.*(?:members|board|officers|meetings)', t):
+    if re.search(
+        r'by-?laws?\s+of|'
+        r'\bby-?laws?\b.{0,120}\b(?:article\s+[ivx\d]+|members|board|officers|meetings|corporation)\b|'
+        r'\barticle\s+[ivx\d]+.*(?:members|board|officers|meetings)',
+        t,
+        re.S,
+    ):
         return {"category": "bylaws", "confidence": 0.9, "method": "regex"}
 
     if re.search(r'articles\s+of\s+incorporation|certificate\s+of\s+incorporation', t):
@@ -428,6 +429,19 @@ def classify_from_text(text: str, hoa_name: str = "") -> dict:
 
     if re.search(r'resolution\s+(?:no\.?|of\s+the\s+board|#)', t):
         return {"category": "resolution", "confidence": 0.8, "method": "regex"}
+
+    if re.search(r'\b(?:final|recorded|subdivision)?\s*plat\b|plat\s+book|book\s+of\s+plats', t):
+        return {"category": "plat", "confidence": 0.75, "method": "regex"}
+
+    # Junk fallbacks after valid patterns.
+    if re.search(r'(?:bankruptcy|district)\s+court|plaintiff|defendant|docket\s+no', t):
+        return {"category": "court", "confidence": 0.9, "method": "regex"}
+
+    if re.search(r'form\s+990|return\s+of\s+organization\s+exempt|internal\s+revenue', t):
+        return {"category": "tax", "confidence": 0.9, "method": "regex"}
+
+    if re.search(r'(?:planning|city)\s+commission|city\s+council\s+agenda|environmental\s+impact', t):
+        return {"category": "government", "confidence": 0.85, "method": "regex"}
 
     if re.search(r'(?:annual|board|special)\s+meeting\s+minutes|minutes\s+of\s+(?:the\s+)?(?:annual|board)', t):
         return {"category": "minutes", "confidence": 0.85, "method": "regex"}

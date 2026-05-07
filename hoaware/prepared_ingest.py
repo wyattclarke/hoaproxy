@@ -34,6 +34,7 @@ PREPARED_KEEP_CATEGORIES = {
     "rules",
     "amendment",
     "resolution",
+    "plat",
 }
 PREPARED_OPTIONAL_CATEGORIES = {"minutes", "financial", "insurance"}
 PREPARED_ALLOWED_CATEGORIES = PREPARED_KEEP_CATEGORIES | PREPARED_OPTIONAL_CATEGORIES

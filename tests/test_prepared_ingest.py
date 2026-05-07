@@ -297,6 +297,29 @@ def test_classifier_recognizes_declaration_of_restrictions():
     assert result["category"] == "ccr"
 
 
+def test_classifier_prefers_governing_text_over_filing_office_noise():
+    cedar = classify_from_text(
+        "Declaration of Covenants, Conditions and Restrictions for Cedar Ridge Addition. "
+        "The final plat was approved by the City of Salina, Kansas."
+    )
+    assert cedar is not None
+    assert cedar["category"] == "ccr"
+
+    fontainebleau = classify_from_text(
+        "Fontainebleau Homes Association, Inc BYLAWS Article I Offices. "
+        "The board of directors and members shall hold meetings. "
+        "A certified copy may be recorded with the district court clerk."
+    )
+    assert fontainebleau is not None
+    assert fontainebleau["category"] == "bylaws"
+
+
+def test_classifier_recognizes_recorded_plats():
+    result = classify_from_text("FINAL PLAT of Armour Hills, recorded in the book of plats.")
+    assert result is not None
+    assert result["category"] == "plat"
+
+
 def test_first_page_review_uses_existing_text_before_docai():
     from scripts import prepare_bank_for_ingest as prep
 
@@ -321,6 +344,10 @@ def test_reject_reason_defers_low_value_and_unknown_until_after_page_one_review(
     }
     assert prep._reject_reason(category="minutes", hard_only=True, **common) is None
     assert prep._reject_reason(category=None, hard_only=True, **common) is None
+    assert (
+        prep._reject_reason(category="government", hard_only=True, allow_junk_review=True, **common)
+        is None
+    )
     assert prep._reject_reason(category="minutes", hard_only=False, **common) == "low_value:minutes"
     assert (
         prep._reject_reason(category=None, hard_only=False, **common)

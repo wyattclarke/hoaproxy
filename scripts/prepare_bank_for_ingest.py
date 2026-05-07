@@ -12,6 +12,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import sys
 import tempfile
 import time
@@ -47,6 +48,16 @@ from hoaware.prepared_ingest import (
 )
 
 LOW_VALUE_CATEGORIES = {"minutes", "financial", "insurance"}
+GOVERNING_METADATA_RE = re.compile(
+    r"\b("
+    r"declarations?|covenants?|restrictions?|cc&?rs?|c\.c\.&r\.s?|"
+    r"bylaws?|by-laws?|articles?(?:\s+of\s+(?:incorporation|organization))?|"
+    r"rules?(?:\s+(?:&|and)\s+regulations?)?|regulations?|guidelines?|"
+    r"resolutions?|amendments?|policies|policy|"
+    r"plat|subdivision\s+plat|final\s+plat|recorded\s+plat"
+    r")\b",
+    re.IGNORECASE,
+)
 NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
 OSM_POLYGON_TYPES = {
     "neighbourhood",
@@ -105,6 +116,23 @@ def _document_category(doc: dict[str, Any], precheck: dict[str, Any]) -> str | N
         if isinstance(value, str) and value.strip():
             return value.strip().lower()
     return None
+
+
+def _has_governing_metadata_signal(
+    *,
+    doc: dict[str, Any],
+    filename: str,
+    source_url: str | None,
+    hoa_name: str,
+) -> bool:
+    fields = [
+        filename,
+        source_url or "",
+        hoa_name,
+        str(doc.get("title") or ""),
+        str(doc.get("link_text") or ""),
+    ]
+    return any(GOVERNING_METADATA_RE.search(value) for value in fields if value)
 
 
 def _compact_hoa_name(name: str) -> str:
@@ -307,6 +335,7 @@ def _reject_reason(
     prepared_shas: set[str],
     sha256: str,
     hard_only: bool = False,
+    allow_junk_review: bool = False,
 ) -> str | None:
     if sha256 in live_shas:
         return "duplicate:live"
@@ -315,6 +344,8 @@ def _reject_reason(
     if category in REJECT_PII:
         return f"pii:{category}"
     if category in REJECT_JUNK:
+        if hard_only and allow_junk_review:
+            return None
         return f"junk:{category}"
     page_count = precheck.get("page_count")
     if isinstance(page_count, int) and page_count > MAX_PAGES_FOR_OCR:
@@ -569,6 +600,12 @@ def prepare(args: argparse.Namespace) -> int:
                 docai_pages: int | None = None
                 page_one_reviewed = False
                 review_docai_pages = 0
+                allow_junk_review = text_extractable is True or _has_governing_metadata_signal(
+                    doc=doc,
+                    filename=filename,
+                    source_url=source_url,
+                    hoa_name=hoa_name,
+                )
                 reason = _reject_reason(
                     category=category,
                     precheck=precheck,
@@ -577,6 +614,7 @@ def prepare(args: argparse.Namespace) -> int:
                     prepared_shas=already_prepared,
                     sha256=sha256,
                     hard_only=True,
+                    allow_junk_review=allow_junk_review,
                 )
                 skip_page_one_review = args.skip_page_one_review or args.skip_unknown_ocr_review
                 if not reason and not skip_page_one_review:

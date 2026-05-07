@@ -206,6 +206,7 @@ Defined in `hoaware/doc_classifier.py`.
 | `rules` | Rules & Regulations, Architectural Guidelines, Design Standards |
 | `amendment` | Amendments or Supplements to any governing document |
 | `resolution` | Board Resolutions, formal policy changes |
+| `plat` | Recorded plats or subdivision plats tied to the community |
 | `minutes` | Meeting Minutes, Newsletters, Annual Meeting summaries |
 | `financial` | Budgets, Financial Statements, Reserve Studies |
 | `insurance` | Certificates of Insurance, liability policies |
