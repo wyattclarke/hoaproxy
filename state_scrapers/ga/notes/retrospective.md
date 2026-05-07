@@ -176,4 +176,4 @@ overrun is small and the formula is still the right starting target.
 ```
 
 Final report: `state_scrapers/ga/results/final_state_report.json`.
-Full handoff narrative: `docs/ga-discovery-handoff.md`.
+Full handoff narrative: `state_scrapers/ga/notes/discovery-handoff.md`.

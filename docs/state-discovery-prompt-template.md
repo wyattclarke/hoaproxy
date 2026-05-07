@@ -12,7 +12,7 @@ Before pasting into a fresh context, substitute three placeholders:
 
 ## Prompt
 
-You are in `/Users/ngoshaliclarke/Documents/GitHub/hoaproxy`. Read the harness instructions for your environment (`AGENTS.md` if you are Codex, `CLAUDE.md` if you are Claude Code), then `docs/state-hoa-discovery-playbook.md`, `docs/openrouter-public-scraping.md`, and at least one prior handoff for cross-state lessons. `docs/ks-discovery-handoff.md` is the most detailed; `docs/tn-discovery-handoff.md` is a thinner, more recent example. Do not let any single state's specific choices constrain you — host families and query patterns generalize, named communities do not.
+You are in `/Users/ngoshaliclarke/Documents/GitHub/hoaproxy`. Read the harness instructions for your environment (`AGENTS.md` if you are Codex, `CLAUDE.md` if you are Claude Code), then `docs/state-hoa-discovery-playbook.md`, `docs/openrouter-public-scraping.md`, and at least one prior handoff for cross-state lessons. `state_scrapers/ks/notes/discovery-handoff.md` is the most detailed; `state_scrapers/tn/notes/discovery-handoff.md` is a thinner, more recent example. Do not let any single state's specific choices constrain you — host families and query patterns generalize, named communities do not.
 
 Other state runs may be active in parallel (in this or the other harness). Coexist gracefully on rate limits. Do not edit `hoaware/discovery/__main__.py` or files actively touched by another run unless you have a specific reason.
 
@@ -109,7 +109,7 @@ For future states, geography should be resolved before live import:
 4. Preflight candidate pages and direct PDFs. Only bank governing PDFs: declarations, CC&Rs, bylaws, articles of incorporation, amendments, rules / regulations, architectural / design guidelines, resolutions, and recorded subdivision plats.
 5. Avoid newsletters, meeting minutes, budgets, forms, pool documents, directories, violation letters, real estate listings, court / government planning packets, and out-of-scope hits. Do not reject out-of-state mandatory-HOA documents when the correct state/county is clear; reroute and bank under the correct prefix. When using same-host crawl on document-rich HOA websites, preflight links and pass only whitelisted governing PDFs as `pre_discovered_pdf_urls` — see "owned-site pass" lessons in the playbook.
 6. Whenever a source family proves productive, stop using the model on it and scrape that family deterministically.
-7. Maintain `docs/{state-lower}-discovery-handoff.md` with bank counts (before / after / running), source families attempted, query files used, false-positive patterns to block, model spend or token usage when available, and next branches. Commit it as you go so progress is recoverable across context resets.
+7. Maintain `state_scrapers/{state-lower}/notes/discovery-handoff.md` with bank counts (before / after / running), source families attempted, query files used, false-positive patterns to block, model spend or token usage when available, and next branches. Commit it as you go so progress is recoverable across context resets.
 
 ### Autonomous loop and stop rules
 

@@ -457,7 +457,7 @@ def main() -> None:
             "  B) --recaptcha-token <token> — a valid Google reCAPTCHA v3 token\n"
             "     (short-lived ~2 min; not suitable for automation)\n\n"
             "TOS note: Bulk storage of records requires written permission or the\n"
-            "Developer API. See fl-discovery-handoff.md for details.\n",
+            "Developer API. See state_scrapers/fl/notes/discovery-handoff.md for details.\n",
             file=sys.stderr,
         )
         sys.exit(1)

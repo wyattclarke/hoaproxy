@@ -78,7 +78,7 @@ If a previous pass left manifests under `_unknown-county/`, treat that as legacy
 
 This playbook is state-agnostic and harness-agnostic. Replace `{STATE}` (e.g. `GA`, `TN`, `KS`) and `{state-name}` (e.g. `Georgia`) throughout. Code blocks containing literal `Kansas`/`KS` strings are illustrative — they are real queries from the May 2026 Kansas pass and should be translated, not copied. The lessons in "Cross-State Lessons" generalize, even though the named communities are Kansas examples.
 
-For per-state progress, see the matching handoff doc (`ks-discovery-handoff.md`, `tn-discovery-handoff.md`, etc.). When starting a new state, create `docs/{state}-discovery-handoff.md` and update it as you go.
+For per-state progress, see the matching handoff doc (`state_scrapers/ks/notes/discovery-handoff.md`, `state_scrapers/tn/notes/discovery-handoff.md`, etc.). When starting a new state, create `state_scrapers/{state}/notes/discovery-handoff.md` and update it as you go.
 
 ## System Shape
 
