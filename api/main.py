@@ -64,7 +64,14 @@ from hoaware.doc_classifier import (
 from hoaware.ingest import ingest_pdf_paths
 from hoaware.pdf_utils import detect_text_extractable
 from hoaware import participation as participation_mod
-from hoaware.qa import get_answer, get_answer_multi, retrieve_context, retrieve_context_multi
+from hoaware.qa import (
+    QAProviderError,
+    QATemporaryError,
+    get_answer,
+    get_answer_multi,
+    retrieve_context,
+    retrieve_context_multi,
+)
 
 _LAW_IMPORT_ERROR: Exception | None = None
 try:
@@ -6076,6 +6083,13 @@ def qa(body: QARequest) -> QAResponse:
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except QATemporaryError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Q&A provider is temporarily unavailable. Please try again shortly.",
+        ) from exc
+    except QAProviderError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     if not results:
@@ -6103,6 +6117,13 @@ def qa_multi(body: MultiQARequest) -> QAResponse:
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except QATemporaryError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Q&A provider is temporarily unavailable. Please try again shortly.",
+        ) from exc
+    except QAProviderError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     if not results:

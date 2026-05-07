@@ -53,12 +53,17 @@ class Settings:
     # Google OAuth
     google_client_id: str | None
     google_client_secret: str | None
-    # Q&A LLM (chat completions). Defaults to Groq + Llama-3.3-70B for fast,
-    # cheap, OpenAI-compatible inference. Override via env to use any
-    # OpenAI-compatible endpoint (Cerebras, Fireworks, DeepInfra, OpenAI, etc.).
+    # Q&A LLM (chat completions). Override via env to use any OpenAI-compatible
+    # endpoint (OpenRouter, Groq, Cerebras, Fireworks, DeepInfra, OpenAI, etc.).
     qa_api_base_url: str
     qa_api_key: str | None
     qa_model: str
+    # Low-latency fallback used when the primary QA provider returns a transient
+    # upstream error. Defaults to Groq's OpenAI-compatible endpoint with a
+    # fast, high-quality open-weight model when GROQ_API_KEY is configured.
+    qa_fallback_api_base_url: str | None
+    qa_fallback_api_key: str | None
+    qa_fallback_model: str | None
     # Public-document classifier (OpenAI-compatible). This is intentionally
     # separate from embeddings so public scraping can use cheap routed models.
     classifier_api_base_url: str
@@ -109,6 +114,9 @@ def load_settings() -> Settings:
         qa_api_base_url=os.environ.get("QA_API_BASE_URL", "https://api.groq.com/openai/v1"),
         qa_api_key=os.environ.get("QA_API_KEY") or os.environ.get("OPENROUTER_API_KEY"),
         qa_model=os.environ.get("QA_MODEL", "llama-3.3-70b-versatile"),
+        qa_fallback_api_base_url=os.environ.get("QA_FALLBACK_API_BASE_URL", "https://api.groq.com/openai/v1") or None,
+        qa_fallback_api_key=os.environ.get("QA_FALLBACK_API_KEY") or os.environ.get("GROQ_API_KEY"),
+        qa_fallback_model=os.environ.get("QA_FALLBACK_MODEL", "openai/gpt-oss-120b") or None,
         classifier_api_base_url=os.environ.get(
             "HOA_CLASSIFIER_API_BASE_URL",
             os.environ.get("QA_API_BASE_URL", "https://openrouter.ai/api/v1"),

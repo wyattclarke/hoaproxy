@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import math
+import time
+from dataclasses import dataclass
 from typing import List, Tuple
 
-from openai import OpenAI
+from openai import APIConnectionError, APIStatusError, APITimeoutError, OpenAI, RateLimitError
 from rich.console import Console
 from rich.panel import Panel
 
@@ -13,6 +15,24 @@ from .cost_tracker import log_chat_usage
 from .embeddings import batch_embeddings
 
 console = Console()
+
+
+class QATemporaryError(RuntimeError):
+    """Raised when the configured QA provider is temporarily unavailable."""
+
+
+class QAProviderError(RuntimeError):
+    """Raised when the configured QA provider rejects or fails a request."""
+
+
+_TRANSIENT_PROVIDER_STATUS_CODES = {408, 409, 429, 500, 502, 503, 504}
+
+
+@dataclass
+class QACompletionResult:
+    completion: object
+    model: str
+    used_fallback: bool = False
 
 
 def _build_prompt(question: str, context: List[dict], scope_label: str) -> list[dict]:
@@ -91,15 +111,79 @@ def _qa_chat_client(settings: Settings) -> OpenAI:
 
     Falls back to OpenAI's API if QA_API_KEY isn't set but OPENAI_API_KEY is.
     """
-    api_key = settings.qa_api_key or settings.openai_api_key
-    return OpenAI(api_key=api_key, base_url=settings.qa_api_base_url)
+    if settings.qa_api_key:
+        return OpenAI(api_key=settings.qa_api_key, base_url=settings.qa_api_base_url)
+    return OpenAI(api_key=settings.openai_api_key)
+
+
+def _qa_fallback_chat_client(settings: Settings, primary_model: str) -> OpenAI | None:
+    if not settings.qa_fallback_model or not settings.qa_fallback_api_key:
+        return None
+    primary_is_direct_openai = not settings.qa_api_key
+    if primary_is_direct_openai and settings.qa_fallback_model == primary_model:
+        return None
+    if settings.qa_fallback_api_base_url:
+        return OpenAI(api_key=settings.qa_fallback_api_key, base_url=settings.qa_fallback_api_base_url)
+    return OpenAI(api_key=settings.qa_fallback_api_key)
 
 
 def _resolve_qa_model(requested: str, settings: Settings) -> str:
     """Use the configured QA model unless caller passed an explicit override."""
     if requested and not requested.startswith("gpt-"):
         return requested
+    if not settings.qa_api_key and settings.qa_model == "llama-3.3-70b-versatile":
+        return requested or "gpt-5-mini"
     return settings.qa_model
+
+
+def _call_chat_provider(chat_client: OpenAI, *, model: str, messages: list[dict]):
+    return chat_client.chat.completions.create(
+        model=model,
+        messages=messages,
+        temperature=0.2,
+    )
+
+
+def _is_transient_provider_error(exc: Exception) -> bool:
+    if isinstance(exc, (APIConnectionError, APITimeoutError, RateLimitError)):
+        return True
+    return isinstance(exc, APIStatusError) and exc.status_code in _TRANSIENT_PROVIDER_STATUS_CODES
+
+
+def _raise_provider_error(exc: Exception) -> None:
+    if isinstance(exc, APIStatusError):
+        if exc.status_code in _TRANSIENT_PROVIDER_STATUS_CODES:
+            raise QATemporaryError(f"Q&A provider temporarily unavailable (HTTP {exc.status_code})") from exc
+        raise QAProviderError(f"Q&A provider returned HTTP {exc.status_code}") from exc
+    raise QATemporaryError("Q&A provider temporarily unavailable") from exc
+
+
+def _create_chat_completion(
+    chat_client: OpenAI,
+    *,
+    model: str,
+    messages: list[dict],
+    fallback_client: OpenAI | None = None,
+    fallback_model: str | None = None,
+) -> QACompletionResult:
+    """Call primary QA provider, then a low-latency fallback on transient failure."""
+    try:
+        completion = _call_chat_provider(chat_client, model=model, messages=messages)
+        return QACompletionResult(completion=completion, model=model)
+    except Exception as exc:
+        if not _is_transient_provider_error(exc):
+            _raise_provider_error(exc)
+        primary_exc = exc
+
+    if fallback_client and fallback_model:
+        time.sleep(0.2)
+        try:
+            completion = _call_chat_provider(fallback_client, model=fallback_model, messages=messages)
+            return QACompletionResult(completion=completion, model=fallback_model, used_fallback=True)
+        except Exception as exc:
+            _raise_provider_error(exc)
+
+    _raise_provider_error(primary_exc)
 
 
 def get_answer(
@@ -123,13 +207,17 @@ def get_answer(
         return "No context retrieved; cannot answer.", [], []
 
     messages = _build_prompt(question, results, f"the {hoa_name} HOA")
-    completion = chat_client.chat.completions.create(
+    fallback_client = _qa_fallback_chat_client(settings, chat_model)
+    completion_result = _create_chat_completion(
+        chat_client,
         model=chat_model,
         messages=messages,
-        temperature=0.2,
+        fallback_client=fallback_client,
+        fallback_model=settings.qa_fallback_model,
     )
+    completion = completion_result.completion
     if hasattr(completion, "usage") and completion.usage:
-        log_chat_usage(completion.usage.prompt_tokens, completion.usage.completion_tokens, model=chat_model)
+        log_chat_usage(completion.usage.prompt_tokens, completion.usage.completion_tokens, model=completion_result.model)
     answer = completion.choices[0].message.content or ""
     citations = build_citations(results)
     return answer.strip(), citations, results
@@ -158,13 +246,17 @@ def get_answer_multi(
 
     scope_label = f"the selected HOAs ({', '.join(normalized_hoas)})"
     messages = _build_prompt(question, results, scope_label)
-    completion = chat_client.chat.completions.create(
+    fallback_client = _qa_fallback_chat_client(settings, chat_model)
+    completion_result = _create_chat_completion(
+        chat_client,
         model=chat_model,
         messages=messages,
-        temperature=0.2,
+        fallback_client=fallback_client,
+        fallback_model=settings.qa_fallback_model,
     )
+    completion = completion_result.completion
     if hasattr(completion, "usage") and completion.usage:
-        log_chat_usage(completion.usage.prompt_tokens, completion.usage.completion_tokens, model=chat_model)
+        log_chat_usage(completion.usage.prompt_tokens, completion.usage.completion_tokens, model=completion_result.model)
     answer = completion.choices[0].message.content or ""
     citations = build_citations(results)
     return answer.strip(), citations, results

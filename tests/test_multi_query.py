@@ -5,9 +5,12 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
+import httpx
+from openai import APITimeoutError
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -15,6 +18,8 @@ if str(ROOT) not in sys.path:
 
 from api.main import app
 from hoaware import db
+from hoaware.config import load_settings
+from hoaware.qa import QAProviderError, QATemporaryError, _create_chat_completion
 
 
 class TestMultiQueryEndpoints(unittest.TestCase):
@@ -121,6 +126,80 @@ class TestMultiQueryEndpoints(unittest.TestCase):
         self.assertEqual(body["answer"], "Combined answer")
         self.assertEqual(body["sources"][0]["hoa"], "Master HOA")
         self.assertEqual(body["sources"][1]["hoa"], "Neighborhood HOA")
+
+    def test_qa_returns_503_for_temporary_provider_failure(self) -> None:
+        with patch("api.main.get_answer", side_effect=QATemporaryError("provider 502")):
+            response = self.client.post(
+                "/qa",
+                json={"hoa": "Master HOA", "question": "What rules apply?", "k": 6},
+            )
+
+        self.assertEqual(response.status_code, 503)
+        self.assertIn("temporarily unavailable", response.json()["detail"])
+
+    def test_qa_returns_502_for_non_retryable_provider_failure(self) -> None:
+        with patch("api.main.get_answer", side_effect=QAProviderError("Q&A provider returned HTTP 401")):
+            response = self.client.post(
+                "/qa",
+                json={"hoa": "Master HOA", "question": "What rules apply?", "k": 6},
+            )
+
+        self.assertEqual(response.status_code, 502)
+        self.assertIn("Q&A provider returned HTTP 401", response.json()["detail"])
+
+    def test_chat_completion_uses_high_quality_low_latency_fallback_after_transient_failure(self) -> None:
+        class FakeCompletions:
+            def __init__(self, *, fail_first: bool = False) -> None:
+                self.calls = 0
+                self.models: list[str] = []
+                self.fail_first = fail_first
+
+            def create(self, **kwargs):
+                self.calls += 1
+                self.models.append(kwargs["model"])
+                if self.fail_first and self.calls == 1:
+                    request = httpx.Request("POST", "https://qa.example.test/chat/completions")
+                    raise APITimeoutError(request=request)
+                return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content="ok"))])
+
+        primary_completions = FakeCompletions(fail_first=True)
+        fallback_completions = FakeCompletions()
+        primary_client = SimpleNamespace(chat=SimpleNamespace(completions=primary_completions))
+        fallback_client = SimpleNamespace(chat=SimpleNamespace(completions=fallback_completions))
+
+        with patch("hoaware.qa.time.sleep"):
+            result = _create_chat_completion(
+                primary_client,
+                model="deepseek/deepseek-v4-flash",
+                messages=[],
+                fallback_client=fallback_client,
+                fallback_model="openai/gpt-oss-120b",
+            )
+
+        self.assertEqual(primary_completions.calls, 1)
+        self.assertEqual(fallback_completions.calls, 1)
+        self.assertEqual(primary_completions.models, ["deepseek/deepseek-v4-flash"])
+        self.assertEqual(fallback_completions.models, ["openai/gpt-oss-120b"])
+        self.assertEqual(result.model, "openai/gpt-oss-120b")
+        self.assertTrue(result.used_fallback)
+        self.assertEqual(result.completion.choices[0].message.content, "ok")
+
+    def test_default_qa_fallback_is_high_quality_fast_open_weight_model(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "GROQ_API_KEY": "test-groq-key",
+            },
+            clear=False,
+        ):
+            os.environ.pop("QA_FALLBACK_API_BASE_URL", None)
+            os.environ.pop("QA_FALLBACK_API_KEY", None)
+            os.environ.pop("QA_FALLBACK_MODEL", None)
+            settings = load_settings()
+
+        self.assertEqual(settings.qa_fallback_api_base_url, "https://api.groq.com/openai/v1")
+        self.assertEqual(settings.qa_fallback_api_key, "test-groq-key")
+        self.assertEqual(settings.qa_fallback_model, "openai/gpt-oss-120b")
 
 
 if __name__ == "__main__":
