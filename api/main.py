@@ -2003,14 +2003,15 @@ def sitemap_xml() -> Response:
     )
 
 
-# Census region grouping for the homepage state-pill grid (item #3 of
-# docs/seo-roadmap.md). Used to render `/hoa/{state}/` links grouped by
-# region so the layout scales as the active-states list grows. Source:
-# US Census Bureau region definitions.
+# Public-facing regional grouping for the homepage state-pill grid (item #3
+# of docs/seo-roadmap.md). This keeps Delaware with the Mid-Atlantic states,
+# which matches how users search for HOA records better than strict Census
+# divisions.
 _STATE_REGIONS: list[tuple[str, list[str]]] = [
-    ("Northeast", ["ct", "me", "ma", "nh", "nj", "ny", "pa", "ri", "vt"]),
+    ("Northeast", ["ct", "me", "ma", "nh", "ri", "vt"]),
+    ("Mid-Atlantic", ["de", "dc", "md", "nj", "ny", "pa"]),
     ("Midwest", ["il", "in", "ia", "ks", "mi", "mn", "mo", "ne", "nd", "oh", "sd", "wi"]),
-    ("South", ["al", "ar", "de", "dc", "fl", "ga", "ky", "la", "md", "ms", "nc", "ok", "sc", "tn", "tx", "va", "wv"]),
+    ("South", ["al", "ar", "fl", "ga", "ky", "la", "ms", "nc", "ok", "sc", "tn", "tx", "va", "wv"]),
     ("West", ["ak", "az", "ca", "co", "hi", "id", "mt", "nv", "nm", "or", "ut", "wa", "wy"]),
 ]
 
