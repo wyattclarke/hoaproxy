@@ -532,7 +532,7 @@ sites; SoS would be redundant.
 ### Universal applicable lessons
 
 - The playbook is now updated with everything in this retrospective.
-  Read `docs/small-state-end-to-end-ingestion-plan.md` first. The
+  Read `docs/multi-state-ingestion-playbook.md` first. The
   "Best Practices Learned" section captures the load-bearing rules.
 - Use `--apply` only after a dry-run validates the lead JSONL format.
 - Always write a final state report JSON to

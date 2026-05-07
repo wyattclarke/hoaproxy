@@ -87,6 +87,14 @@ For the one-time prod cleanup still pending after the migration, see `docs/ops-c
 
 The bank is *not* the ingest pipeline. `/upload` still owns ingest; the bank is the upstream pool a drain worker will eventually feed from. Don't read `gs://hoaproxy-bank/` from `api/main.py`.
 
+## State Scraping
+
+When starting a fresh state-scraping session (covering one or more US states/DC), read `docs/multi-state-ingestion-playbook.md` first. It is the canonical, tier-stratified playbook (Tier 0 tiny → Tier 4 huge), supersedes the prior small-state plan / discovery playbook / bank-to-live plan / GCS prepared plan / prompt template, and includes:
+
+- the per-tier run shape (parallel autonomous batches for tiny states; phased operator-supervised for larger ones)
+- the `is_dirty()` name-quality gate at the bank, now backed by `hoaware/name_utils.py`
+- the mandatory Phase 10 retrospective at `state_scrapers/{state}/notes/retrospective.md` (see GA, RI, TN exemplars)
+
 ## Proxy Voting System
 See `docs/proxy-voting-plan.md` for full details.
 

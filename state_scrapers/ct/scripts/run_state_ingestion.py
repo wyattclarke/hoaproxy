@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run Connecticut small-state HOA ingestion end-to-end.
 
-Pipeline (per ``docs/small-state-end-to-end-ingestion-plan.md``):
+Pipeline (per ``docs/multi-state-ingestion-playbook.md``):
 
   1. Pull active HOA / condo / community-association entities from CT
      Open Data (Connecticut Business Registry - Business Master, dataset

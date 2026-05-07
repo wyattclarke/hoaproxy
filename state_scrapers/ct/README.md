@@ -1,6 +1,6 @@
 # Connecticut Scraper
 
-Per the small-state ingestion playbook (`docs/small-state-end-to-end-ingestion-plan.md`).
+Per the multi-state ingestion playbook (`docs/multi-state-ingestion-playbook.md`).
 
 ## Why CT is a good autonomous-run target
 
@@ -62,7 +62,7 @@ that, we query the same registry via Open Data:
 
 ## Pipeline
 
-Same shape as RI — see `docs/small-state-end-to-end-ingestion-plan.md`.
+Same shape as RI — see `docs/multi-state-ingestion-playbook.md`.
 
 ```bash
 .venv/bin/python state_scrapers/ct/scripts/run_state_ingestion.py \

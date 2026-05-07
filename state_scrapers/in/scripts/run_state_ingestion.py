@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run Indiana HOA ingestion end-to-end.
 
-Pipeline (per ``docs/small-state-end-to-end-ingestion-plan.md``):
+Pipeline (per ``docs/multi-state-ingestion-playbook.md``):
 
   1. For each per-county queries file, run benchmark/scrape_state_serper_docpages.py
      with ``--probe`` so leads are banked under

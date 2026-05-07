@@ -58,7 +58,7 @@ User instruction: continue autonomously for GA. Do not stop at checkpoints. Comm
 
 ## Lead Quality Stance
 
-The user's preference is **breadth over polish**: bank every lead that has a plausible HOA name plus a town/county or a public document URL. Manifests with no PDFs are kept if name+location are present; manifests with malformed names are kept if there is a real PDF, with name repair deferred to a post-hoc pass. The only hard rejects are out-of-state hits, generic legal pages without a specific community, private portals, and obvious junk hosts. See the "What Counts As A Worthwhile Lead" section in `docs/state-hoa-discovery-playbook.md`.
+The user's preference is **breadth over polish**: bank every lead that has a plausible HOA name plus a town/county or a public document URL. Manifests with no PDFs are kept if name+location are present; manifests with malformed names are kept if there is a real PDF, with name repair deferred to a post-hoc pass. The only hard rejects are out-of-state hits, generic legal pages without a specific community, private portals, and obvious junk hosts. See the "What Counts As A Worthwhile Lead" section in `docs/multi-state-ingestion-playbook.md#phase-2-discovery-and-banking`.
 
 ## County Routing (Outstanding Debt)
 

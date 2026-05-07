@@ -2,7 +2,7 @@
 
 This is the canonical reference for one-off HOA additions and normal website uploads. An LLM agent (Claude Code or equivalent) discovers an HOA, fetches a polygon, classifies its public documents locally, and POSTs them to `/upload` with structured metadata. The server is a trusted-but-verifying executor.
 
-Bulk scraped-bank ingestion uses a separate prepared GCS queue: the raw bank stays at `gs://hoaproxy-bank/v1/{STATE}/...`, a local/GCP worker writes OCR-ready bundles to `gs://hoaproxy-ingest-ready/v1/{STATE}/...`, and Render imports them through `POST /admin/ingest-ready-gcs`. See [`bank-to-live-ingestion.md`](bank-to-live-ingestion.md). Do not use `/upload` as a Render-side bulk OCR worker.
+Bulk scraped-bank ingestion uses a separate prepared GCS queue: the raw bank stays at `gs://hoaproxy-bank/v1/{STATE}/...`, a local/GCP worker writes OCR-ready bundles to `gs://hoaproxy-ingest-ready/v1/{STATE}/...`, and Render imports them through `POST /admin/ingest-ready-gcs`. See [`multi-state-ingestion-playbook.md`](multi-state-ingestion-playbook.md). Do not use `/upload` as a Render-side bulk OCR worker.
 
 If you're a fresh session figuring out how to add a single HOA or handle a public contributor upload, read this doc top to bottom and you'll have the full contract. For the one-time cleanup of legacy data still left in the prod DB, see [`ops-cleanup.md`](ops-cleanup.md).
 
