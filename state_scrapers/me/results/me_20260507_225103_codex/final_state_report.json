@@ -1,0 +1,207 @@
+{
+  "artifacts": {
+    "curated_leads": [
+      "state_scrapers/me/leads/me_curated_direct_pdf_leads.jsonl",
+      "state_scrapers/me/leads/me_curated_direct_pdf_leads_2.jsonl"
+    ],
+    "discovery_handoff": "state_scrapers/me/notes/discovery-handoff.md",
+    "probe_results": [
+      "state_scrapers/me/results/me_20260507_225103_codex/curated_probe_results.jsonl",
+      "state_scrapers/me/results/me_20260507_225103_codex/curated_probe_results_2.jsonl"
+    ],
+    "retrospective": "state_scrapers/me/notes/retrospective.md"
+  },
+  "bank": {
+    "duplicate_rejections_on_second_prepare": 16,
+    "prepared_bucket_prefix": "gs://hoaproxy-ingest-ready/v1/ME/",
+    "prepared_bundles": 18,
+    "prepared_documents": 22,
+    "raw_bucket_prefix": "gs://hoaproxy-bank/v1/ME/",
+    "raw_manifests": 18,
+    "raw_pdfs": 23,
+    "rejected_documents": 1
+  },
+  "budget_caps_usd": {
+    "docai": 10.0,
+    "openrouter": 5.0,
+    "serper": 3.0
+  },
+  "discovery_mode": "keyword-serper",
+  "docai": {
+    "content_pages": 111,
+    "estimated_content_cost_usd": 0.1665,
+    "review_pages": 9
+  },
+  "estimated_spend_usd": {
+    "docai": 0.1665,
+    "openrouter": 0.0,
+    "serper": null
+  },
+  "finished_at": "2026-05-07T23:21:29.597421+00:00",
+  "import": {
+    "live_chunks": 950,
+    "live_documents": 22,
+    "live_profiles": 17,
+    "map_points": 17,
+    "map_rate": 1.0,
+    "missing_coordinates": [],
+    "out_of_state_points": []
+  },
+  "live_communities": [
+    {
+      "chunk_count": 181,
+      "city": "York",
+      "doc_count": 3,
+      "hoa": "Beachwood Bay Estates Condominium Association",
+      "latitude": 43.1544,
+      "longitude": -70.6578
+    },
+    {
+      "chunk_count": 39,
+      "city": "Wells",
+      "doc_count": 1,
+      "hoa": "Breeze Lane Condominium Association",
+      "latitude": 43.3144,
+      "longitude": -70.5969
+    },
+    {
+      "chunk_count": 76,
+      "city": "North Yarmouth",
+      "doc_count": 1,
+      "hoa": "Cider Hill Condominium Association",
+      "latitude": 43.838,
+      "longitude": -70.2001
+    },
+    {
+      "chunk_count": 40,
+      "city": "Falmouth",
+      "doc_count": 1,
+      "hoa": "Cumberland Foreside Condominium Association",
+      "latitude": 43.734,
+      "longitude": -70.2625
+    },
+    {
+      "chunk_count": 67,
+      "city": "Portland",
+      "doc_count": 2,
+      "hoa": "Eastman Block Condominium Association",
+      "latitude": 43.6606,
+      "longitude": -70.2589
+    },
+    {
+      "chunk_count": 2,
+      "city": "Wells",
+      "doc_count": 1,
+      "hoa": "Fairway View Village Condominium Association",
+      "latitude": 43.3144,
+      "longitude": -70.5969
+    },
+    {
+      "chunk_count": 50,
+      "city": "Wells",
+      "doc_count": 1,
+      "hoa": "Misty Harbor and Barefoot Beach Resort Condominium Association",
+      "latitude": 43.3144,
+      "longitude": -70.5969
+    },
+    {
+      "chunk_count": 33,
+      "city": "Portland",
+      "doc_count": 1,
+      "hoa": "Munjoy Heights Condominium Association",
+      "latitude": 43.6606,
+      "longitude": -70.2589
+    },
+    {
+      "chunk_count": 105,
+      "city": "Wells",
+      "doc_count": 2,
+      "hoa": "Ocean Mist Villages Condominium Association",
+      "latitude": 43.3144,
+      "longitude": -70.5969
+    },
+    {
+      "chunk_count": 113,
+      "city": "Portland",
+      "doc_count": 1,
+      "hoa": "OneJoy Condominium Owners Association",
+      "latitude": 43.6606,
+      "longitude": -70.2589
+    },
+    {
+      "chunk_count": 5,
+      "city": "Portland",
+      "doc_count": 1,
+      "hoa": "Park-Danforth Condominium Association",
+      "latitude": 43.6876,
+      "longitude": -70.2876
+    },
+    {
+      "chunk_count": 125,
+      "city": "Portland",
+      "doc_count": 1,
+      "hoa": "Pine and Winter Street Condominium Association",
+      "latitude": 43.6602,
+      "longitude": -70.2898
+    },
+    {
+      "chunk_count": 58,
+      "city": "Kittery",
+      "doc_count": 1,
+      "hoa": "Regency Woods Condominium Association",
+      "latitude": 43.0921,
+      "longitude": -70.7429
+    },
+    {
+      "chunk_count": 6,
+      "city": "Falmouth",
+      "doc_count": 1,
+      "hoa": "Ridgewood Condominium Association",
+      "latitude": 43.734,
+      "longitude": -70.2625
+    },
+    {
+      "chunk_count": 42,
+      "city": "Brunswick",
+      "doc_count": 1,
+      "hoa": "Sunfield Condominium Association",
+      "latitude": 43.8973,
+      "longitude": -69.9779
+    },
+    {
+      "chunk_count": 3,
+      "city": "Litchfield",
+      "doc_count": 1,
+      "hoa": "Woodbury Shores Cottages Condominium Owners Association",
+      "latitude": 44.1634,
+      "longitude": -69.9581
+    },
+    {
+      "chunk_count": 5,
+      "city": "Yarmouth",
+      "doc_count": 2,
+      "hoa": "Yarmouth Bluffs Condominium Association",
+      "latitude": 43.8009,
+      "longitude": -70.175
+    }
+  ],
+  "location_enrichment": {
+    "by_quality": {
+      "zip_centroid": 17
+    },
+    "geo_enrichment_errors_in_prepare_ledger": 26,
+    "records": 17
+  },
+  "prepared_categories": {
+    "amendment": 2,
+    "bylaws": 14,
+    "plat": 4,
+    "rules": 2
+  },
+  "run_id": "me_20260507_225103_codex",
+  "sos_preflight": {
+    "reason": "Maine SoS ICRS is reachable but presents reCAPTCHA and a no-data-mining/no-automated-tools notice; run switched to county/source-family Serper fallback.",
+    "status": "blocked_for_automation"
+  },
+  "state": "ME"
+}

@@ -1,0 +1,12 @@
+site:parcelsfolder.portlandmaine.gov/Files "Declaration of Condominium" "Maine"
+site:parcelsfolder.portlandmaine.gov/Files "Condo Declaration" "Portland"
+site:parcelsfolder.portlandmaine.gov/Files "Condominium Association" "Bylaws"
+site:content.civicplus.com/api/assets/me-portland "Condominium Association"
+site:wellstown.org/AgendaCenter/ViewFile "Declaration of Condominium" "Maine"
+site:kennebunkmaine.us/DocumentCenter/View "Declaration of Condominium" "Maine"
+site:northyarmouth.org "Declaration of Condominium" "Association" filetype:pdf
+site:*.org/wp-content/uploads "Maine" "Condominium Association" "Declaration" filetype:pdf
+site:*.com/wp-content/uploads "Maine" "Condominium Association" "Declaration" filetype:pdf
+"Maine Unit Ownership Act" "unit owners association" filetype:pdf
+"33 M.R.S.A. §§1601-101" "Declaration" "Association" filetype:pdf
+"Declaration of Covenants and Restrictions" "Maine" "Property Owners Association" filetype:pdf

@@ -1,0 +1,77 @@
+{
+  "county_runs": [
+    {
+      "default_county": "Cumberland",
+      "queries": "me_cumberland_serper_queries.txt"
+    },
+    {
+      "default_county": "York",
+      "queries": "me_york_serper_queries.txt"
+    },
+    {
+      "default_county": "Hancock",
+      "queries": "me_hancock_serper_queries.txt"
+    },
+    {
+      "default_county": "Kennebec",
+      "queries": "me_kennebec_serper_queries.txt"
+    },
+    {
+      "default_county": "Penobscot",
+      "queries": "me_penobscot_serper_queries.txt"
+    },
+    {
+      "default_county": "Androscoggin",
+      "queries": "me_androscoggin_serper_queries.txt"
+    },
+    {
+      "default_county": "Knox",
+      "queries": "me_knox_serper_queries.txt"
+    },
+    {
+      "default_county": "Lincoln",
+      "queries": "me_lincoln_serper_queries.txt"
+    },
+    {
+      "default_county": "Sagadahoc",
+      "queries": "me_sagadahoc_serper_queries.txt"
+    },
+    {
+      "default_county": "Waldo",
+      "queries": "me_waldo_serper_queries.txt"
+    },
+    {
+      "default_county": "Oxford",
+      "queries": "me_oxford_serper_queries.txt"
+    },
+    {
+      "default_county": "Franklin",
+      "queries": "me_franklin_serper_queries.txt"
+    },
+    {
+      "default_county": "Somerset",
+      "queries": "me_somerset_serper_queries.txt"
+    },
+    {
+      "default_county": "Aroostook",
+      "queries": "me_aroostook_serper_queries.txt"
+    },
+    {
+      "default_county": "Piscataquis",
+      "queries": "me_piscataquis_serper_queries.txt"
+    },
+    {
+      "default_county": "Washington",
+      "queries": "me_washington_serper_queries.txt"
+    }
+  ],
+  "discovery_mode": "keyword-serper",
+  "docai_config_present": true,
+  "gcs_bank_ok": true,
+  "max_ocr_budget_usd": 10.0,
+  "prepared_bucket_ok": true,
+  "render_admin_ok": true,
+  "serper_ok": true,
+  "state": "ME",
+  "tier": "1"
+}

@@ -1,0 +1,68 @@
+{
+  "responses": [
+    {
+      "body": {
+        "bucket": "hoaproxy-ingest-ready",
+        "dry_run": false,
+        "found": 4,
+        "requested_limit": 50,
+        "results": [
+          {
+            "docai_pages": 34,
+            "failed": 0,
+            "hoa": "Beachwood Bay Estates Condominium Association",
+            "indexed": 2,
+            "prefix": "v1/ME/york/beachwood-bay-estates/84c9b5a7fcf2141e",
+            "processed": 2,
+            "skipped": 0,
+            "status": "imported"
+          },
+          {
+            "docai_pages": 0,
+            "failed": 0,
+            "hoa": "Breeze Lane Condominium Association",
+            "indexed": 1,
+            "prefix": "v1/ME/york/breeze-lane/d9937728c086c623",
+            "processed": 1,
+            "skipped": 0,
+            "status": "imported"
+          },
+          {
+            "docai_pages": 2,
+            "failed": 0,
+            "hoa": "Fairway View Village Condominium Association",
+            "indexed": 1,
+            "prefix": "v1/ME/york/fairway-view-village/307ae9ad408c319b",
+            "processed": 1,
+            "skipped": 0,
+            "status": "imported"
+          },
+          {
+            "docai_pages": 0,
+            "failed": 0,
+            "hoa": "Ocean Mist Villages Condominium Association",
+            "indexed": 2,
+            "prefix": "v1/ME/york/ocean-mist-villages/9ed64ec594b9a296",
+            "processed": 2,
+            "skipped": 0,
+            "status": "imported"
+          }
+        ],
+        "state": "ME"
+      },
+      "status_code": 200
+    },
+    {
+      "body": {
+        "bucket": "hoaproxy-ingest-ready",
+        "dry_run": false,
+        "found": 0,
+        "requested_limit": 50,
+        "results": [],
+        "state": "ME"
+      },
+      "status_code": 200
+    }
+  ],
+  "total_imported": 4
+}
