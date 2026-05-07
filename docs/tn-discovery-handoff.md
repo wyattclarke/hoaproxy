@@ -631,3 +631,15 @@ Updated: 2026-05-06
 - Possessive association names can create bad bank slugs such as `wild-pear-shores-s`. Normalize `Homeowner's Association` to `Homeowners Association` in curated lead files before probing; if a bad prefix lands, rebank under the clean name and remove the bad prefix immediately.
 - Cocke/Grainger gap searches are also out-of-state noisy. Recent rejects included Club Rio in Florida, Preserve at Newport in Harris County Texas, Newport/Newport POA materials tied to Chatham County Georgia, Rutledge Landing in Wake County North Carolina, Thornhill hits outside Tennessee, and generic governing-document primers.
 - Pindell-Wilson/Rutledge URLs can look promising for Grainger because of the county name, but the tested `Rutledge Landing` documents are North Carolina. Do not bank unless a future PDF itself shows Tennessee/Grainger evidence.
+
+## End-to-End Live Ingestion — 2026-05-07
+
+- Raw TN bank coverage at ingestion start: 736 manifests under `gs://hoaproxy-bank/v1/TN/`.
+- Prepared-ingest run: `state_scrapers/tn/results/tn_ingest_20260507_100418`.
+- Prepared scanner completed all 736 manifests and wrote 711 prepared bundles before invalid removals. Three out-of-state prepared prefixes were removed before import (`bartow/lake-jeanette-known-as`, `greene/lake-jeanette-known-as`, `hillsborough/planned-development`), leaving 708 prepared bundles.
+- Final prepared queue status: 708/708 imported. One stale `claimed` status (`sumner/gallatin-heights`) was confirmed live and then marked imported.
+- Live site result after final sweep: 672 TN HOA rows, 1,072 documents, and 35,190 chunks.
+- Map result after stale-geometry cleanup and ZIP centroid pass: 446 TN map points (109 polygon, 337 ZIP centroid), 0 out-of-Tennessee-bbox points, 66.37% map coverage.
+- OCR spend stayed below the raised cap: 13,858 DocAI pages, estimated `$20.787` against the `$25.00` cap.
+- Live cleanup patch `4488e2e` added the ability to clear stale cross-state coordinates/boundaries. This was needed because same-name HOAs from prior state imports could otherwise retain old coordinates while being updated to `state=TN`.
+- Final report artifact: `state_scrapers/tn/results/tn_ingest_20260507_100418/final_state_report.json`.
