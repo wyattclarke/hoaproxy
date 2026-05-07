@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import logging
 import os
 import re
 import sys
@@ -19,6 +20,8 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+log = logging.getLogger(__name__)
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -32,6 +35,7 @@ from hoaware.bank import _inspect_pdf, slugify
 from hoaware.config import load_settings
 from hoaware.cost_tracker import COST_DOCAI_PER_PAGE
 from hoaware.doc_classifier import REJECT_JUNK, REJECT_PII, classify_from_text
+from hoaware.name_utils import is_dirty as _is_dirty_name
 from hoaware.pdf_utils import MAX_PAGES_FOR_OCR, extract_pages
 from hoaware.prepared_ingest import (
     DEFAULT_PREPARED_BUCKET,
@@ -527,6 +531,18 @@ def prepare(args: argparse.Namespace) -> int:
             continue
 
         hoa_name = manifest.get("name") or hoa_slug
+        _name_dirty, _name_dirty_reason = _is_dirty_name(hoa_name)
+        if _name_dirty:
+            # Log to stderr and ledger — do NOT block import.  The post-import
+            # name cleanup pass (state_scrapers/ga/scripts/clean_dirty_hoa_names.py)
+            # is the canonical resolver.
+            log.warning("dirty hoa_name name=%r reason=%s", hoa_name, _name_dirty_reason)
+            _append_ledger(args.ledger, {
+                "manifest_uri": manifest_uri,
+                "event": "dirty_name_warn",
+                "hoa_name": hoa_name,
+                "reason": _name_dirty_reason,
+            })
         address = manifest.get("address") if isinstance(manifest.get("address"), dict) else {}
         geometry = manifest.get("geometry") if isinstance(manifest.get("geometry"), dict) else {}
         website = manifest.get("website") if isinstance(manifest.get("website"), dict) else {}

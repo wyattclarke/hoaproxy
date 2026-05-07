@@ -191,7 +191,7 @@ gs://hoaproxy-bank/v1/{STATE}/{county}/{hoa-slug}/
 
 **Per-state two-sweep stop rule:** stop active discovery for the state when two consecutive sweeps both meet all three thresholds above. Allowed follow-up: dedup audits, unknown-county repair, name repair, targeted re-mining of already-downloaded result sets (no new Serper/OpenRouter spend).
 
-**Name-quality gate.** Before banking, every candidate `lead.name` must pass `is_dirty()` (a shared regex check; canonical implementation lives in `state_scrapers/ga/scripts/clean_dirty_hoa_names.py` and should be hoisted to `hoaware/name_utils.py` as a follow-up code change). The PDF filename is **not** a fallback for the HOA name — filenames like `2018-exhibit-a-supplemental-dec.pdf` are document titles, not HOA names. If the only available name evidence is a filename, snippet, or OCR fragment that fails `is_dirty()`, bank under `gs://hoaproxy-bank/v1/{STATE}/_unresolved-name/{slug}/` instead of the canonical state/county slot. The post-import LLM rename pass picks these up later.
+**Name-quality gate.** Before banking, every candidate `lead.name` must pass `is_dirty()` (a shared regex check; canonical implementation shared via `hoaware/name_utils.py`). The PDF filename is **not** a fallback for the HOA name — filenames like `2018-exhibit-a-supplemental-dec.pdf` are document titles, not HOA names. If the only available name evidence is a filename, snippet, or OCR fragment that fails `is_dirty()`, bank under `gs://hoaproxy-bank/v1/{STATE}/_unresolved-name/{slug}/` instead of the canonical state/county slot. The post-import LLM rename pass picks these up later.
 
 Dirty-name patterns currently in production cleanup (`clean_dirty_hoa_names.py::is_dirty`):
 - `year_prefix` — name starts with a 4-digit year (`^(?:19|20)\d{2}\s+`)
@@ -387,7 +387,7 @@ gs://hoaproxy-ingest-ready/v1/{STATE}/{county}/{hoa-slug}/{bundle-id}/
 - Location metadata present when available.
 - No PII category present.
 
-**Pre-/upload name gate.** Before assembling the prepared bundle, run `is_dirty(manifest["name"])`. On a hit, attempt the four deterministic strategies from `state_scrapers/ga/scripts/ga_slug_cleanup.py::derive_clean_slug()` in order: `strip_leading_stopwords`, `extract_after_marker`, `dedupe_tail`, `name_from_source_url`. If all four fail, run an inline LLM rename (same shape as `clean_dirty_hoa_names.py::_ask_llm`) using the first ~3000 chars of OCR text already extracted in Phase 5. The corrected name goes into `bundle.json` and the `/upload` `hoa` field.
+**Pre-/upload name gate.** Before assembling the prepared bundle, run `is_dirty(manifest["name"])`. On a hit, attempt the four deterministic strategies from `hoaware/name_utils.py::derive_clean_slug()` (see `hoaware/name_utils.py` for the canonical implementation) in order: `strip_leading_stopwords`, `extract_after_marker`, `dedupe_tail`, `name_from_source_url`. If all four fail, run an inline LLM rename (same shape as `clean_dirty_hoa_names.py::_ask_llm`) using the first ~3000 chars of OCR text already extracted in Phase 5. The corrected name goes into `bundle.json` and the `/upload` `hoa` field.
 
 ### Phase 8 — Render Import
 

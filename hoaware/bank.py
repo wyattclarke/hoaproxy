@@ -25,11 +25,14 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import logging
 import os
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Iterable
+
+log = logging.getLogger(__name__)
 
 from google.api_core import exceptions as gcs_exceptions
 from google.cloud import storage as gcs
@@ -390,12 +393,42 @@ def bank_hoa(
     name_aliases = list(name_aliases or [])
 
     state = _state_norm(address.get("state"))
+
+    # Name-quality guard: detect and attempt to recover dirty names before
+    # they occupy a canonical state/county slot in the bank.
+    from hoaware.name_utils import derive_clean_slug, is_dirty  # noqa: PLC0415
+
+    dirty, dirty_reason = is_dirty(name)
+    county_override: str | None = None
+    if dirty:
+        source_url = metadata_source.get("source_url")
+        cleaned = derive_clean_slug(name, source_url=source_url)
+        if cleaned and not is_dirty(cleaned)[0]:
+            log.warning(
+                "bank_hoa: dirty name recovered dirty=%r reason=%s -> cleaned=%r",
+                name,
+                dirty_reason,
+                cleaned,
+            )
+            name_aliases = name_aliases + [name]
+            name = cleaned
+        else:
+            # Bank under _unresolved-name/ so the post-import cleanup pass can
+            # find it, but don't occupy a canonical state/county slot.
+            log.warning(
+                "bank_hoa: unresolvable dirty name=%r reason=%s; routing to _unresolved-name/",
+                name,
+                dirty_reason,
+            )
+            county_override = "_unresolved-name"
+
     hoa_slug = slugify(name)
     if not hoa_slug:
         raise ValueError(f"could not slugify name: {name!r}")
+    county_for_path = county_override if county_override is not None else address.get("county")
     prefix = _path_for(
         state=state,
-        county=address.get("county"),
+        county=county_for_path,
         hoa_slug=hoa_slug,
         source_slug=metadata_source.get("source"),
     )
