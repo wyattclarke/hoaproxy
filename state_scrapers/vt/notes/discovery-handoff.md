@@ -10,6 +10,8 @@ response if blocked, out of budget, or asked for status.
 
 - Bank prefix: `gs://hoaproxy-bank/v1/VT/`
 - Current clean bank count: `17` manifests, `21` PDFs.
+- Final live count: `15` VT profiles, `26` live documents, `736` chunks,
+  `14/15` mapped by ZIP centroid.
 - Run ID: `vt_20260507_224836_codex`
 - Tier/budget: Tier 0; `--max-docai-cost-usd 5`.
 - Discovery branch: SoS-first preflight failed headlessly; fallback is
@@ -70,10 +72,8 @@ available without bypassing CAPTCHA.
 
 ## Next Branches
 
-1. Run `prepare_bank_for_ingest.py` through the VT runner with
-   `--max-docai-cost-usd 5`.
-2. Import prepared VT bundles into live through `/admin/ingest-ready-gcs`.
-3. Verify live counts/map coverage and write the mandatory retrospective.
+Discovery/import is complete for this run. Future work should start from new
+source families only, not another broad county keyword sweep.
 
 ## Useful Commands
 

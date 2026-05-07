@@ -1,91 +1,110 @@
-# {STATE} HOA Scrape — Retrospective
-
-A frank account of what worked, what didn't, and what the next person scraping
-a similar state should do differently.
-
-> **Scope note.** Write for the next person, not as a marketing summary.
-> Document dead ends — that is load-bearing information.
+# Vermont HOA Scrape — Retrospective
 
 ## TL;DR
 
-- **Outcome:** {N} {STATE} HOAs live on hoaproxy.org with {N} documents, {N}
-  search chunks, {X}% map coverage. Total marginal spend **~${X.XX}**.
-- **Coverage of estimated universe:** ~{X}% ({N} of {CAI_ESTIMATE} estimated HOAs).
-- **Structural ceiling:** {one sentence on why free public discovery stops here}
+- **Outcome:** 15 VT HOA/condo profiles live with 26 live documents, 736 live
+  chunks, and 93.3% map coverage. The run imported 15 prepared bundles and 17
+  newly indexed documents; Sunrise already existed live and merged into that
+  profile.
+- **Marginal spend:** about **$0.33**: Serper ~$0.03, OpenRouter $0.00, DocAI
+  $0.294, embeddings roughly $0.01.
+- **Coverage of estimated universe:** about 1% of the <1,500 CAI estimate. The
+  SoS universe could not be scraped headlessly, so this is a free-public-doc
+  seed set rather than a registry-complete run.
+- **Structural ceiling:** Vermont public search is dominated by municipal
+  planning/zoning PDFs; higher coverage needs a SoS export or town land-record
+  access, not broader keyword searching.
 
 ## Cost Breakdown
 
 | Phase | API | Spend | Notes |
-|---|---|---|---|
-| Discovery (SoS scrape / Serper sweeps) | Serper | $X.XX | {N} calls |
-| Model classification / name repair | OpenRouter | $X.XX | model, token count |
-| OCR | Google Document AI | $X.XX | {N} pages at $0.0015/page |
-| Embeddings | OpenAI | $X.XX | {N} chunks |
-| ZIP centroid backfill | zippopotam.us | $0 | free |
-| **Total** | | **$X.XX** | |
-
-### Per-HOA economics
-
-| Unit | Count | Cost per unit |
-|---|---|---|
-| Entity attempted | {N} | $X.XXXX |
-| HOA imported live | {N} | $X.XXXX |
-| HOA with substantive content (≥10 chunks) | {N} | $X.XXXX |
-
-## False-Positive Classes
-
-Describe the main reject classes and whether they were correctly handled.
-
-| Reject reason | Count | Verdict |
-|---|---|---|
-| `junk:government` | {N} | correct / over-reject / under-reject |
-| `pii:membership_list` | {N} | correct |
-| `unsupported_category:unknown` | {N} | {note} |
-| `junk:unrelated` | {N} | {note} |
+|---|---:|---:|---|
+| Discovery | Serper | ~$0.03 | 88 search calls |
+| Model classification / name repair | OpenRouter | $0.00 | No model calls used |
+| OCR | Google Document AI | $0.294 | 196 pages at $0.0015/page |
+| Embeddings | OpenAI | ~$0.01 | Estimate from imported chunk volume |
+| ZIP centroid backfill | zippopotam.us/manual ZIP centroids | $0 | No paid geocoder |
+| **Total** | | **~$0.33** | Well below all caps |
 
 ## Final Counts
 
 ```json
 {
-  "state": "{STATE}",
-  "raw_manifests": 0,
-  "prepared_bundles": 0,
-  "imported_bundles": 0,
-  "live_profiles": 0,
-  "live_documents": 0,
-  "live_chunks": 0,
-  "map_points": 0,
-  "map_rate": 0.0,
-  "by_location_quality": {"polygon": 0, "address": 0, "zip_centroid": 0},
+  "state": "VT",
+  "raw_manifests": 17,
+  "prepared_bundles": 15,
+  "prepared_documents": 19,
+  "imported_bundles": 15,
+  "live_profiles": 15,
+  "live_documents": 26,
+  "live_chunks": 736,
+  "map_points": 14,
+  "map_rate": 0.9333,
+  "by_location_quality": {"zip_centroid": 14},
   "out_of_bounds_points": 0,
-  "ocr_cost_usd": 0.0,
-  "rejected_documents": 0,
+  "ocr_cost_usd": 0.294,
+  "rejected_documents": 2,
   "budget_deferred": 0,
-  "failed_bundles": 0
+  "failed_bundles": 0,
+  "zero_chunk_docs_for_vt": 0
 }
 ```
 
 ## Source-Family Yield
 
-| Source family | Manifests | PDFs | Final assessment |
-|---|---|---|---|
-| {family} | {N} | {N} | high / medium / zero |
+| Source family | Result | Assessment |
+|---|---:|---|
+| Vermont SoS registry | 0 leads | Public UI requires CAPTCHA; direct API calls hit Imperva 403 |
+| County Serper fallback | 17 clean manifests / 21 bank PDFs after cleanup | Low-yield but usable |
+| SNHA/Smugglers' Notch source sweep | 1 net PDF enrichment | Useful only for known resort condos |
+
+## False Positives
+
+The first automated probe was too permissive and banked municipal plans,
+zoning bylaws, hazard mitigation plans, DRB staff reports, court material, and
+regional planning documents. Those prefixes were deleted before prepare, and
+the run switched to direct-only curated leads.
+
+Two prepared-stage rejections were correct enough to leave alone:
+
+| Reject reason | Count | Note |
+|---|---:|---|
+| `pii:membership_list` | 1 | Sunset Cove booklet included owner/contact-directory risk |
+| `low_value:financial` | 1 | Haystack Highlands financial/low-value classification |
+
+## What Worked
+
+- Direct-only probing. Passing only vetted `pre_discovered_pdf_urls` prevented
+  broad site crawls from collecting municipal packets and unrelated docs.
+- Resort/community document hosts: SNHA, Mountainside, Chimney Hill, Great
+  Hawk, Quechee Lakes, Eastridge Acres, and Intervale produced the substantive
+  documents.
+- ZIP-centroid backfill recovered map coverage after public Nominatim returned
+  429s during prepare.
 
 ## Would Not Do Again
 
-List the strategies or decisions that cost time / money with no return.
+- Do not use the generic state Serper probe with `--probe` for VT. It inferred
+  HOA names from zoning/planning PDFs and created bad bank prefixes.
+- Do not spend time retrying the current Vermont SoS API from headless scripts;
+  it is free to view but not cleanly automatable from this environment.
+- Do not include HOA website roots during probing unless the link set is
+  prefiltered; the harvester can collect insurance, directories, service
+  introductions, and municipal attachments.
 
-## Unsung Win
+## Reusable Artifacts
 
-The one technique or observation that paid back more than expected.
+| Artifact | Reuse |
+|---|---|
+| `state_scrapers/vt/scripts/run_state_ingestion.py` | Vermont constants and fallback county query wiring |
+| `state_scrapers/vt/leads/vt_curated_*.jsonl` | Audited direct-only VT lead examples |
+| `state_scrapers/vt/queries/vt_*_serper_queries.txt` | Low-yield fallback queries; keep for audit, not as a preferred future branch |
+| `state_scrapers/vt/results/vt_20260507_224836_codex/final_state_report.json` | Final run artifact |
 
-## Cross-State Lessons to Fold Back Into the Playbook
+## Cross-State Lessons
 
-List anything that should be added to `docs/multi-state-ingestion-playbook.md`
-or a future Appendix D note for this state's tier/pattern.
-
-## Reusable Scripts
-
-| Script | Phase | Reusable as-is? |
-|---|---|---|
-| `state_scrapers/{state}/scripts/...` | | adapt {what} per state |
+For small Northeast states, SoS-first is still the right architecture, but the
+preflight must explicitly distinguish "public web UI" from "headlessly
+queryable source." If the registry is CAPTCHA/Imperva-gated, immediately move
+to exact source families and direct-only PDF curation; broad county keyword
+searches should be treated as candidate collection, not automatic bank input.
