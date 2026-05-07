@@ -233,6 +233,15 @@
         color: var(--danger);
       }
 
+      .status.pending {
+        color: #345173;
+        background: #eef5ff;
+        border: 1px solid #cfe0ff;
+        border-radius: 10px;
+        padding: 10px 12px;
+        line-height: 1.45;
+      }
+
       @media (max-width: 760px) {
         .form-grid {
           grid-template-columns: 1fr;
@@ -317,8 +326,7 @@
           <div class="full">
             <button id="submitBtn" type="button">Create HOA and Upload</button>
             <div class="hint">
-              Upload and processing can take a couple minutes. If your documents do not appear right away, refresh the HOA page
-              until they show up.
+              After upload, your PDFs may take a few minutes to appear while HOAproxy extracts text and checks the documents.
             </div>
           </div>
         </div>
@@ -369,6 +377,18 @@
         statusEl.textContent = msg || "";
       }
 
+      function pendingUploadStorageKey(hoaName) {
+        return `hoaproxy.pendingUploads.${hoaName}`;
+      }
+
+      function savePendingUploads(hoa, uploadedFiles) {
+        if (!hoa || !uploadedFiles.length) return;
+        localStorage.setItem(
+          pendingUploadStorageKey(hoa),
+          JSON.stringify({ files: uploadedFiles.map(String), createdAt: Date.now() })
+        );
+      }
+
       function hasLocation() {
         return Boolean(
           lat.value.trim() ||
@@ -414,11 +434,12 @@
         }
 
         submitBtn.disabled = true;
-        setStatus("Uploading documents and creating HOA...", "");
+        setStatus("Uploading your PDFs. Once they arrive, we'll extract the text and check the documents before they appear on the HOA page.", "pending");
 
         try {
           const form = new FormData();
           form.append("hoa", hoa);
+          const selectedFiles = [...files.files].map((file) => file.name);
           for (const file of files.files) {
             form.append("files", file);
           }
@@ -453,16 +474,17 @@
             } catch (_) {}
             throw new Error(detail);
           }
-          await res.json();
+          const body = await res.json();
           if (window.gtag) gtag("event", "hoa_created", { hoa_name: hoa, method: isAnonymous ? "anonymous" : "authenticated" });
           if (isAnonymous) {
-            setStatus("Upload received! Check your email to verify and publish this HOA.", "ok");
+            setStatus("Upload received. Check your email to verify it; after verification, processing can take a few minutes before the documents appear.", "pending");
           } else {
-            setStatus("HOA created and upload queued. Redirecting...", "ok");
+            savePendingUploads(body.hoa || hoa, body.saved_files && body.saved_files.length ? body.saved_files : selectedFiles);
+            setStatus("Upload received. We'll show the documents on the HOA page as soon as text extraction and checks finish. Redirecting...", "pending");
             const redirect = `/hoa/${encodeURIComponent(hoa)}`;
             setTimeout(() => {
               window.location.href = redirect;
-            }, 700);
+            }, 1200);
           }
         } catch (err) {
           setStatus(String(err.message || err), "error");

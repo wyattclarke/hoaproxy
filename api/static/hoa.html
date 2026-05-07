@@ -242,6 +242,15 @@
         color: var(--danger);
       }
 
+      .status.pending {
+        color: #345173;
+        background: #eef5ff;
+        border: 1px solid #cfe0ff;
+        border-radius: 10px;
+        padding: 10px 12px;
+        line-height: 1.45;
+      }
+
       .grid {
         margin-top: 14px;
         display: grid;
@@ -580,6 +589,8 @@
         map: null,
         marker: null,
         boundaryLayer: null,
+        pendingUploads: [],
+        pendingUploadTimer: null,
       };
 
       const hoaTitle = document.getElementById("hoaTitle");
@@ -616,6 +627,15 @@
       function setStatus(el, message, kind = "") {
         el.className = `status ${kind}`.trim();
         el.textContent = message || "";
+      }
+
+      function pendingUploadMessage(count) {
+        const noun = count === 1 ? "document" : "documents";
+        return `Upload received. We're extracting the text and checking that your ${noun} belong here. This can take a few minutes, and the ${noun} will appear in the browser as soon as processing finishes.`;
+      }
+
+      function pendingUploadStorageKey(hoaName) {
+        return `hoaproxy.pendingUploads.${hoaName}`;
       }
 
       function escapeHtml(text) {
@@ -709,6 +729,78 @@
         hoaTitle.textContent = resolved.hoa_name;
       }
 
+      function restorePendingUploads() {
+        if (!state.hoaName) return;
+        try {
+          const raw = localStorage.getItem(pendingUploadStorageKey(state.hoaName));
+          if (!raw) return;
+          const payload = JSON.parse(raw);
+          const createdAt = Number(payload.createdAt || 0);
+          if (!Array.isArray(payload.files) || !payload.files.length || Date.now() - createdAt > 30 * 60 * 1000) {
+            localStorage.removeItem(pendingUploadStorageKey(state.hoaName));
+            return;
+          }
+          state.pendingUploads = payload.files.map(String);
+        } catch (_) {
+          localStorage.removeItem(pendingUploadStorageKey(state.hoaName));
+        }
+      }
+
+      function savePendingUploads(files) {
+        if (!state.hoaName || !files.length) return;
+        state.pendingUploads = [...new Set([...(state.pendingUploads || []), ...files.map(String)])];
+        localStorage.setItem(
+          pendingUploadStorageKey(state.hoaName),
+          JSON.stringify({ files: state.pendingUploads, createdAt: Date.now() })
+        );
+      }
+
+      function clearPendingUploads() {
+        state.pendingUploads = [];
+        if (state.pendingUploadTimer) {
+          clearInterval(state.pendingUploadTimer);
+          state.pendingUploadTimer = null;
+        }
+        if (state.hoaName) localStorage.removeItem(pendingUploadStorageKey(state.hoaName));
+      }
+
+      function pendingFilesMissingFrom(docs) {
+        const relPaths = new Set((docs || []).map((doc) => String(doc.relative_path || "")));
+        return (state.pendingUploads || []).filter((file) => {
+          const name = String(file || "");
+          return ![...relPaths].some((path) => path === name || path.endsWith("/" + name));
+        });
+      }
+
+      function renderPendingDocuments(missingFiles) {
+        if (!missingFiles.length) return "";
+        return missingFiles
+          .map((file) => {
+            const displayName = String(file).replace(/\.pdf$/i, "").replace(/_/g, " ").trim() || file;
+            return (
+              `<div class="doc-item"><strong>${escapeHtml(displayName)}</strong>` +
+              `<span class="chip">Processing</span><br>` +
+              `<span class="meta">Uploaded successfully. Text extraction and document checks are still running.</span></div>`
+            );
+          })
+          .join("");
+      }
+
+      function startPendingUploadPolling() {
+        if (!state.pendingUploads.length || state.pendingUploadTimer) return;
+        const startedAt = Date.now();
+        state.pendingUploadTimer = setInterval(async () => {
+          if (Date.now() - startedAt > 5 * 60 * 1000) {
+            clearInterval(state.pendingUploadTimer);
+            state.pendingUploadTimer = null;
+            setStatus(uploadStatus, "We're still processing your upload. You can leave this page and check back in a few minutes.", "pending");
+            return;
+          }
+          await loadDocuments({ quiet: true });
+          await loadHoaMeta();
+        }, 6000);
+      }
+
       function setMode(mode) {
         state.mode = mode;
         if (mode === "qa") {
@@ -794,16 +886,26 @@
         hoaMeta.innerHTML = `${escapeHtml(location)}${stateBackLink} · ${item.doc_count} docs · ${item.chunk_count} searchable sections · ${mb} MB${websitePart}`;
       }
 
-      async function loadDocuments() {
+      async function loadDocuments(options = {}) {
         if (!state.hoaName) return;
-        setStatus(uploadStatus, "Loading documents...");
+        if (!options.quiet && !state.pendingUploads.length) {
+          setStatus(uploadStatus, "Loading documents...");
+        }
         try {
           const docs = await fetchJson(`/hoas/${encodeURIComponent(state.hoaName)}/documents`);
+          const missingPending = pendingFilesMissingFrom(docs);
           if (!docs.length) {
-            docsEl.innerHTML = '<div class="doc-item">No documents uploaded yet.</div>';
-            setStatus(uploadStatus, "No documents uploaded yet.");
+            if (missingPending.length) {
+              docsEl.innerHTML = renderPendingDocuments(missingPending);
+              setStatus(uploadStatus, pendingUploadMessage(missingPending.length), "pending");
+              startPendingUploadPolling();
+            } else {
+              docsEl.innerHTML = '<div class="doc-item">No documents uploaded yet.</div>';
+              setStatus(uploadStatus, "No documents uploaded yet.");
+            }
             return;
           }
+          const pendingHtml = renderPendingDocuments(missingPending);
           docsEl.innerHTML = docs
             .map((doc) => {
               const rawHref = `/hoas/${encodeURIComponent(state.hoaName)}/documents/file?path=${encodeURIComponent(doc.relative_path)}`;
@@ -818,8 +920,16 @@
                 `<a class="doc-link" href="${rawHref}" target="_blank" rel="noopener noreferrer">Open Raw PDF</a></div>`
               );
             })
-            .join("");
-          setStatus(uploadStatus, "Document list loaded.", "ok");
+            .join("") + pendingHtml;
+          if (missingPending.length) {
+            setStatus(uploadStatus, pendingUploadMessage(missingPending.length), "pending");
+            startPendingUploadPolling();
+          } else if (state.pendingUploads.length) {
+            clearPendingUploads();
+            setStatus(uploadStatus, "Your upload is ready. The document is now searchable.", "ok");
+          } else if (!options.quiet) {
+            setStatus(uploadStatus, "Document list loaded.", "ok");
+          }
         } catch (err) {
           docsEl.innerHTML = "";
           setStatus(uploadStatus, String(err.message || err), "error");
@@ -841,19 +951,22 @@
         }
 
         uploadBtn.disabled = true;
-        setStatus(uploadStatus, "Uploading and processing...");
+        setStatus(uploadStatus, "Uploading your PDF. Once it arrives, we'll extract the text and check the document before it appears here.", "pending");
 
         try {
           const formData = new FormData();
           formData.append("hoa", state.hoaName);
+          const selectedFiles = [...uploadFiles.files].map((file) => file.name);
           for (const file of uploadFiles.files) {
             formData.append("files", file);
           }
           const body = await fetchJson("/upload", { method: "POST", body: formData });
-          setStatus(uploadStatus, `Uploaded ${body.saved_files.length} file(s). Processing started — documents will appear shortly.`, "ok");
+          savePendingUploads(body.saved_files && body.saved_files.length ? body.saved_files : selectedFiles);
+          setStatus(uploadStatus, pendingUploadMessage(state.pendingUploads.length), "pending");
           uploadFiles.value = "";
-          await loadDocuments();
+          await loadDocuments({ quiet: true });
           await loadHoaMeta();
+          startPendingUploadPolling();
         } catch (err) {
           setStatus(uploadStatus, String(err.message || err), "error");
         } finally {
@@ -1093,6 +1206,7 @@
           setMode("qa");
           initMap();
           await resolveHoaName();
+          restorePendingUploads();
           await loadHoaMeta();
           await loadDocuments();
           await loadHoaLocation();
