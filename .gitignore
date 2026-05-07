@@ -34,6 +34,10 @@ docs/hoa-law-corpus-execution-log.md
 docs/ux-fix-list.md
 scripts/gcp_billing_cap/
 
+# Generated scraping / benchmark output
+benchmark/results/
+state_scrapers/**/results/
+
 # Claude Code / Playwright working dirs
 .claude/
 .playwright-mcp/

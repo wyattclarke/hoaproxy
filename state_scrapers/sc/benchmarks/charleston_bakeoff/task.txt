@@ -1,0 +1,56 @@
+Find and bank HOA governing documents for HOAs in CHARLESTON COUNTY, SOUTH CAROLINA.
+
+You will be terminated at a hard wall-clock limit. Bank as many HOAs as you can before then.
+
+## Setup
+
+Working directory: /Users/ngoshaliclarke/Documents/GitHub/hoaproxy
+Activate venv: source .venv/bin/activate
+Load env vars (do NOT cat/read settings.env): set -a; source settings.env; set +a
+GCP project: hoaware (gcloud already authed; default credentials work)
+Bank bucket: gs://hoaproxy-bank/
+
+## Available tools
+
+- `hoaware.discovery.probe(lead)` — fetches an HOA homepage, harvests PDF links, verifies them, and banks them to GCS. See hoaware/discovery/probe.py for the API.
+- `hoaware.discovery.Lead(name=, state="SC", county="Charleston", city=, website=, source=, source_url=)` — the input dataclass.
+- `python -m hoaware.discovery probe-batch leads.jsonl` — batch wrapper around probe(); reads a JSONL of Lead dicts, one per line. Has a 5-min per-HOA timeout (HOA_PROBE_TIMEOUT).
+- `hoaware.discovery.bank.bank_hoa(...)` — direct bank API if you want to bank docs without going through probe.
+- Serper API: `HOA_SERPER_API_KEY` env var; $0.001/query for Google search. Use for finding HOA websites.
+- Existing aggregator scrapers under `hoaware/discovery/sources/` (NC) — read them for patterns, but they don't cover SC. You'll need to find SC-specific sources.
+- You may write Python scripts, install packages, scrape websites, anything.
+
+## What counts as banked
+
+Each banked HOA = one manifest.json under `gs://hoaproxy-bank/v1/SC/charleston/<hoa-slug>/manifest.json`.
+Each banked PDF = `gs://hoaproxy-bank/v1/SC/charleston/<hoa-slug>/doc-<sha>/original.pdf`.
+
+Count via:
+  gsutil ls "gs://hoaproxy-bank/v1/SC/**/manifest.json" 2>/dev/null | wc -l
+  gsutil ls -r gs://hoaproxy-bank/v1/SC/ 2>/dev/null | grep "original.pdf" | wc -l
+
+## Strategy ideas (you decide)
+
+- Google search via Serper: "[city] SC HOA covenants site:*.org filetype:pdf"
+- Charleston County property records / GIS: subdivision lists are sometimes downloadable
+- Property management firms in the Charleston area — their HOA portals often link out to community websites
+- Direct address-search sites (some have downloadable plat / declaration data)
+- Aggregator sites like neighborhoodscout, casnc-equivalents, local realtors
+
+## Rules
+
+- Do NOT read or modify settings.env (use `source settings.env` to load env vars only).
+- Do NOT modify hoaware/ source code. You can write NEW scripts under /tmp or scripts/.
+- Do NOT ask questions — work autonomously until terminated.
+- Do not commit anything to git.
+
+## Final report
+
+When you finish or sense you are about to be terminated, emit exactly this block (single block, no surrounding text):
+
+BENCHMARK_RESULT
+hoas_banked: <integer from gsutil count of manifest.json under v1/SC/>
+pdfs_banked: <integer from gsutil count of original.pdf under v1/SC/>
+strategy: <one paragraph describing what you actually tried and what worked>
+sources_used: <comma-separated list of distinct sources/sites you scraped>
+END_BENCHMARK_RESULT

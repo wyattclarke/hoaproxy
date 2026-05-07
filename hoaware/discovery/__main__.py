@@ -19,6 +19,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import signal
 import sys
 from dataclasses import asdict
 from typing import Iterator
@@ -26,6 +28,25 @@ from typing import Iterator
 from .leads import Lead
 from .probe import probe
 from .sources.nc_aggregators import ALL_SOURCES, nc_leads
+
+_PROBE_TIMEOUT = int(os.environ.get("HOA_PROBE_TIMEOUT", "300"))
+
+
+def _probe_with_timeout(lead: Lead, bucket_name: str | None, timeout: int):
+    """Run probe() with a per-HOA wall-clock timeout (SIGALRM, POSIX only)."""
+    if timeout <= 0:
+        return probe(lead, bucket_name=bucket_name)
+
+    def _handler(signum, frame):
+        raise TimeoutError(f"probe exceeded {timeout}s wall-clock limit")
+
+    old_handler = signal.signal(signal.SIGALRM, _handler)
+    signal.alarm(timeout)
+    try:
+        return probe(lead, bucket_name=bucket_name)
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, old_handler)
 
 
 def _print_result(lead: Lead, result, *, json_out: bool) -> None:
@@ -85,8 +106,11 @@ def cmd_probe_batch(args) -> int:
     failures = 0
     for lead in _iter_jsonl(args.path):
         try:
-            result = probe(lead, bucket_name=args.bucket)
+            result = _probe_with_timeout(lead, args.bucket, _PROBE_TIMEOUT)
             _print_result(lead, result, json_out=args.json)
+        except TimeoutError as exc:
+            failures += 1
+            print(f"TIMEOUT {lead.name}: {exc}", file=sys.stderr)
         except Exception as exc:
             failures += 1
             print(f"FAILED {lead.name}: {exc}", file=sys.stderr)
