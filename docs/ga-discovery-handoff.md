@@ -74,7 +74,7 @@ The current GA passes ran with statewide query files and statewide validation, s
 
 ## Backfill Result (run 1, 2026-05-05)
 
-`scripts/ga_county_backfill.py` walked all 416 `_unknown-county/...` GA manifests:
+`state_scrapers/ga/scripts/ga_county_backfill.py` walked all 416 `_unknown-county/...` GA manifests:
 
 - **168 moved** to the right county prefix (PDF first/last-page text or HOA-name/URL city match).
 - **248 still under `_unknown-county/`** — heuristic could not pin a county. Most are HOA names without a city hint and PDFs whose recording county sits past the first ~6 pages or in non-text-extractable scans.
@@ -118,9 +118,9 @@ OpenRouter spend in this pass: ~$0.13 (running total ~$11.03 of $20 cap).
 
 Two depth passes ran after the host-family per-county sweep:
 
-1. `scripts/ga_owned_domain_depth.py` walked every GA manifest with a website already set + fewer than --target-pdfs PDFs and tried to crawl the documents page. Result: 510/631 manifests had no usable website (most leads came from CDN URLs), 22 already had ≥4 PDFs, 99 were probed, only +1 PDF banked. Low ROI as expected; left in the repo for future state-runs that bank more website-attached leads.
+1. `state_scrapers/ga/scripts/ga_owned_domain_depth.py` walked every GA manifest with a website already set + fewer than --target-pdfs PDFs and tried to crawl the documents page. Result: 510/631 manifests had no usable website (most leads came from CDN URLs), 22 already had ≥4 PDFs, 99 were probed, only +1 PDF banked. Low ROI as expected; left in the repo for future state-runs that bank more website-attached leads.
 
-2. `scripts/ga_find_owned_website.py` — much higher yield. For every banked GA HOA with fewer than --max-pdfs-already PDFs and a usable name, runs one Serper search ("<name> <county> Georgia HOA documents") and picks the first organic hit whose host (a) isn't a CDN/portal/legal/social and (b) contains the HOA's distinctive name in its host or path. Then probes the homepage so the existing probe pipeline crawls and banks any governing PDFs. Result: 472 manifests processed, 184 probed, **436 PDFs newly banked** (mean ~2.4 PDFs/probe), 287 had no convincing owned domain. Spend was Serper-only (no model) and added the bulk of GA's new depth. This is the most productive single pass we ran for depth.
+2. `state_scrapers/ga/scripts/ga_find_owned_website.py` — much higher yield. For every banked GA HOA with fewer than --max-pdfs-already PDFs and a usable name, runs one Serper search ("<name> <county> Georgia HOA documents") and picks the first organic hit whose host (a) isn't a CDN/portal/legal/social and (b) contains the HOA's distinctive name in its host or path. Then probes the homepage so the existing probe pipeline crawls and banks any governing PDFs. Result: 472 manifests processed, 184 probed, **436 PDFs newly banked** (mean ~2.4 PDFs/probe), 287 had no convincing owned domain. Spend was Serper-only (no model) and added the bulk of GA's new depth. This is the most productive single pass we ran for depth.
 
 ## Deep Legal-Phrase Pass #1 + #2
 
@@ -136,7 +136,7 @@ in flight at handoff time.
 
 ## Backfill Round 2
 
-A second `scripts/ga_county_backfill.py` pass over the
+A second `state_scrapers/ga/scripts/ga_county_backfill.py` pass over the
 `_unknown-county/` manifests that grew during the depth +
 deep-legal-1 work: 37 moved to the right county, 11 collisions
 (would have overwritten an existing manifest at the destination),
@@ -147,13 +147,13 @@ deep-legal-1 work: 37 moved to the right county, 11 collisions
 After the v2 sweep finished, two cleanup passes ran on the
 `_unknown-county/` backlog (309 manifests):
 
-1. `scripts/ga_cleanup_unknown_county.py` — combines LLM name-repair
+1. `state_scrapers/ga/scripts/ga_cleanup_unknown_county.py` — combines LLM name-repair
    (DeepSeek, only fired when the current name looks malformed) with a
    Serper address-lookup fallback (one search per HOA, scans organic
    results for an explicit GA county or known city). Routed 120
    manifests; flagged 41 collisions; left 148 truly stuck.
 
-2. `scripts/ga_purge_collision_orphans.py` — cleaned up the 41
+2. `state_scrapers/ga/scripts/ga_purge_collision_orphans.py` — cleaned up the 41
    collision cases. 21 were pure duplicates (deleted). 20 had unique
    PDFs the canonical manifest didn't have; merged those PDFs into the
    canonical doc-{sha[:12]}/ folders, appended their records to the

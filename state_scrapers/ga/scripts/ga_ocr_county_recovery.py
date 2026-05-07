@@ -44,8 +44,9 @@ from typing import Any
 
 from dotenv import load_dotenv
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 load_dotenv(ROOT / "settings.env", override=False)
 load_dotenv(ROOT / ".env", override=False)
 
@@ -56,7 +57,7 @@ from hoaware.config import load_settings  # noqa: E402
 from hoaware.cost_tracker import COST_DOCAI_PER_PAGE  # noqa: E402
 
 # Reuse the heuristic helpers and the cross-state cleaner's detector.
-from scripts.ga_county_backfill import (  # noqa: E402
+from ga_county_backfill import (  # noqa: E402
     BUCKET_NAME,
     UNKNOWN_PREFIX,
     copy_prefix,

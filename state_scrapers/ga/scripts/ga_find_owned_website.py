@@ -23,7 +23,7 @@ from urllib.parse import urlparse
 import requests
 from dotenv import load_dotenv
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
 load_dotenv(ROOT / "settings.env", override=False)
 load_dotenv(ROOT / ".env", override=False)

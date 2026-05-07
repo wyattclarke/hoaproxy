@@ -59,8 +59,8 @@ When the two-sweep rule triggers, do not launch another broad scrape for that st
 
 **Do not launch a statewide `scrape_state_serper_docpages.py` invocation** (no `--default-county` set, broad query file with no `"<County> County"` constraint). Any time you reach for one, treat it as a sign that you've drifted off the rule and stop. The only allowed statewide-shaped operations are:
 
-- Per-HOA enrichment passes that use the *existing* manifest's county (e.g. `scripts/ga_find_owned_website.py`, `scripts/ga_owned_domain_depth.py`). These do not create new manifests; they enrich within the bank's existing county routing.
-- A one-time backfill (`scripts/ga_county_backfill.py`) over historical `_unknown-county/` debt — never to legitimize new statewide sweeps.
+- Per-HOA enrichment passes that use the *existing* manifest's county (e.g. `state_scrapers/ga/scripts/ga_find_owned_website.py`, `state_scrapers/ga/scripts/ga_owned_domain_depth.py`). These do not create new manifests; they enrich within the bank's existing county routing.
+- A one-time backfill (`state_scrapers/ga/scripts/ga_county_backfill.py`) over historical `_unknown-county/` debt — never to legitimize new statewide sweeps.
 
 In practice the per-county pipeline is:
 

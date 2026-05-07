@@ -44,8 +44,9 @@ import requests
 from dotenv import load_dotenv
 from openai import OpenAI
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 load_dotenv(ROOT / "settings.env", override=False)
 load_dotenv(ROOT / ".env", override=False)
 
@@ -53,7 +54,7 @@ from google.cloud import storage as gcs  # noqa: E402
 
 # Reuse the heuristic helpers (county list, city map, PDF text extract,
 # GCS copy/delete, manifest update).
-from scripts.ga_county_backfill import (  # noqa: E402
+from ga_county_backfill import (  # noqa: E402
     BUCKET_NAME,
     CITY_TO_COUNTY,
     GA_COUNTIES,

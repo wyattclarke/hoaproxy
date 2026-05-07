@@ -33,8 +33,9 @@ from pathlib import Path
 from dotenv import load_dotenv
 from openai import OpenAI
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 load_dotenv(ROOT / "settings.env", override=False)
 load_dotenv(ROOT / ".env", override=False)
 
@@ -42,7 +43,7 @@ from google.cloud import storage as gcs  # noqa: E402
 
 # Reuse the existing backfill helpers (county list, PDF text extraction,
 # heuristic county inference, GCS copy/delete).
-from scripts.ga_county_backfill import (  # noqa: E402
+from ga_county_backfill import (  # noqa: E402
     BUCKET_NAME,
     GA_COUNTIES,
     UNKNOWN_PREFIX,

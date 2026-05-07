@@ -14,7 +14,7 @@ from pathlib import Path
 
 import requests
 
-SETTINGS_PATH = Path(__file__).resolve().parents[1] / "settings.env"
+SETTINGS_PATH = Path(__file__).resolve().parents[3] / "settings.env"
 
 
 def _load_jwt_secret() -> str:
