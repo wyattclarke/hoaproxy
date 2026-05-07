@@ -1,0 +1,8 @@
+filetype:pdf "Kennebec County Registry of Deeds" "Declaration of Condominium" "Maine"
+filetype:pdf "Kennebec County" Maine "Unit Owners Association" bylaws
+filetype:pdf "Augusta" Maine "Condominium Association" bylaws
+filetype:pdf "Waterville" Maine "Declaration of Condominium" "Association"
+site:kennebec.me.ds.search.govos.com "Declaration of Condominium" "Maine"
+site:kennebec.me.ds.search.govos.com "Unit Owners Association" "Maine"
+"Maine Condominium Act" "Kennebec County Registry of Deeds" "Association" filetype:pdf
+"Declaration of Covenants and Restrictions" "Kennebec County" Maine "Property Owners Association" filetype:pdf

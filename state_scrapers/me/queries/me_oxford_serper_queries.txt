@@ -1,0 +1,6 @@
+filetype:pdf "Oxford County Registry of Deeds" "Declaration of Condominium" "Maine"
+filetype:pdf "Oxford County" Maine "Unit Owners Association" bylaws
+filetype:pdf "Bethel" Maine "Condominium Association" bylaws
+filetype:pdf "Newry" Maine "Declaration of Condominium" "Association"
+"Maine Condominium Act" "Oxford County Registry of Deeds" "Association" filetype:pdf
+"Declaration of Covenants and Restrictions" "Oxford County" Maine "Property Owners Association" filetype:pdf

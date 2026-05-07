@@ -1,0 +1,6 @@
+filetype:pdf "Piscataquis County Registry of Deeds" "Declaration of Condominium" "Maine"
+filetype:pdf "Piscataquis County" Maine "Unit Owners Association" bylaws
+filetype:pdf "Dover-Foxcroft" Maine "Condominium Association" bylaws
+filetype:pdf "Greenville" Maine "Declaration of Condominium" "Association"
+"Maine Condominium Act" "Piscataquis County Registry of Deeds" "Association" filetype:pdf
+"Declaration of Covenants and Restrictions" "Piscataquis County" Maine "Property Owners Association" filetype:pdf
