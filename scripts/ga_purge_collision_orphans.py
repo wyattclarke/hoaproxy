@@ -171,8 +171,13 @@ def parse_collisions(log_path: Path) -> list[dict]:
                 continue
             if row.get("status") != "collision":
                 continue
-            if not row.get("slug") or not row.get("county") or not row.get("new_slug"):
+            if not row.get("slug") or not row.get("county"):
                 continue
+            # OCR-recovery collisions don't repair the slug, so default to
+            # the original slug. The cleanup-script collisions carry an
+            # explicit new_slug.
+            if not row.get("new_slug"):
+                row["new_slug"] = row["slug"]
             rows.append(row)
     return rows
 
