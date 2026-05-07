@@ -191,6 +191,26 @@ gs://hoaproxy-bank/v1/{STATE}/{county}/{hoa-slug}/
 
 **Per-state two-sweep stop rule:** stop active discovery for the state when two consecutive sweeps both meet all three thresholds above. Allowed follow-up: dedup audits, unknown-county repair, name repair, targeted re-mining of already-downloaded result sets (no new Serper/OpenRouter spend).
 
+**Name-quality gate.** Before banking, every candidate `lead.name` must pass `is_dirty()` (a shared regex check; canonical implementation lives in `state_scrapers/ga/scripts/clean_dirty_hoa_names.py` and should be hoisted to `hoaware/name_utils.py` as a follow-up code change). The PDF filename is **not** a fallback for the HOA name — filenames like `2018-exhibit-a-supplemental-dec.pdf` are document titles, not HOA names. If the only available name evidence is a filename, snippet, or OCR fragment that fails `is_dirty()`, bank under `gs://hoaproxy-bank/v1/{STATE}/_unresolved-name/{slug}/` instead of the canonical state/county slot. The post-import LLM rename pass picks these up later.
+
+Dirty-name patterns currently in production cleanup (`clean_dirty_hoa_names.py::is_dirty`):
+- `year_prefix` — name starts with a 4-digit year (`^(?:19|20)\d{2}\s+`)
+- `numeric_prefix` — `^\d+\s*[-)]\s*`
+- `street_address_prefix` — `^\d+\s+\w+\s+(Street|Road|…)\b`
+- `stopword_prefix` — starts with `bylaws|declarations|exhibit|supplement|amendment|appendix|articles|certificate|covenants|protective|restated|second|third|first` etc.
+- `doc_fragment_anywhere` — contains `exhibit [A-Z]`, `supplemental dec`, `amended and restated`, `declaration of`, `by-laws of`, `articles of incorporation of`, `protective covenants`, `wetland mitigation`
+- `doubled_name` — POA/HOA prefix repeats (e.g., "Foo HOA Foo Homeowners Association")
+- `garbled_acronym` — `[A-Z]{2,}-[A-Z]{2,}-[A-Z]{2,}` (OCR artifact)
+- `tail_truncation` — ends with `\b(and|or|of|to|the|for|with)\s+HOA$`
+- `citation_in_name` — contains `book \d|page \d|paragraph`
+- `ccr_in_name_long` — contains `cc&?rs?` and `len > 30`
+- `shouting_prefix` — `^[A-Z][A-Z &\-]{3,}\s+` and `len > 40`
+- `too_short` — `len ≤ 4` and lacks HOA/POA marker
+- `very_long` — `len > 70`
+- `long_dashed_phrase` — `" - "` present and `len > 50`
+- `county_prefix` — starts with `\w+ County of `
+- `starts_lowercase`, `longdigit_prefix`
+
 **Per-branch pivot order:**
 1. County sweeps dry → host-family expansion.
 2. Source family stops → legal-phrase searches over recorded documents (`Register of Deeds`, `{state} not-for-profit corporation`, `Articles of Incorporation`, `Amendment to Declaration`, `Restated Bylaws`, `Supplemental Declaration`).
@@ -367,6 +387,8 @@ gs://hoaproxy-ingest-ready/v1/{STATE}/{county}/{hoa-slug}/{bundle-id}/
 - Location metadata present when available.
 - No PII category present.
 
+**Pre-/upload name gate.** Before assembling the prepared bundle, run `is_dirty(manifest["name"])`. On a hit, attempt the four deterministic strategies from `state_scrapers/ga/scripts/ga_slug_cleanup.py::derive_clean_slug()` in order: `strip_leading_stopwords`, `extract_after_marker`, `dedupe_tail`, `name_from_source_url`. If all four fail, run an inline LLM rename (same shape as `clean_dirty_hoa_names.py::_ask_llm`) using the first ~3000 chars of OCR text already extracted in Phase 5. The corrected name goes into `bundle.json` and the `/upload` `hoa` field.
+
 ### Phase 8 — Render Import
 
 ```bash
@@ -481,7 +503,9 @@ Write before the state is considered done.
 - Source families attempted vs productive.
 - Lessons learned to fold back into this playbook.
 
-**Exemplars:** `state_scrapers/ri/RI_SCRAPE_RETROSPECTIVE.md` (Tier 1 SoS-first), `state_scrapers/ga/` (Tier 3 per-county Serper).
+**Exemplars:** `state_scrapers/ri/RI_SCRAPE_RETROSPECTIVE.md` (Tier 1 SoS-first), `state_scrapers/ga/` (Tier 3 per-county Serper), `state_scrapers/tn/notes/retrospective.md` (Tier 2 per-county Serper).
+
+**Budget the post-import name cleanup as a named closing step**, not an afterthought. Expect ~14-16% of live HOAs to need it even with good discovery (GA's 1,800-bank run produced 16% dirty names). Run `state_scrapers/ga/scripts/clean_dirty_hoa_names.py --state {STATE} --apply` (or its hoisted equivalent) and target the `year_prefix`, `doc_fragment_anywhere`, and `stopword_prefix` buckets first as the highest-yield classes.
 
 ---
 
@@ -632,6 +656,32 @@ Applied before every model call or bank write:
 - **Deployment of new `location_quality` values must precede importing records that use them.**
 - **`HOA_DISCOVERY_MODEL_BLOCKLIST`:** Gemini is blocked (too expensive per yield, per May 2026 KS activity export). Qwen Flash variants are blocked (runaway hidden reasoning-token usage).
 - **Turn boundary is not a blocker.** A final response stops the execution turn; it is not a valid reason to stop autonomous scraping. Only stop when there is a real blocker, the budget is exhausted, or the user asks for status.
+
+---
+
+## Cross-State Lessons (Consolidated from GA / RI / TN)
+
+Findings that generalized across three retrospectives and should be treated as invariants for new state runs.
+
+1. **SoS-first vs. county-Serper is structural, not preference.** Use SoS-first when county/town names overlap with other states (any small Northeast state) or land records are walled. Use county-Serper when county recorders publish public PDFs (FL, TX, GA, CA). RI's first county-Serper attempt: 0 HOAs.
+
+2. **Bare statewide Serper produces noise.** The per-county anchor is the precision gate. Every state that tried bare statewide queries regretted it.
+
+3. **Productive source families must be promoted to deterministic scraping.** Once two sweeps confirm a host family (CDN paths, Squarespace `/s/` aliases, mgmt-co domains), stop Serpering and mine the URL pattern directly with exact-source dedup.
+
+4. **Pre-import stale-geometry audit is mandatory.** Same-name HOAs from prior state imports retain their old coordinates. TN had this bug — TN HOAs showed map points in TX, CA, WA. The fix is the cross-state-clear feature in `db.upsert_hoa_location` (`clear_coordinates` / `clear_boundary_geojson` kwargs); always pass them when a later state's import has no trustworthy spatial evidence.
+
+5. **ZIP centroid backfill belongs in the pipeline, not a cleanup afterthought.** Every state needed it. Public Nominatim is unreliable above ~100 sequential requests; do not put it on the critical path.
+
+6. **Management-company crawling yields zero in NE-regional states.** FirstService, Associa, Brigs, Barkan all use AppFolio/CINC/ManageBuilding portals that block public access. Run `state_scrapers/ri/scripts/find_mgmt_companies.py` to confirm fast, then move on.
+
+7. **Budget 14-16% of live HOAs for post-import name cleanup** even with good discovery. This is normal. (See Phase 10 closing step above.)
+
+8. **DocAI is always the dominant cost (~60-93% of total).** The `max($5, $0.03 × manifest_count)` cap is the right per-state formula; budget overruns come from recovery passes, not the main run.
+
+9. **Keep every Serper result directory.** Re-mining old noisy results with updated source-family knowledge recovers real docs at zero marginal Serper cost. TN proved this.
+
+10. **Live `JWT_SECRET` drifts from local `settings.env`.** Every runner that calls the live API must fetch the secret via the Render API at runtime (see Phase 8 for the canonical implementation). Treat this as a runner-class invariant, not a one-off workaround.
 
 ---
 
