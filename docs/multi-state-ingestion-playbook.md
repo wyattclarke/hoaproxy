@@ -743,55 +743,14 @@ For each halt: write the exact command to resume and the files to inspect.
 
 ## Appendix A — Kickoff Prompt Template
 
-Substitute `{STATE}`, `{state-name}`, and `{METRO_LIST}` before use.
+The canonical, agent-agnostic kickoff prompt lives at
+[`state_scrapers/_template/kickoff-prompt.md`](../state_scrapers/_template/kickoff-prompt.md).
+That file carries the Prompt Body (verbatim copy block), the placeholder
+substitution table, per-tier cost defaults, run-id format, and a worked
+example.
 
----
-
-You are in `/Users/ngoshaliclarke/Documents/GitHub/hoaproxy`. Read `CLAUDE.md` (or `AGENTS.md` for Codex), then `docs/multi-state-ingestion-playbook.md`, `docs/agent-ingestion.md`, and at least one prior handoff. `state_scrapers/ks/notes/discovery-handoff.md` is the most detailed; `state_scrapers/tn/notes/discovery-handoff.md` is thinner and more recent. Do not let any single state's specific choices constrain you.
-
-Other state runs may be active in parallel. Coexist gracefully on rate limits. Do not edit shared files actively touched by another run unless you have a specific reason.
-
-### Task
-
-Autonomously scrape public {state-name} HOA governing documents into the existing GCS bank. Use `state="{STATE}"` on leads so documents land under `gs://hoaproxy-bank/v1/{STATE}/...`. Do not create a new bucket.
-
-### Constraints
-
-- Continue autonomously. Turn boundaries are not blockers — see "Autonomy Failure Mode" in the playbook. Only send a final response when there is a real blocker, the explicit budget is exhausted, or the user asks for status.
-- Do not use Gemini. Do not use Qwen Flash variants for bulk classification. Both are blocklisted.
-- Prefer deterministic search → fetch → preflight → bank over model calls.
-- Primary model: `deepseek/deepseek-v4-flash`. Quality fallback: `moonshotai/kimi-k2.6` for the bounded subset of candidates DeepSeek rejects/cannot name/scores below threshold after deterministic gates. Do not retry whole failed DeepSeek batches on Kimi.
-- Never send to any model: secrets, cookies, logged-in pages, resident data, private portal content, emails, payment data, or internal/work data.
-- Respect `robots.txt` and practical per-host delays.
-- Log all model usage to `data/model_usage.jsonl`. Do not log prompts, completions, document text, cookies, or API keys.
-- Commit reusable code and docs after each milestone with a descriptive message, then keep scraping.
-
-### Sub-agent right-sizing
-
-Delegate to cheaper subagents (Explorer/Runner/Curator/Verifier roles as defined in Phase 0) for mechanical work. Reserve orchestrator for judgment: choosing next source-family branch, reading validator audits, calling the two-sweep stop rule, cross-state routing edge cases, safety/policy questions.
-
-### Initial strategy
-
-1. Count current {STATE} bank coverage:
-   ```bash
-   gsutil ls 'gs://hoaproxy-bank/v1/{STATE}/**/manifest.json' 2>/dev/null | wc -l
-   gsutil ls 'gs://hoaproxy-bank/v1/{STATE}/*/*/doc-*/original.pdf' 2>/dev/null | wc -l
-   ```
-2. Start with the highest HOA-density metros:
-   {METRO_LIST}
-3. Run discovery county-by-county using the pattern appropriate for {state-name} (see "Discovery source selection" table in the playbook).
-4. Maintain `state_scrapers/{state}/notes/discovery-handoff.md` with running bank counts, source families attempted, query files used, false-positive patterns to block, model spend, and next branches. Commit as you go.
-
-### Stop rules
-
-See "Per-branch stop thresholds" and "Per-state two-sweep stop rule" in Phase 2. Stop only when source families are genuinely exhausted, the OpenRouter budget is exhausted, or the user explicitly asks for status.
-
-### Required artifacts on completion
-
-- `state_scrapers/{state}/results/{run_id}/final_state_report.json`
-- `state_scrapers/{state}/notes/retrospective.md` (see Phase 10 requirements)
-
----
+Use it for both Claude Code and Codex sessions; the Prompt Body references
+both `CLAUDE.md` and `AGENTS.md` so it works unchanged in either harness.
 
 ## Appendix B — Bank Manifest Schema
 

@@ -58,6 +58,7 @@ No Claude or Codex SDK imports. Both agents use the same runner unchanged.
 
 ## Reference
 
+- `kickoff-prompt.md` (next to this README) — agent-agnostic prompt template for starting a fresh state-scraping session
 - `docs/multi-state-ingestion-playbook.md` — canonical playbook (all phases)
 - `docs/multi-state-ingestion-playbook.md#appendix-d` — per-state discovery table
 - `state_scrapers/in/scripts/run_state_ingestion.py` — original IN runner this was generalized from
