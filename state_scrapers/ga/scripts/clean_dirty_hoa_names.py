@@ -50,8 +50,37 @@ _BAD_PREFIX = re.compile(
     r"plat|this |consideration|common|accordance|city of|county of|members of|"
     r"voting|the property|is the |a homeowners|page |section |exhibit|schedule|"
     r"such as|in addition|unless |any |all |or other|or by|a typical|recorded |"
-    r"submitted )",
+    r"submitted |squarespace|attachment |appendix |of for |of to |amended and )",
     re.I,
+)
+
+# Phrases that almost always indicate a doc-title fragment leaked into the
+# HOA name — even when they appear mid-string (caught the Lake Laceola case).
+_DOC_FRAGMENT_RE = re.compile(
+    r"\b(?:exhibit\s+[A-Za-z](?:\b|-\d)|"
+    r"supplemental\s+dec(?:laration)?|amended\s+and\s+restated|"
+    r"architectural\s+design\s+guidelines?|"
+    r"declaration\s+of(?:\s+covenants)?|"
+    r"by-?laws\s+of|articles\s+of\s+incorporation\s+of|"
+    r"protective\s+covenants?|wetland(?:-|\s)mitigation)\b",
+    re.I,
+)
+
+# Trailing "<stop word> HOA" — names like "Bridgeberry Amenity and HOA" where
+# OCR truncated mid-phrase and "HOA" got stuck on the end.
+_TAIL_TRUNCATION_RE = re.compile(
+    r"\b(?:and|or|of|to|the|for|with|on|in|by|both)\s+HOA$", re.I
+)
+
+# "<County> County OF.<Name>" or "<County> County of <Name>" — county leaked
+# in as a prefix (e.g. "Gwinnett County OF. FAITH HOLLOW Homeowners …").
+_COUNTY_PREFIX_RE = re.compile(
+    r"^[A-Z][a-z]+\s+County\s+(?:of|OF\.?)\s+", re.I
+)
+
+# Doubled-name pattern: "<X> POA <X-CAPS> PROPERTY OWNERS ASSOCIATION".
+_DOUBLED_NAME_RE = re.compile(
+    r"\b(POA|HOA)\s+[A-Z][A-Z &]{3,}\s+(?:PROPERTY|HOMEOWNERS|OWNERS)\s+ASSOCIATION\b"
 )
 
 
@@ -63,12 +92,38 @@ def is_dirty(name: str) -> tuple[bool, str]:
         return True, "starts_lowercase"
     if re.match(r"^\d+\s*[-)]\s*", n):
         return True, "numeric_prefix"
+    # Year prefix like "2018 Exhibit A …" or "1985 Amended Bylaws of …"
+    if re.match(r"^(?:19|20)\d{2}\s+[A-Za-z]", n):
+        return True, "year_prefix"
+    # Long digit run prefix like "5021942267194390towne park pooler"
+    if re.match(r"^\d{6,}", n):
+        return True, "longdigit_prefix"
+    # Street-address prefix like "6318 Suwanee Dam Rd HOA"
+    if re.match(
+        r"^\d+\s+[A-Z][a-z]+(?:\s+[A-Z][a-zA-Z]+){0,4}\s+"
+        r"(?:Rd|Road|St|Street|Ave|Avenue|Dr|Drive|Lane|Ln|Way|Cir|"
+        r"Ct|Court|Blvd|Boulevard|Place|Pl|Pkwy|Parkway|Trail|Tr|Hwy|Highway)\b",
+        n,
+        re.I,
+    ):
+        return True, "street_address_prefix"
     if re.match(r"^[A-Z][A-Z &\-]{3,}\s+", n) and len(n) > 40:
         return True, "shouting_prefix"
     if len(n) <= 4 and not re.search(r"hoa|poa", n, re.I):
         return True, "too_short"
     if _BAD_PREFIX.match(n):
         return True, "stopword_prefix"
+    if _COUNTY_PREFIX_RE.match(n):
+        return True, "county_prefix"
+    if _DOC_FRAGMENT_RE.search(n):
+        return True, "doc_fragment_anywhere"
+    if _TAIL_TRUNCATION_RE.search(n):
+        return True, "tail_truncation"
+    if _DOUBLED_NAME_RE.search(n):
+        return True, "doubled_name"
+    # Garbled hyphenated acronym like "GL-LB-BAR HOA"
+    if re.search(r"\b[A-Z]{2,}-[A-Z]{2,}-[A-Z]{2,}\b", n):
+        return True, "garbled_acronym"
     if len(n) > 70:
         return True, "very_long"
     if re.search(r"\bbook \d|page \d|paragraph", n, re.I):
@@ -189,6 +244,70 @@ def _prompt(name: str, text: str) -> str:
     )
 
 
+_HOA_SUFFIX_RE = re.compile(
+    r"\b("
+    r"homeowners(?:'?\s|\s+)?association(?:,?\s+inc\.?)?|"
+    r"homes\s+association|home\s+owners\s+association|"
+    r"property\s+owners(?:'?\s+|\s+)association(?:,?\s+inc\.?)?|"
+    r"owners\s+association(?:,?\s+inc\.?)?|"
+    r"community\s+association|"
+    r"condominium\s+association(?:,?\s+inc\.?)?|"
+    r"condominium\s+owners\s+association|"
+    r"townhome\s+association|"
+    r"hoa|poa"
+    r")\b\.?\s*$",
+    re.I,
+)
+
+# Common doc-title / OCR-noise prefixes that prepend the real name.
+_PREFIX_NOISE_RE = re.compile(
+    r"^("
+    r"(?:19|20)\d{2}\s+(?:exhibit\s+[a-z]\s+)?(?:supplemental\s+)?dec(?:laration)?\s+|"
+    r"(?:19|20)\d{2}\s+exhibit\s+[a-z]\s+|"
+    r"(?:19|20)\d{2}\s+(?:amended|restated|amended\s+and\s+restated)\s+|"
+    r"and\s+restated(?:\s*-\s*|\s+)|"
+    r"amended\s+and\s+restated\s+|"
+    r"squarespace\s*\.?\s*of\.?\s*|"
+    r"squarespace\s*[-.]\s*|"
+    r"architectural\s+design\s+guidelines?\s+(?:for\s+)?|"
+    r"design\s+guidelines?\s+(?:for\s+)?|"
+    r"declaration\s+of(?:\s+covenants(?:,?\s+conditions(?:,?\s+and\s+restrictions)?)?\s+)?(?:for\s+|of\s+)?|"
+    r"by-?laws\s+of\s+(?:the\s+)?|"
+    r"articles\s+of\s+incorporation\s+of\s+(?:the\s+)?|"
+    r"protective\s+covenants?\s+(?:for\s+|of\s+)?|"
+    r"supplemental\s+declaration\s+(?:for\s+|of\s+)?|"
+    r"\d{6,}|"
+    r"[A-Z][a-z]+\s+county\s+(?:of|OF\.?)\s+"
+    r")",
+    re.I,
+)
+
+
+def _try_strip_prefix(name: str) -> str | None:
+    """Deterministically peel off doc-title noise. Returns the cleaned
+    name only when (a) the original has a recognized HOA-shaped suffix
+    and (b) something clearly junk-like was actually stripped from the
+    front. Returns None if no safe strip is possible."""
+    n = (name or "").strip()
+    if not _HOA_SUFFIX_RE.search(n):
+        # No HOA suffix to anchor — leave to the LLM.
+        return None
+    cleaned = n
+    changed = False
+    for _ in range(4):
+        m = _PREFIX_NOISE_RE.match(cleaned)
+        if not m:
+            break
+        cleaned = cleaned[m.end():].lstrip(" -.,;:")
+        changed = True
+    if not changed:
+        return None
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" -.,;:")
+    if len(cleaned) < 4:
+        return None
+    return cleaned
+
+
 def _ask_llm(client: OpenAI, model: str, name: str, text: str) -> dict[str, Any] | None:
     try:
         resp = client.chat.completions.create(
@@ -280,6 +399,30 @@ def main() -> int:
 
     for i, (row, why) in enumerate(dirty, 1):
         old = row.get("hoa") or ""
+        # Fast path: try a deterministic prefix-strip first. If we get a
+        # name that already looks canonical we can skip the LLM call,
+        # which both saves money and avoids the LLM's tendency to
+        # decline a perfectly-fine in-name suffix as "unconfirmed".
+        stripped = _try_strip_prefix(old)
+        if stripped and _looks_canonical(stripped) and stripped != old:
+            decision = {
+                "hoa_id": row.get("hoa_id"),
+                "old_name": old,
+                "dirty_reason": why,
+                "canonical_name": stripped,
+                "confidence": 0.95,
+                "llm_reason": "deterministic_prefix_strip",
+                "doc_count": row.get("doc_count"),
+                "chunk_count": row.get("chunk_count"),
+            }
+            decisions.append(decision)
+            propose_renames.append(
+                {"hoa_id": row.get("hoa_id"), "new_name": stripped}
+            )
+            if i % 10 == 0:
+                print(f"  processed {i}/{len(dirty)}", file=sys.stderr)
+                out_path.write_text("\n".join(json.dumps(d, sort_keys=True) for d in decisions))
+            continue
         text = _fetch_doc_text(args.base_url, old, max_chars=args.max_text_chars)
         ans = _ask_llm(client, args.model, old, text)
         if ans is None or ans.get("_error"):

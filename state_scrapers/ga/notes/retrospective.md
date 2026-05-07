@@ -64,8 +64,27 @@ Cleaned     1,139 live HOAs (after rename + merge of dirty-name rows)
    (move documents, re-touch chunks.embedding so the chunk_vec
    partition refreshes, drop dup paths, move location iff target has
    none, delete source) made it safe to clean 16% of live names with
-   a single LLM-driven sweep. 106 in-place renames + 12 merges, 0
-   errors. Future states will reuse this directly.
+   a multi-pass cleanup. Across three rounds (original LLM pass +
+   widened detector + deterministic prefix-strip): 124 in-place
+   renames + 14 merges, 0 errors. Future states will reuse this
+   directly.
+
+6. **Deterministic prefix-strip before LLM**. The user spotted that
+   `2018 Exhibit A Supplemental Dec Lake Laceola HOA` was still on
+   live after the first cleanup. Two fixes:
+   - Detector regex was too narrow (no `^(19|20)\d{2}\b` rule, no
+     mid-string `exhibit X`, no `architectural design guidelines`,
+     etc.). Widened.
+   - For the cleaned cases the LLM was over-cautious — it answered
+     "Laceola Development" because the doc didn't say "HOA" outright,
+     and the canonical-shape filter then dropped it. A short
+     `_try_strip_prefix()` runs first and just peels off known
+     doc-title prefixes (`<year> Exhibit X Supplemental Dec`,
+     `Squarespace . OF.`, `<County> County OF.`, `AND RESTATED -`,
+     `Architectural Design Guidelines`) when the original ends in a
+     recognized HOA suffix. That fixed Lake Laceola in one shot
+     without a doc-text fetch and saves the LLM call entirely. For
+     future states, run this fast path before any LLM cleanup.
 
 ## What didn't work, or had to be reworked
 
@@ -147,6 +166,46 @@ The DocAI cap formula `max($5, $0.03 × manifest count)` produced a
 $54 budget for 1,800 manifests; actual spend was $65 because the
 post-hoc `_unknown-county/` recovery pass needed extra OCR. That
 overrun is small and the formula is still the right starting target.
+
+## OCR efficiency
+
+DocAI is the dominant cost (60% of GA spend), so the right thing to
+ask is: of the pages we paid for, what share landed in live?
+
+| | pages | $ |
+|---|---|---|
+| GA-attributable DocAI billed (5/6 + 5/7 prepare runs) | 43,505 | $65.26 |
+| Pages on accepted prepared bundles | 15,909 | — |
+| Pages in `imported` bundles (live) | **15,495** | — |
+| Pages in `failed` bundles (50 `_unknown-county` + 1 invalid name) | 414 | — |
+
+**Live OCR efficiency: 15,495 / 43,505 ≈ 35.6%.**
+
+The other 64% went to:
+- Page-1 review for the 737 docs ultimately rejected at the OCR/filter
+  step. Page-1 still costs DocAI even when the doc is then dropped as
+  junk / low_value / PII / unsupported_category.
+- The 50 `_unknown-county/` bundles whose pages were OCR'd in full
+  before being marked failed at the import gate.
+- The post-hoc `ga_ocr_county_recovery.py` pass that re-OCR'd page 1-3
+  of stuck `_unknown-county` manifests trying to recover their county.
+- A small amount of overlap from the four sequential prepare runs
+  (each new run picks up new manifests but the page-1 review pass
+  re-runs across the whole eligible set).
+
+How to do better next time:
+- Cache page-1 OCR results by SHA in a sidecar so re-runs of prepare
+  don't re-OCR the same first pages. Currently the page-1 review
+  cache is implicit (the prepared bundle stores the result) but the
+  reject side has no cache, so redo costs full OCR every retry.
+- Skip `_unknown-county/` bundles at *prepare* time once a real-county
+  sibling exists for the same SHA. We instead let prepare process the
+  `_unknown-county` first, then mark its bundle failed at import,
+  losing the OCR spend. The Iron Gate gap (11 PDFs, 8 HOAs) is the
+  flip side of this same defect.
+- Tighten the page-cap floor on PDF candidates that obviously look
+  like minutes/financial/government docs from the URL, rather than
+  paying for 2-3 page-1 reviews to come to the same conclusion.
 
 ## Numbers worth carrying forward
 
