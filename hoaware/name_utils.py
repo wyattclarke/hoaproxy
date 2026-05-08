@@ -55,6 +55,87 @@ _DOUBLED_NAME_RE = re.compile(
     r"\b(POA|HOA)\s+[A-Z][A-Z &]{3,}\s+(?:PROPERTY|HOMEOWNERS|OWNERS)\s+ASSOCIATION\b"
 )
 
+# Project / phase / unit-numbering codes that leak in as the front of the name.
+# Catches "TE1-12 Townhouses…", "TE-1-12 Townhouses…", "Phase II Foo HOA",
+# "Block A Foo Condominium Association", "Building 4 Foo …".
+_PROJECT_CODE_PREFIX_RE = re.compile(
+    r"^(?:"
+    r"[A-Z]{2,5}-?\d+(?:-\d+)+|"          # TE1-12, TE-1-12, AB-3-7
+    r"[A-Z]{2,5}\d+|"                      # TE5, AB12 (single-segment code)
+    r"phase\s+(?:[ivx]+|\d+)|"             # Phase II, Phase 3
+    r"block\s+[a-z\d]+|"                   # Block A, Block 4
+    r"building\s+\d+|"                     # Building 7
+    r"unit\s+\d+|"                         # Unit 12
+    r"lot\s+\d+|"                          # Lot 14
+    r"parcel\s+[a-z\d]+"                   # Parcel A
+    r")\b",
+    re.I,
+)
+
+# HOA suffixes used to peel off the legal-suffix and inspect the community-name
+# stem. Matches at end-of-name only.
+_HOA_SUFFIX_TAIL_RE = re.compile(
+    r"\s*,?\s*(?:"
+    r"(?:home|land|property|unit|condominium|condo)\s*owners?\s*(?:'\s*)?\s*"
+    r"association(?:,?\s+inc\.?)?|"
+    r"homes\s+association|"
+    r"home\s+owners\s+association|"
+    r"community\s+association(?:,?\s+inc\.?)?|"
+    r"condominium\s+association(?:,?\s+inc\.?)?|"
+    r"condominium\s+trust|"
+    r"townhome\s+association|"
+    r"townhouse\s+association|"
+    r"hoa|poa|coa"
+    r")\.?\s*$",
+    re.I,
+)
+
+# Roman numerals or numeric/phase qualifiers that follow a single-token stem
+# without adding a real community identifier ("Willows IV", "Slopeside II",
+# "Building 3", "Phase 2"). These are stripped before checking generic-stem.
+_TRAILING_QUALIFIER_RE = re.compile(
+    r"\s+(?:"
+    r"[ivx]{1,5}|"                          # roman numeral
+    r"\d+|"                                  # bare number
+    r"phase\s+(?:[ivx]+|\d+)|"
+    r"building\s+\d+|"
+    r"section\s+(?:[ivx]+|\d+)|"
+    r"unit\s+\d+"
+    r")$",
+    re.I,
+)
+
+# Generic geographic / topographic stems that, on their own, do not identify a
+# community. Real HOAs almost always combine one of these with a place-name
+# specifier ("Sunset Cove", "Hilltop Acres at Foo"). When the entire stem
+# before the HOA suffix is just one of these tokens we treat it as a name
+# extracted from a doc-fragment, not a real association name.
+_GENERIC_GEOGRAPHIC_STEMS = frozenset(
+    {
+        "sunrise", "sunset", "mountainside", "slopeside", "hillside",
+        "hilltop", "lakeside", "riverside", "lakeview", "riverview",
+        "mountain", "lake", "river", "creek", "pond", "brook",
+        "intervale", "willows", "willow", "oaks", "oak", "pines", "pine",
+        "maples", "maple", "birches", "birch", "elms", "elm",
+        "meadow", "meadows", "valley", "valleys", "ridge", "ridges",
+        "summit", "summits", "peak", "peaks", "hill", "hills",
+        "wood", "woods", "woodland", "woodlands", "forest", "forests",
+        "glen", "glens", "shore", "shores", "cove", "coves",
+        "harbor", "harbors", "harbour", "point", "pointe",
+        "garden", "gardens", "terrace", "terraces", "manor", "manors",
+        "court", "courts", "place", "places", "plaza", "square",
+        "downs", "field", "fields", "commons", "village", "villages",
+        "highland", "highlands", "plantation", "plantations",
+        "grove", "groves", "park", "parks", "estate", "estates",
+        "acres", "trace", "knoll", "knolls", "heights",
+        "crossing", "crossings", "landing", "landings",
+        "village", "villages", "town", "towne", "townhouse", "townhouses",
+        # 1- to 4-letter cardinals/ordinals that occasionally leak in
+        "north", "south", "east", "west", "central",
+        "old", "new", "upper", "lower",
+    }
+)
+
 
 def is_dirty(name: str) -> tuple[bool, str | None]:
     """Return ``(True, reason_code)`` when the name looks like an OCR fragment
@@ -102,6 +183,29 @@ def is_dirty(name: str) -> tuple[bool, str | None]:
     # Garbled hyphenated acronym like "GL-LB-BAR HOA"
     if re.search(r"\b[A-Z]{2,}-[A-Z]{2,}-[A-Z]{2,}\b", n):
         return True, "garbled_acronym"
+    # Project / phase / unit-numbering code as prefix ("TE1-12 Townhouses…",
+    # "Phase II Foo HOA"). These come from filename stems, not real names.
+    if _PROJECT_CODE_PREFIX_RE.match(n):
+        return True, "project_code_prefix"
+    # Single-token generic stem before the HOA suffix. "Sunrise Homeowners
+    # Association", "Mountainside Condominium Association", "Willows IV
+    # Condominium Association" are all doc-fragment artifacts: a real
+    # community name would add a place specifier ("Sunset Cove", "Sunrise at
+    # Mendon"). We strip the legal suffix and any trailing roman/phase/number
+    # qualifier, then flag if the remaining stem is a single common geographic
+    # token.
+    suffix_match = _HOA_SUFFIX_TAIL_RE.search(n)
+    if suffix_match:
+        stem = n[: suffix_match.start()].strip(" \t,.-")
+        # Strip trailing roman / phase / number qualifier ("Slopeside II",
+        # "Willows 2", "Foo Phase III").
+        stripped_qualifier = _TRAILING_QUALIFIER_RE.sub("", stem).strip()
+        if stripped_qualifier:
+            stem_tokens = [t for t in re.split(r"\s+", stripped_qualifier) if t]
+            if len(stem_tokens) == 1:
+                only = stem_tokens[0].lower().rstrip(".,;:")
+                if only in _GENERIC_GEOGRAPHIC_STEMS:
+                    return True, "generic_single_stem"
     if len(n) > 70:
         return True, "very_long"
     if re.search(r"\bbook \d|page \d|paragraph", n, re.I):
@@ -409,6 +513,119 @@ def name_from_source_url(url: str | None) -> str | None:
 
 
 # ---------------------------------------------------------------------------
+# Smart title-casing  (fixes the most common "shouting_prefix" dirty pattern)
+# ---------------------------------------------------------------------------
+
+# Words to keep lowercase in the middle of a title (not first/last).
+_SMALL_WORDS = frozenset({
+    "a", "an", "the", "and", "or", "for", "to", "in", "on", "at", "by",
+    "of", "with", "from", "as", "but", "nor", "yet", "so", "if", "via",
+})
+
+# Words to keep fully uppercase regardless of position. Roman numerals
+# I, II, III … X are kept as-is when they appear as standalone tokens.
+_KEEP_UPPERCASE = frozenset({
+    "HOA", "POA", "COA", "LLC", "L.L.C.", "PLC", "PC", "P.C.",
+    "USA", "US", "U.S.", "DC", "II", "III", "IV", "V", "VI",
+    "VII", "VIII", "IX", "X", "XI", "XII",
+})
+
+# A trailing ", THE" gets moved to leading "The " (English convention).
+_TRAILING_THE_RE = re.compile(r",\s*the\s*\.?\s*$", re.I)
+
+
+def _titlecase_token(token: str, *, anchor: bool) -> str:
+    """Title-case one whitespace-delimited token while preserving trailing
+    punctuation and recognising keep-uppercase abbreviations.
+
+    ``anchor`` is True for the first or last token of the title — anchor
+    tokens are always capitalised even if they are in ``_SMALL_WORDS``.
+    """
+    if not token:
+        return token
+    # Pull off trailing punctuation cluster (.,;:!?")  — but keep apostrophes
+    # inside the word ("OWNERS'", "O'BRIEN").
+    m = re.match(r"^([A-Za-z'`]+)([.,;:!?\"\)\]]*)$", token)
+    if not m:
+        # Mixed alphanumeric ("NO.24", "06831") — leave as-is.
+        return token
+    core, trailing = m.group(1), m.group(2)
+    upper = core.upper()
+    if upper in _KEEP_UPPERCASE:
+        return upper + trailing
+    lower = core.lower()
+    if lower in _SMALL_WORDS and not anchor:
+        return lower + trailing
+    # Title-case: first char upper, remainder lower, apostrophes preserved.
+    out = core[:1].upper() + core[1:].lower()
+    return out + trailing
+
+
+def smart_titlecase(name: str) -> str:
+    """Title-case an all-caps (or mixed-case) HOA name with HOA-aware rules.
+
+    Examples:
+      "FOUNTAINWOOD CONDOMINIUM ASSOCIATION, INC."
+        -> "Fountainwood Condominium Association, Inc."
+      "WILSON POINT PROPERTY OWNERS' ASSOCIATION, INCORPORATED, THE"
+        -> "The Wilson Point Property Owners' Association, Incorporated"
+      "PROPERTY OWNERS ASSOCIATION OF LAKE HAYWARD"
+        -> "Property Owners Association of Lake Hayward"
+      "HILL-AN-DALE VILLAGE CONDOMINIUM ASSOCIATION, INC."
+        -> "Hill-An-Dale Village Condominium Association, Inc."
+      "GLEN OAKS CONDOMINIUM NO. 24, INC."
+        -> "Glen Oaks Condominium No. 24, Inc."
+
+    Idempotent: re-running on already-clean output produces the same string.
+    """
+    if not name:
+        return name or ""
+    s = name.strip()
+    if not s:
+        return s
+
+    # Insert a space after commas / periods that are missing one — common
+    # in scraped registry data ("ASSOCIATION,INC." or "ASSN.INC.") — so that
+    # tokenisation by whitespace correctly isolates each word.
+    s = re.sub(r"([,;])(\S)", r"\1 \2", s)
+
+    # Move trailing ", THE" to a leading "The ".
+    leading_the = ""
+    m = _TRAILING_THE_RE.search(s)
+    if m:
+        s = s[: m.start()].rstrip(" ,")
+        leading_the = "The "
+
+    tokens = s.split()
+    n = len(tokens)
+    out: list[str] = []
+    for i, w in enumerate(tokens):
+        anchor = (i == 0 and not leading_the) or i == n - 1
+        if "-" in w and not w.startswith("-") and not w.endswith("-"):
+            # Title-case each hyphen segment independently. All segments are
+            # treated as anchors so "HILL-AN-DALE" → "Hill-An-Dale", not
+            # "Hill-an-Dale".
+            parts = w.split("-")
+            casted = [_titlecase_token(p, anchor=True) for p in parts]
+            out.append("-".join(casted))
+        else:
+            out.append(_titlecase_token(w, anchor=anchor))
+    return leading_the + " ".join(out)
+
+
+def _try_titlecase_shouting(name: str) -> str | None:
+    """Strategy: if a name only fails ``is_dirty`` because of all-caps
+    shouting, smart-title-case it and accept iff the result is clean.
+    """
+    if not name:
+        return None
+    titled = smart_titlecase(name)
+    if titled and titled != name and not is_dirty(titled)[0]:
+        return titled
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Name-level prefix strip  (operates on raw names, not slugs)
 # ---------------------------------------------------------------------------
 
@@ -462,7 +679,15 @@ def derive_clean_slug(name: str, source_url: str | None = None) -> str | None:
         """Convert a hyphenated slug to a title-cased name."""
         return " ".join(part.capitalize() for part in slug.split("-"))
 
-    # 0. Name-level strip (highest confidence for names with HOA suffix).
+    # 0a. Smart title-case for all-caps "shouting_prefix" names. This is the
+    # most common dirty class on SoS-derived registries (RI, CT, NH, ME) where
+    # entity names are exported in ALL CAPS. Smart title-casing recovers the
+    # human-readable form deterministically without an LLM call.
+    titled = _try_titlecase_shouting(name)
+    if titled:
+        return titled
+
+    # 0b. Name-level strip (highest confidence for names with HOA suffix).
     stripped_name = _try_strip_name_prefix(name)
     if stripped_name and not is_dirty(stripped_name)[0]:
         return stripped_name

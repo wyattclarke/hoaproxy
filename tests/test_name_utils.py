@@ -109,6 +109,48 @@ class TestIsDirty:
         assert dirty is True
         assert reason == "ccr_in_name_long"
 
+    def test_project_code_prefix_te(self):
+        dirty, reason = is_dirty("TE1-12 Townhouses Condominium Association")
+        assert dirty is True
+        assert reason == "project_code_prefix"
+
+    def test_project_code_prefix_phase(self):
+        dirty, reason = is_dirty("Phase II Oakwood HOA")
+        assert dirty is True
+        assert reason == "project_code_prefix"
+
+    def test_project_code_prefix_block(self):
+        dirty, reason = is_dirty("Block A Foo Condominium Association")
+        assert dirty is True
+        assert reason == "project_code_prefix"
+
+    def test_project_code_prefix_building(self):
+        dirty, reason = is_dirty("Building 4 Sunrise HOA")
+        assert dirty is True
+        assert reason == "project_code_prefix"
+
+    def test_generic_single_stem_sunrise(self):
+        dirty, reason = is_dirty("Sunrise Homeowners Association")
+        assert dirty is True
+        assert reason == "generic_single_stem"
+
+    def test_generic_single_stem_mountainside(self):
+        dirty, reason = is_dirty("Mountainside Condominium Association")
+        assert dirty is True
+        assert reason == "generic_single_stem"
+
+    def test_generic_single_stem_with_roman_qualifier(self):
+        # "Slopeside II" still reduces to "Slopeside" (generic) after stripping
+        # the roman-numeral qualifier.
+        dirty, reason = is_dirty("Slopeside II Condominium Association")
+        assert dirty is True
+        assert reason == "generic_single_stem"
+
+    def test_generic_single_stem_with_numeric_qualifier(self):
+        dirty, reason = is_dirty("Willows IV Condominium Association")
+        assert dirty is True
+        assert reason == "generic_single_stem"
+
     # --- clean controls ---
 
     def test_clean_name_simple(self):
@@ -129,6 +171,25 @@ class TestIsDirty:
 
     def test_clean_name_condominium(self):
         dirty, reason = is_dirty("Cumberland Harbour Condominium Association")
+        assert dirty is False
+        assert reason is None
+
+    def test_clean_two_token_with_generic_token(self):
+        # "Sunset Cove" combines a generic stem with a place specifier.
+        dirty, reason = is_dirty("Sunset Cove Condominium Association")
+        assert dirty is False
+        assert reason is None
+
+    def test_clean_villmarksauna_single_distinctive(self):
+        # Single-token but distinctive (not in the generic list) — keep.
+        dirty, reason = is_dirty("Villmarksauna Condominium Association")
+        assert dirty is False
+        assert reason is None
+
+    def test_clean_phase_qualifier_with_real_name(self):
+        # "Smugglers Notch Phase II" has a real two-token stem before the
+        # qualifier; should not be flagged as generic.
+        dirty, reason = is_dirty("Smugglers Notch Phase II Condominium Association")
         assert dirty is False
         assert reason is None
 
