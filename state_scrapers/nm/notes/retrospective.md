@@ -1,91 +1,70 @@
-# {STATE} HOA Scrape — Retrospective
+# New Mexico HOA Scrape Retrospective
 
-A frank account of what worked, what didn't, and what the next person scraping
-a similar state should do differently.
-
-> **Scope note.** Write for the next person, not as a marketing summary.
-> Document dead ends — that is load-bearing information.
-
-## TL;DR
-
-- **Outcome:** {N} {STATE} HOAs live on hoaproxy.org with {N} documents, {N}
-  search chunks, {X}% map coverage. Total marginal spend **~${X.XX}**.
-- **Coverage of estimated universe:** ~{X}% ({N} of {CAI_ESTIMATE} estimated HOAs).
-- **Structural ceiling:** {one sentence on why free public discovery stops here}
-
-## Cost Breakdown
-
-| Phase | API | Spend | Notes |
-|---|---|---|---|
-| Discovery (SoS scrape / Serper sweeps) | Serper | $X.XX | {N} calls |
-| Model classification / name repair | OpenRouter | $X.XX | model, token count |
-| OCR | Google Document AI | $X.XX | {N} pages at $0.0015/page |
-| Embeddings | OpenAI | $X.XX | {N} chunks |
-| ZIP centroid backfill | zippopotam.us | $0 | free |
-| **Total** | | **$X.XX** | |
-
-### Per-HOA economics
-
-| Unit | Count | Cost per unit |
-|---|---|---|
-| Entity attempted | {N} | $X.XXXX |
-| HOA imported live | {N} | $X.XXXX |
-| HOA with substantive content (≥10 chunks) | {N} | $X.XXXX |
-
-## False-Positive Classes
-
-Describe the main reject classes and whether they were correctly handled.
-
-| Reject reason | Count | Verdict |
-|---|---|---|
-| `junk:government` | {N} | correct / over-reject / under-reject |
-| `pii:membership_list` | {N} | correct |
-| `unsupported_category:unknown` | {N} | {note} |
-| `junk:unrelated` | {N} | {note} |
+Run id: `nm_20260508_110239_claude` (Tier 0). Eighth state in batch
+`overnight_batch_20260508`. 9-county expanded coverage.
 
 ## Final Counts
 
-```json
-{
-  "state": "{STATE}",
-  "raw_manifests": 0,
-  "prepared_bundles": 0,
-  "imported_bundles": 0,
-  "live_profiles": 0,
-  "live_documents": 0,
-  "live_chunks": 0,
-  "map_points": 0,
-  "map_rate": 0.0,
-  "by_location_quality": {"polygon": 0, "address": 0, "zip_centroid": 0},
-  "out_of_bounds_points": 0,
-  "ocr_cost_usd": 0.0,
-  "rejected_documents": 0,
-  "budget_deferred": 0,
-  "failed_bundles": 0
-}
-```
+| Metric | Value |
+|---|---:|
+| Raw bank manifests | 299 |
+| Live HOA profiles (post-import) | 106 |
+| After LLM rename pass (48 renames + 5 merges) | 50 visible |
+| After delete pass (22) | **79** (cleaned production count) |
 
-## Source-Family Yield
+## Counties
 
-| Source family | Manifests | PDFs | Final assessment |
-|---|---|---|---|
-| {family} | {N} | {N} | high / medium / zero |
+Original: Bernalillo (Albuquerque), Sandoval (Rio Rancho), Doña Ana
+(Las Cruces), Santa Fe.
+Expansion: San Juan (Farmington), Lea (Hobbs), Otero (Alamogordo),
+Chaves (Roswell), Lincoln NM (Ruidoso/Ruidoso Downs).
 
-## Would Not Do Again
+The Albuquerque-Rio Rancho corridor (Bernalillo + Sandoval) was the
+primary contributor. Santa Fe added high-quality entries (Eldorado-area
+HOAs). Lincoln NM (Ruidoso) added resort condo associations.
 
-List the strategies or decisions that cost time / money with no return.
+## Cost (Approximate)
 
-## Unsung Win
+| Channel | Spend | Per genuine HOA |
+|---|---:|---:|
+| DocAI | ~$2.80 | $0.035 |
+| OpenRouter | ~$0.40 | $0.005 |
+| Serper | ~$0.05 | $0.001 |
+| **Total** | **~$3.25** | **~$0.041** |
 
-The one technique or observation that paid back more than expected.
+## Phase 10 Outcomes
 
-## Cross-State Lessons to Fold Back Into the Playbook
+**LLM unconditional cleanup (106 → 50):** 48 renames + 5 merges.
 
-List anything that should be added to `docs/multi-state-ingestion-playbook.md`
-or a future Appendix D note for this state's tier/pattern.
+**Delete pass (22):** Government planning (Hobbs Planning Board, NM
+Property Tax Code), recording fragments, "Of " prefixes (Of Enchanted
+Hills, Of Protective HOA, Of Restrictive HOA), single-word fragments
+(Granada HOA, Islands HOA, Ccceh, Los Nidos), platting fragments,
+Albuquerque Arroyo Del Sol fragment, Lincoln County Archives, Design
+Guidelines isolated fragment.
 
-## Reusable Scripts
+## Lessons
 
-| Script | Phase | Reusable as-is? |
-|---|---|---|
-| `state_scrapers/{state}/scripts/...` | | adapt {what} per state |
+1. **Bernalillo + Sandoval was very productive.** Albuquerque proper
+   plus Rio Rancho yielded the bulk of NM's genuine HOAs.
+2. **Lincoln NM (Ruidoso) was a smart addition.** Ruidoso resort condos
+   + Ruidoso Downs subdivision HOAs added 5–8 entries that weren't in
+   the original 4-county scope.
+3. **NM has a distinctive "Of " fragment leak.** Multiple bank-stage
+   names started with "Of " (Of Protective, Of Restrictive, Of
+   Enchanted Hills) — likely from "Declaration **Of** Protective
+   Covenants And Restrictions" recorded-document title fragments where
+   the bank pipeline truncated the leading word. Worth folding the
+   `^Of ` regex pattern into the canonical `is_dirty()` set.
+4. **Acequia / Mercado / Nuestro fragments** are NM-specific
+   government / community-water-rights doc names that look HOA-shaped
+   to keyword search; flagged in the regex set.
+
+## Standard Ledger Files
+
+- `state_scrapers/nm/results/nm_20260508_110239_claude/preflight.json`
+- `state_scrapers/nm/results/nm_20260508_110239_claude/prepared_ingest_ledger.jsonl`
+- `state_scrapers/nm/results/nm_20260508_110239_claude/live_import_report.json`
+- `state_scrapers/nm/results/nm_20260508_110239_claude/final_state_report.json`
+- `state_scrapers/nm/results/nm_20260508_110239_claude/name_cleanup_unconditional.jsonl`
+- `state_scrapers/nm/results/nm_20260508_110239_claude/discover_*.log` (9 files)
