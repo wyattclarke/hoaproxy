@@ -4392,6 +4392,88 @@ def admin_rename_hoa(request: Request, body: dict):
     }
 
 
+@app.post("/admin/delete-hoa")
+def admin_delete_hoa(request: Request, body: dict):
+    """Hard-delete one or more HOAs and all their attached rows.
+
+    Body: {"hoa_ids": [123, 456], "dry_run": false}
+
+    Cascades: chunks (via document_id), documents, hoa_locations, and the
+    proxy/membership tables — same set the rename-hoa merge path clears for
+    its source row.
+    """
+    _require_admin(request)
+    import sqlite3
+    settings = load_settings()
+    ids = body.get("hoa_ids") or ([body["hoa_id"]] if "hoa_id" in body else [])
+    if not isinstance(ids, list) or not ids:
+        raise HTTPException(status_code=400, detail="hoa_ids[] required")
+    try:
+        ids = [int(x) for x in ids]
+    except Exception:
+        raise HTTPException(status_code=400, detail="hoa_ids must be integers")
+    dry_run = bool(body.get("dry_run") or False)
+
+    deleted: list[dict] = []
+    errors = 0
+    with db.get_connection(settings.db_path) as conn:
+        for hid in ids:
+            row = conn.execute("SELECT id, name FROM hoas WHERE id = ?", (hid,)).fetchone()
+            if not row:
+                deleted.append({"hoa_id": hid, "status": "not_found"})
+                errors += 1
+                continue
+            doc_count = conn.execute(
+                "SELECT COUNT(*) FROM documents WHERE hoa_id = ?", (hid,)
+            ).fetchone()[0]
+            chunk_count = conn.execute(
+                "SELECT COUNT(*) FROM chunks WHERE document_id IN (SELECT id FROM documents WHERE hoa_id = ?)",
+                (hid,),
+            ).fetchone()[0]
+            if dry_run:
+                deleted.append({
+                    "hoa_id": hid, "name": row["name"], "status": "would_delete",
+                    "doc_count": doc_count, "chunk_count": chunk_count,
+                })
+                continue
+            try:
+                conn.execute(
+                    "DELETE FROM chunks WHERE document_id IN (SELECT id FROM documents WHERE hoa_id = ?)",
+                    (hid,),
+                )
+                conn.execute("DELETE FROM documents WHERE hoa_id = ?", (hid,))
+                conn.execute("DELETE FROM hoa_locations WHERE hoa_id = ?", (hid,))
+                for sql in (
+                    "DELETE FROM membership_claims WHERE hoa_id = ?",
+                    "DELETE FROM delegates WHERE hoa_id = ?",
+                    "DELETE FROM proxy_assignments WHERE hoa_id = ?",
+                    "DELETE FROM proxy_audit WHERE hoa_id = ?",
+                    "DELETE FROM proposals WHERE hoa_id = ?",
+                    "DELETE FROM meetings WHERE hoa_id = ?",
+                ):
+                    try:
+                        conn.execute(sql, (hid,))
+                    except sqlite3.OperationalError:
+                        pass
+                conn.execute("DELETE FROM hoas WHERE id = ?", (hid,))
+                deleted.append({
+                    "hoa_id": hid, "name": row["name"], "status": "deleted",
+                    "doc_count": doc_count, "chunk_count": chunk_count,
+                })
+            except sqlite3.Error as exc:
+                deleted.append({"hoa_id": hid, "status": "error", "reason": str(exc)})
+                errors += 1
+        if not dry_run:
+            conn.commit()
+    return {
+        "dry_run": dry_run,
+        "deleted": sum(1 for d in deleted if d.get("status") == "deleted"),
+        "would_delete": sum(1 for d in deleted if d.get("status") == "would_delete"),
+        "errors": errors,
+        "results": deleted,
+    }
+
+
 @app.post("/admin/extract-doc-zips")
 def admin_extract_doc_zips(request: Request, state: str | None = None, limit: int = 5000):
     """Scan each HOA's chunked text for postal-code mentions and return the
