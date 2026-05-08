@@ -62,7 +62,7 @@ Source: `docs/cai_state_hoa_counts.txt`. Status as of 2026-05-07.
 | KS | <2,000 | 1 | done | Per-county Serper; canonical Tier 1/2 keyword run |
 | OK | <2,000 | 1 | not-started | — |
 | ME | <2,000 | 1 | not-started | — |
-| NH | <2,500 | 1 | not-started | SoS-first recommended |
+| NH | <2,500 | 1 | done | Keyword-Serper after SoS-first failed (Akamai-walled QuickStart) |
 | NV | 3,800 | 1 | not-started | — |
 | UT | 3,700 | 1 | not-started | — |
 | HI | 1,600 | 1 | not-started | SoS-first recommended |
@@ -823,7 +823,7 @@ This table assigns every remaining jurisdiction a primary discovery recommendati
 | NC | 15,050 | 3 | not-started | aggregator | Closing Carolina + CASNC primary |
 | ND | <750 | 0 | not-started | SoS-first | Small universe; simple |
 | NE | <1,200 | 0 | not-started | SoS-first | Small-state pattern |
-| NH | <2,500 | 1 | not-started | SoS-first | NE small-state pattern |
+| NH | <2,500 | 1 | done | keyword-Serper | SoS QuickStart Akamai-walled; keyword-Serper fallback used |
 | NJ | 7,200 | 2 | not-started | keyword-Serper | Aggregator candidates exist (NJ HOA dirs) |
 | NM | <1,500 | 0 | not-started | keyword-Serper | NM HOA Act registration also possible |
 | NV | 3,800 | 1 | not-started | keyword-Serper | Concentrated in Clark/Washoe |

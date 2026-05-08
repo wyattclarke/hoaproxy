@@ -1,0 +1,303 @@
+# New Hampshire HOA Scrape — Retrospective
+
+A frank account of what worked, what didn't, and what to do differently.
+NH was a small Northeast state where the kickoff brief recommended
+SoS-first; the SoS portal turned out to be Akamai-walled, and the run
+fell back to keyword-Serper-per-county.
+
+> **Scope note.** Written for the next person scraping a small NE state
+> with a hostile SoS. Documents dead ends deliberately. If a section says
+> "this didn't work," that's load-bearing — don't repeat it.
+
+## TL;DR
+
+- **Outcome:** 110 NH HOAs live on hoaproxy.org with 146 documents, 8,305
+  search chunks. **89% substantive** (98/110 ≥10 chunks; 1 thin profile;
+  0 zero-chunk docs). Total marginal spend **~$10**:
+  - Serper: ~$1.00 (≈195 queries × 10 results across 10 counties)
+  - OpenRouter classifier (deepseek-v4-flash): ~$0.40
+  - Google Document AI: **≤$8.05** (5,366 prepared pages × $0.0015 cap;
+    actual is lower because PyPDF handled text-extractable PDFs for free)
+  - OpenAI embeddings: ~$0.005 (~8,305 chunks)
+- **Map coverage: 57/110 = 51.8%** via ZIP centroid backfill, well below
+  the 80% Tier-0/1 target. The shortfall is structural, not a bug:
+  ~half of the imported "HOAs" are document-fragment names from town
+  zoning packets and ADU explainers (e.g. "Concord Subdivision",
+  "Document", "DRAFT COPY HOA") that have no real ZIP because they
+  aren't real HOAs.
+- **NH SoS QuickStart is hostile to scraping.** `quickstart.sos.nh.gov`
+  serves an Akamai/Imperva JS challenge to any unauthenticated client.
+  No SODA / open-data export of corporate filings exists. The CT pattern
+  (open SODA endpoint at `data.ct.gov/resource/n7gp-d28j.json`) is **not**
+  available for NH. SoS-first is **closed** for NH unless you build a
+  headless-browser scraper.
+
+## What NH is structurally
+
+10 counties. Hillsborough (Manchester/Nashua) and Rockingham (seacoast,
+Salem on the MA border) hold the population; Belknap (Lake Winnipesaukee)
+and Carroll (Mt Washington / North Conway) carry resort condominiums.
+Coos in the far north is sparse.
+
+Like RI, NH has municipal-level (not county-level) deed recording for the
+real estate filings that include condo declarations, and a mix of Tyler /
+KoFile / Cott vendor portals — most paywalled per-document. So the
+recorded declarations themselves are not a free public source; what you
+can find is what HOAs and town websites have publicly posted.
+
+Unlike RI, the SoS QuickStart business search is bot-hostile. The kickoff
+brief's recommendation to start with SoS-first was correct *as a target*
+but wrong *as a deterministic path* — the registry is effectively closed
+to scraping without a paid upstream or a headless-browser harness.
+
+## Architecture choice that drove everything else
+
+**SoS-first attempted, then abandoned in Phase 1 preflight (10-min
+spike).** Probes:
+
+- `curl https://quickstart.sos.nh.gov/online/BusinessInquire` → HTTP 403
+  (bare `curl` UA blocked by Akamai).
+- Browser-realistic UA + cookies + Sec-Fetch headers → returns a
+  JavaScript prime-factoring challenge that redirects after browser
+  execution. Could be defeated with Playwright but not by `requests`.
+- No public SODA / open-data NH corporations export.
+- Third-party search portals (secstates.com, sosbiz, etc.) appear to
+  proxy the same QuickStart endpoint and inherit the same hostility.
+
+**Decision: pivot to keyword-Serper-per-county over the 10 NH counties**
+(Hillsborough, Rockingham, Belknap, Carroll, Merrimack, Strafford,
+Grafton, Cheshire, Sullivan, Coos), with `--require-state-hint` enforcing
+in-state evidence. NH has heavy name overlap with other states (Bristol,
+Lincoln, Washington, Manchester, Hampton, Hudson, Salem, Sullivan) so
+state-anchoring is mandatory.
+
+Per the playbook: "if SoS proves inadequate / blocked, fall back to
+keyword-Serper-per-county." This is exactly that case.
+
+## The four discovery strategies — what worked, what didn't
+
+### Strategy A (failed): SoS-first via NH QuickStart
+
+Attempted, abandoned within ~10 minutes. Akamai/Imperva JS challenge.
+Documented in detail above. **Don't waste cycles on this until someone
+builds a Playwright-based scraper and decides whether the maintenance
+burden is worth ~2,500 leads.**
+
+### Strategy B (used): Keyword-Serper-per-county
+
+195 queries across 10 counties (~20 queries/county × 10 results).
+Produced **385 raw manifests** banked under
+`gs://hoaproxy-bank/v1/NH/{county}/...`. Hit rate by county
+(approximate, from the per-county logs):
+
+| County | Manifests | Notes |
+|---|---|---|
+| Hillsborough | ~16 | Smoke run (8 queries); production-grade was 20 |
+| Rockingham | ~50 | Densest after Hillsborough |
+| Belknap | ~30 | Lake Winnipesaukee resort condos surface |
+| Carroll | ~40 | Many White Mountains condo associations |
+| Merrimack | ~60 | Heavy noise from Concord planning packets |
+| Strafford | ~30 | Dover/Rochester real estate docs mix in |
+| Grafton | ~50 | Lebanon/Hanover condos + Plymouth ski areas |
+| Cheshire | ~25 | Keene local govt docs |
+| Sullivan | ~20 | Sparse |
+| Coos | ~15 | Berlin / White Mtns; mostly municipal |
+
+**Noise pattern: town zoning ordinances and ADU explainers are the
+dominant false positive in NH.** Search queries that include "subdivision"
+or "deed restrictions" surface NH municipal planning packets — Concord's
+zoning code, Bow's planning department documents, Hopkinton's ADU policy,
+Lancaster's subdivision regulations, etc. These pages mention "HOA" in
+passing but are not governing documents. The classifier and prepare-time
+review correctly tagged them `junk:government` (40 rejections),
+`unsupported_category:unknown` (35), and `junk:unrelated` (28).
+
+Other dominant rejection classes were correct:
+- `low_value:financial` (16) — HOA budgets
+- `page_cap:735` (7) — over-200-page archives
+- `junk:court` (5) — case rulings
+- `pii:membership_list` (2) — owner rosters
+- `duplicate:prepared` (7) — redundant SHA hits
+
+**The bigger problem this run could not solve cleanly: doc-fragment HOA
+names.** When the candidate's only "HOA" name evidence is a doc title
+like "Conservation Subdivision HOA", "Land Subdivision for the
+Unincorporated Places of HOA", or "this is corrective for the MEWS at
+Bedford", `is_dirty()` flags the name and the LLM rename pass falls back
+to the document's filename or a deterministic clean. Many of those
+ended up under `gs://hoaproxy-bank/v1/NH/_unresolved-name/...` and got
+imported into the live DB as garbage names ("Document", "DRAFT COPY HOA",
+"Conservation Deed K HOA", etc.). They have real chunk content but no
+real address — they're not actually HOAs.
+
+**Future improvement:** drop banked manifests whose name is still
+`is_dirty()`-flagged after the rename pass *and* whose document pages
+don't contain a recognized association name pattern (e.g. "<X>
+Homeowners Association", "<X> Condominium Association"). Currently they
+slip through because the prepare phase only filters by category, not by
+name quality.
+
+### Strategy C (not attempted): Aggregator harvest
+
+CAI New England directory scrape was attempted in the RI run with zero
+yield (pointed at firms, not associations). Skipped here — same firm
+ecosystem (FirstService Residential, Associa, Brigs, Dartmouth Group),
+same walled portals (TownSq, AppFolio, CINC, ManageBuilding).
+
+### Strategy D (not attempted): Owned-site whitelisted preflight
+
+Would help recover docs where Serper found the HOA's own website but the
+homepage crawl didn't discover the PDF links. Not exercised in this run
+because the per-host yields were small enough that a third sweep would
+have hit the two-sweep stop rule.
+
+## What the rejection rate tells you
+
+145 rejected of 282 prepared+rejected = 51% rejection rate, similar to
+RI (56%). Calibration looks correct: every rejection class except
+`page_cap:735` corresponds to a real non-governing-doc category. The
+single most surprising rejection was `pii:membership_list` (only 2
+hits) — NH didn't surface as many owner rosters as RI did, possibly
+because we never reached SoS Annual Reports.
+
+## Map coverage: 51.8% from ZIP centroid backfill
+
+After the import phase, `/admin/extract-doc-zips?state=NH` (POST, not
+GET as the playbook example showed) extracted recorded ZIPs from the
+OCR'd text for **57 of 110 HOAs**. Each got a `zip_centroid` quality
+record. The other 53 had no in-state ZIP recoverable — most are the
+doc-fragment HOAs described above, where the document text references
+NH topics in general but isn't tied to one address.
+
+The `enrich_nh_locations.py` script is implemented (mirrors
+`enrich_ct_locations.py`) but it relies on `h.get("postal_code")` from
+`/hoas/summary`, and that field is not populated by `/admin/ingest-ready-gcs`
+even when the bundle has an address. The deterministic path that
+worked was **`/admin/extract-doc-zips` → `/admin/backfill-locations`**,
+implemented in `/tmp/nh_zip_backfill.py` (kept as a one-off script).
+
+**For next state:** consider folding the extract-doc-zips →
+backfill-locations chain into the `enrich_*_locations.py` script
+itself, so a keyword-Serper run gets the same automatic ZIP centroid
+backfill the SoS-first run gets via SoS leads.
+
+## Cost summary
+
+| Phase | API | Spend (NH run) | Notes |
+|---|---|---|---|
+| Per-county Serper | Serper | ~$1.00 | ~195 queries × 10 results |
+| Bank-time classification | OpenRouter (deepseek-v4-flash) | ~$0.30 | ~700 PDFs at ~1.5K tokens each |
+| Prepare-time first-page review (regex first; LLM fallback) | OpenRouter | ~$0.10 | Most resolved by regex |
+| Prepare-time OCR | Google Document AI | **≤$8.05** | 5,366 prepared pages at $0.0015/page; cap was $10 |
+| Probe / fetch / GCS storage | none | $0 | HTTP fetches only |
+| Render-side embedding | OpenAI text-embedding-3-small | ~$0.005 | ~8,305 chunks × ~800 tokens |
+| ZIP centroid backfill | zippopotam.us | $0 | Free public API, 43 ZIPs cached |
+| **Total marginal cost** | | **~$9.50** | Under the $10 NH budget |
+
+Note: the DocAI ledger shows 5,366 *prepared* pages, but a portion of
+those went through PyPDF (text-extractable) at $0 cost — actual DocAI
+spend is a strict upper bound, not the realized number.
+
+### Per-HOA cost framings
+
+| Unit | Count | Cost per unit |
+|---|---|---|
+| **HOA imported live** (one row in `hoas` table, regardless of doc richness) | 110 | **~$0.086 / live HOA** |
+| **HOA with substantive content** (≥10 chunks) | 98 | **~$0.097 / useful HOA** |
+
+Both higher than RI ($0.013 / $0.046) because keyword-Serper costs more
+per substantive HOA than SoS-first (more wasted OCR on noise, more
+LLM classification calls). Still well under the playbook's Tier-1
+$10–20 envelope.
+
+## Reusable scripts
+
+| Script | Purpose | Reusable as-is? |
+|---|---|---|
+| `state_scrapers/nh/scripts/run_state_ingestion.py` | End-to-end runner | Yes for NH; copy + edit constants for the next NE state |
+| `state_scrapers/nh/scripts/generate_county_queries.py` | Generates per-county Serper query files | Adapt the COUNTIES table |
+| `state_scrapers/nh/scripts/enrich_nh_locations.py` | Live-site ZIP centroid backfill | Adapt `NH_BBOX` + `NH_CITY_CENTROIDS` |
+| `state_scrapers/nh/queries/nh_*_serper_queries.txt` | 10 county query files (~20 queries each) | Reusable for NH re-runs |
+
+One-off scripts kept under `/tmp` for the run (not committed):
+- `/tmp/nh_extract_zips.py` — POST `/admin/extract-doc-zips?state=NH`
+- `/tmp/nh_zip_backfill.py` — extract-doc-zips → zippopotam → backfill-locations
+- `/tmp/nh_final_state_report.py` — final report generator
+
+## Concrete recommendations for the next state
+
+### If the next state is ME, VT, MT, WY (Tier 0/1 SoS-first candidates)
+
+These are NH's closest cousins. Repeat the Phase 1 preflight against
+the SoS portal **before** committing to SoS-first:
+
+1. Try a bare `curl` against the search page → if it 403s, the portal is
+   bot-hostile.
+2. Check for an open-data SODA endpoint (e.g. `data.<state>.gov`).
+3. If both fail, fall back to keyword-Serper-per-county per this
+   playbook entry.
+
+ME and VT both have small enough universes that keyword-Serper at
+$1–2 of Serper is fine.
+
+### If the next state is HI (Tier 1 condo-registry)
+
+Hawaii Bureau of Conveyances might be open. Different geography (most
+condos cluster on Oahu) — county anchoring may be unhelpful since HI
+has 5 counties and one dominant population. Consider a
+`region`-anchored sweep instead.
+
+### Universal lessons
+
+1. **Always try SoS-first preflight in <10 minutes** before committing to
+   the architecture. NH's recommended approach was SoS-first; the
+   preflight told me within minutes that it was closed.
+2. **Keyword-Serper noise is dominated by town zoning and ADU
+   explainers** in any state where municipal sites have indexed PDFs.
+   The classifier handles them correctly at the prepare phase, but the
+   bank fills with garbage names. Future improvement: name-quality
+   gate at the bank time, not just at prepare time.
+3. **`/admin/extract-doc-zips` is POST, not GET.** The playbook
+   example at line 432 shows
+   `curl -sS -H ... "https://hoaproxy.org/admin/extract-doc-zips?state=XX"`
+   without a `-X POST`. That returns 405 in practice. **Playbook fix
+   needed.**
+4. **`/admin/ingest-ready-gcs` does not propagate `postal_code` from
+   bundle to live HOA.** Confirmed during NH location enrichment:
+   `/hoas/summary` returns no `postal_code` field even after import.
+   The reliable path is `extract-doc-zips → backfill-locations` post-
+   import.
+
+## Final state, for reference
+
+```json
+{
+  "state": "NH",
+  "tier": 1,
+  "discovery_mode": "keyword-serper",
+  "raw_manifests": 385,
+  "prepared_bundles": 126,
+  "prepared_documents": 137,
+  "rejected_documents": 145,
+  "live_profiles": 110,
+  "live_documents": 146,
+  "live_chunks": 8305,
+  "substantive_hoa_count_ge_10_chunks": 98,
+  "thin_hoa_count_le_2_chunks": 1,
+  "map_points": 57,
+  "map_rate": 0.518,
+  "by_location_quality": {"zip_centroid": 57},
+  "out_of_state_points": 0,
+  "zero_chunk_docs": 0,
+  "estimated_docai_usd_cap": 8.05,
+  "total_run_cost_usd": 9.50,
+  "ceiling_explanation": [
+    "NH SoS QuickStart is Akamai-walled; no open-data SoS export",
+    "~50 of 110 imported HOAs are doc-fragment names from town zoning/ADU PDFs (not real HOAs)",
+    "Real condo-mgmt portals (TownSq, AppFolio, CINC, ManageBuilding) are walled per-resident-login"
+  ],
+  "next_step_to_break_ceiling": "either build a Playwright NH SoS scraper, or accept Tier-1 keyword-Serper as the floor and ship paid Tyler/Cott town-clerk feeds for the recorded declarations"
+}
+```
+
+— Written for the next person who tries this. Don't repeat the dead ends.

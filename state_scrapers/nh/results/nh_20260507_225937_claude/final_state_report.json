@@ -1,0 +1,44 @@
+{
+  "by_location_quality": {
+    "zip_centroid": 57
+  },
+  "chunk_buckets": {
+    "0": 0,
+    "1-2": 1,
+    "10+": 98,
+    "3-9": 11
+  },
+  "discovery_mode": "keyword-serper",
+  "estimated_docai_usd_cap": 8.049,
+  "live_chunks": 8305,
+  "live_documents": 146,
+  "live_profiles": 110,
+  "map_points": 57,
+  "map_rate": 0.518,
+  "out_of_state_points": 0,
+  "out_of_state_sample": [],
+  "prepared_bundles": 126,
+  "prepared_documents": 137,
+  "prepared_pages": 5366,
+  "raw_manifests": 385,
+  "rejected_documents": 145,
+  "rejection_reasons": {
+    "duplicate:prepared": 7,
+    "junk:court": 5,
+    "junk:government": 40,
+    "junk:unrelated": 28,
+    "low_value:financial": 16,
+    "low_value:insurance": 1,
+    "low_value:minutes": 2,
+    "page_cap:222": 2,
+    "page_cap:735": 7,
+    "pii:membership_list": 2,
+    "unsupported_category:unknown": 35
+  },
+  "run_id": "nh_20260507_225937_claude",
+  "state": "NH",
+  "substantive_hoa_count_ge_10_chunks": 98,
+  "thin_hoa_count_le_2_chunks": 1,
+  "tier": 1,
+  "zero_chunk_docs": 0
+}
