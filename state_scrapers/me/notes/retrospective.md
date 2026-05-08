@@ -29,6 +29,29 @@ Serper rounds and consolidated the bank under proper county prefixes.
   in the document body resolved the location to 25 High Street,
   Portland, ME.
 
+### Document-vs-name verification
+
+A post-import sweep extracted the first 3 pages of every text-
+extractable PDF in the bank and checked whether the manifest's
+community-name stem appears in the document body. Of 14 ME
+text-extractable manifests checked, **1 was mismatched**:
+
+- `ME/cumberland/cider-hill` → the document body actually defines
+  **"Crossroad Apartments Association"** (in North Yarmouth, ME).
+  Codex pass 1 had labelled it "Cider Hill Condominium Association"
+  based on filename context that turned out to be wrong (the file
+  was hosted at `northyarmouth.org/.../appendix_g_-_crossroad_apartments.pdf`
+  but the surrounding planning packet referenced cider-related agenda
+  items). Renamed in live DB and bank
+  (`/admin/rename-hoa` + GCS prefix move + manifest rewrite + per-doc
+  `gcs_path` fixup).
+
+The verification script is at `/tmp/vtme_audit/verify_doc_names.py`
+(scratch path; promote into `scripts/` if used again — bank-name
+verification is a generally-useful closing step for any keyword-Serper
+state where the lead-name extractor may have inferred a wrong stem
+from an adjacent filename or page title).
+
 ### Bank consolidation
 
 - Moved Two Echo and York and High from `_unknown-county` to
