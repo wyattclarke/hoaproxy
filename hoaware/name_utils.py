@@ -530,8 +530,12 @@ _KEEP_UPPERCASE = frozenset({
     "VII", "VIII", "IX", "X", "XI", "XII",
 })
 
-# A trailing ", THE" gets moved to leading "The " (English convention).
-_TRAILING_THE_RE = re.compile(r",\s*the\s*\.?\s*$", re.I)
+# A trailing "THE" gets moved to leading "The " (English convention).
+# Two separate patterns: comma form (consumes the comma) and period form
+# (uses a lookbehind so the period before "Inc." is preserved when we
+# slice the string).
+_TRAILING_THE_AFTER_COMMA_RE = re.compile(r",\s+the\s*\.?\s*$", re.I)
+_TRAILING_THE_AFTER_PERIOD_RE = re.compile(r"(?<=\.)\s+the\s*\.?\s*$", re.I)
 
 
 def _titlecase_token(token: str, *, anchor: bool) -> str:
@@ -589,12 +593,19 @@ def smart_titlecase(name: str) -> str:
     # tokenisation by whitespace correctly isolates each word.
     s = re.sub(r"([,;])(\S)", r"\1 \2", s)
 
-    # Move trailing ", THE" to a leading "The ".
+    # Move trailing "THE" to a leading "The ".
     leading_the = ""
-    m = _TRAILING_THE_RE.search(s)
+    m = _TRAILING_THE_AFTER_COMMA_RE.search(s)
     if m:
+        # Comma form: consume the comma along with " THE".
         s = s[: m.start()].rstrip(" ,")
         leading_the = "The "
+    else:
+        m = _TRAILING_THE_AFTER_PERIOD_RE.search(s)
+        if m:
+            # Period form: lookbehind keeps the period in s[:m.start()].
+            s = s[: m.start()].rstrip()
+            leading_the = "The "
 
     tokens = s.split()
     n = len(tokens)

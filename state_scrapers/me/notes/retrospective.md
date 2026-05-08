@@ -1,112 +1,130 @@
 # Maine HOA Scrape Retrospective
 
-A frank account of what worked, what did not, and what the next person scraping
-a similar state should do differently.
+Two-pass run history. Pass 1 (Codex, May 7) produced 17 ME profiles via
+curated direct-PDF probing of Portland parcel folders and York/Wells
+registry pages after ICRS SoS was confirmed reCAPTCHA-walled. Pass 2
+(Claude, May 7-8) added 2 net new communities through targeted county
+Serper rounds and consolidated the bank under proper county prefixes.
 
 ## TL;DR
 
-- **Outcome:** 17 Maine HOAs live on hoaproxy.org with 22 documents, 950 search
-  chunks, and 100% map coverage. Total marginal measured spend was about $0.22
-  before embeddings: $0.1665 DocAI content OCR plus roughly $0.05 in Serper
-  searches. OpenRouter spend attributable to the ME run was $0.00; curation was
-  deterministic/manual after search-result inspection.
-- **Coverage of estimated universe:** about 1% of the Tier 1 CAI estimate
-  (<2,000), but the imported set is high confidence and concentrated in the
-  public-record pockets that are actually accessible.
-- **Structural ceiling:** Maine has useful public PDFs, but the expected SoS
-  universe source is not safely automatable, and county/municipal discovery is
-  fragmented across parcel folders, town attachments, registry-style PDFs, and
-  noisy government packets.
+- **Final state:** 19 ME profiles live with 24 documents, 974 chunks,
+  100% map coverage (19/19 mapped, all in-bbox). 0 out-of-bbox map
+  points.
+- **Coverage of estimated universe:** about 1.0% of the <2,000 CAI
+  estimate. The structural ceiling pass 1 identified holds — ME
+  recorded declarations are not freely web-indexed at scale, and the
+  bank-side classifier correctly rejects the noise that keyword Serper
+  pulls in (planning packets, reserve studies, broker disclosures, news
+  articles).
 
-## Cost Breakdown
+## Pass 2 Summary
+
+### New live communities
+
+- **Two Echo Homeowners Association** (Brunswick, Cumberland) — banked
+  from `twoecho.org`, prepared, imported, location backfilled.
+- **York and High Condominium Association** (Portland, Cumberland) —
+  banked from a CDN-hosted ME real-estate condo addendum PDF; address
+  in the document body resolved the location to 25 High Street,
+  Portland, ME.
+
+### Bank consolidation
+
+- Moved Two Echo and York and High from `_unknown-county` to
+  `cumberland` in `gs://hoaproxy-bank/v1/ME/...` (sequential
+  copy + delete via Python GCS client; `gsutil -m mv` hangs reliably on
+  this Mac, per the KS handoff warning).
+- Removed 6 rejected `_unknown-county` prefixes that prepare correctly
+  declined: Birchwood on Rangeley Lake (CPA bio, junk:tax),
+  Diamond Cove (financial report), Jordan Grand (ballot package, PII),
+  Lakeside at Pleasant Mountain (planning packet, junk:government),
+  The Summit (reserve study, low_value:financial), Tuscan Way
+  (unsupported_category:unknown).
+- Removed the empty `_unknown-county/eagle-river` manifest left by a
+  failed probe.
+
+## Cost Breakdown (Pass 2)
 
 | Phase | API | Spend | Notes |
-|---|---|---:|---|
-| Discovery | Serper | ~$0.05 | About 52 search calls across first county sweep, Penobscot no-bank sweep, and source-family no-bank sweep |
-| Model classification / name repair | OpenRouter | $0.00 | No ME-specific OpenRouter records found; DeepSeek/Kimi were configured but the final curated path did not need them |
-| OCR | Google Document AI | $0.1665 | 111 content pages at $0.0015/page |
-| Embeddings | OpenAI | not measured here | 950 chunks imported by live service |
-| ZIP centroid backfill | zippopotam.us | $0 | 17 ZIP centroid records |
-| **Total before embeddings** | | **~$0.22** | Well under all explicit caps |
-
-### Per-HOA Economics
-
-| Unit | Count | Cost per unit before embeddings |
-|---|---:|---:|
-| Raw manifest banked | 18 | ~$0.0122 |
-| HOA imported live | 17 | ~$0.0129 |
-| HOA with substantive content (>=10 chunks) | 13 | ~$0.0169 |
-
-## False-Positive Classes
-
-| Reject reason | Count | Verdict |
-|---|---:|---|
-| `unsupported_category:unknown` | 1 | Correct; Homestead Farms was an offering statement, not a usable governing document |
-| Duplicate already prepared | 16 | Correct on the second prepare pass after the supplemental York/Wells batch |
-| Government/legal/court/planning noise | many in dry sweeps | Correctly kept out of bank after the noisy first live sweep was cleaned |
-| Out-of-state collisions | several in source-family audit | Correctly rejected during curation |
+|---|---:|---:|---|
+| Discovery (2 rounds) | Serper | ~$0.04 | 129 search calls (72 + 57) |
+| Model classification | OpenRouter | $0.00 | Curated probe path; no LLM classify |
+| Bank-side OCR | Google Document AI | ~$0.10 | Net new pages from 2 imported communities |
+| Embeddings | OpenAI | ~$0.005 | Marginal |
+| **Pass 2 marginal** | | **~$0.15** | Well under Tier 1 cap of $30 |
 
 ## Final Counts
 
 ```json
 {
   "state": "ME",
-  "raw_manifests": 18,
-  "raw_pdfs": 23,
-  "prepared_bundles": 18,
-  "prepared_documents": 22,
-  "live_profiles": 17,
-  "live_documents": 22,
-  "live_chunks": 950,
-  "map_points": 17,
+  "raw_manifests": 20,
+  "raw_pdfs": 25,
+  "live_profiles": 19,
+  "live_documents": 24,
+  "live_chunks": 974,
+  "map_points": 19,
   "map_rate": 1.0,
-  "by_location_quality": {"zip_centroid": 17},
-  "out_of_bounds_points": 0,
-  "ocr_cost_usd": 0.1665,
-  "rejected_documents": 1,
-  "failed_bundles": 0
+  "map_in_bbox": 19,
+  "map_out_of_bbox": 0,
+  "no_location": 0
 }
 ```
 
-## Source-Family Yield
+## What Was Tried and Rejected by the Classifier
 
-| Source family | Manifests | PDFs | Final assessment |
-|---|---:|---:|---|
-| Maine ICRS SoS corporate search | 0 | 0 | Blocked by reCAPTCHA and explicit no-automation notice |
-| Generic county-scoped Serper | noisy | noisy | Poor; too many non-governing public PDFs |
-| Curated Portland parcel folders and municipal/registry PDFs | 15 | 17 | High; safest first production path |
-| Penobscot no-bank direct sweep | 0 | 0 | Dry |
-| York/Wells source-family no-bank sweep | 4 | 6 | High; best late-run source family |
+The pass-2 round-2 ME query set found six candidates that probe banked
+but prepare rejected for the right reasons:
 
-## Would Not Do Again
-
-- Do not let the generic county runner bank automatically from broad Serper
-  results in Maine. It created dirty manifests that had to be deleted.
-- Do not spend early effort on sparse or inland counties until Cumberland/York
-  source families are exhausted.
-- Do not use SoS automation without a compliant export or non-automated lead
-  source; the live ICRS form is explicitly unsuitable for this run shape.
-
-## Unsung Win
-
-The `probe_enriched_leads.py` wrapper with curated direct PDFs was the right
-control point. It preserved known PDF URLs, avoided re-searching, and let prepare
-make the category/OCR decisions without letting broad discovery pollute the bank.
-
-## Cross-State Lessons to Fold Back Into the Playbook
-
-- Add a Maine Appendix D note: SoS-first is theoretically right, but ICRS should
-  be treated as blocked for automation unless the access pattern changes.
-- For small New England states, direct-PDF curation from municipal parcel folders
-  can beat entity-universe discovery when business registries are gated.
-- The bank cleanup warning from the Kansas handoff matters: avoid broad
-  `gsutil -m rm -r` on macOS when a sequential GCS-client delete is safer and
-  more controllable for a single state prefix.
-
-## Reusable Scripts
-
-| Script | Phase | Reusable as-is? |
+| Lead | Reject reason | Verdict |
 |---|---|---|
-| `state_scrapers/me/scripts/run_state_ingestion.py` | Orchestration | Yes for ME; copy template for other states |
-| `state_scrapers/me/scripts/probe_enriched_leads.py` | Curated direct-PDF probing | Reusable with state/default path changes |
-| `state_scrapers/me/scripts/enrich_me_locations.py` | Location backfill | Maine-specific ZIP map; reusable pattern, not data |
+| Birchwood on Rangeley Lake Condominium Association | `junk:tax` | Source URL was a CPA's accountant bio PDF |
+| Diamond Cove Homeowners Association | `low_value:financial` | Source was an annual financial report |
+| Jordan Grand Condominium Owners Association | `pii:ballot` | Source was a vote package with member PII |
+| Lakeside at Pleasant Mountain Condominium Association | `junk:government` | Source was a town planning-board packet |
+| The Summit Condominium Owners Association | `low_value:financial` | Source was a reserve study |
+| Tuscan Way Condominium Association | `unsupported_category:unknown` | Source was a town subdivision review form |
+
+These are useful negative results — the classifier saved the live
+catalog from drift toward financial / town / broker / vote-package
+content that mentions an HOA but is not a governing document.
+
+## Source Families: Pass 1 + Pass 2
+
+| Source family | Net manifests | Yield | Status |
+|---|---:|---|---|
+| Maine ICRS SoS corporate search | 0 | blocked | reCAPTCHA / no-automation notice |
+| Generic county-scoped Serper | noisy (pass 1 cleaned + pass 2 curated) | high after curation | reusable |
+| Curated Portland parcel folders + town registry PDFs | 15 (pass 1) | high | reusable; safest first path |
+| Penobscot direct-only sweep | 0 | dry | confirmed dry by both passes |
+| York/Wells source-family sweep | 4 (pass 1) | high | reusable |
+| `twoecho.org` direct PDF | 1 | clean | new in pass 2 |
+| `cloudfront.net` ME condo addendums | 1 | clean | new in pass 2 |
+
+## Cross-State Lessons (additions on top of pass 1's)
+
+1. **`gsutil -m mv` hangs reliably on Mac for small GCS prefix moves.**
+   Use the `google.cloud.storage` Python client and sequential
+   `bucket.copy_blob` + `blob.delete()` instead. The KS handoff already
+   warned about `gsutil -m rm`; the same advice extends to `mv`.
+2. **State-hint name matching needs an address verification step.** Pass
+   2 caught a CA-located "Vermont Villas" in the VT run via post-import
+   review. The same risk applies to ME — "Maine" is rarer in HOA names
+   than "Vermont" so the failure mode is less common, but still worth
+   anchoring on city/county evidence before importing live.
+3. **`prepare_bank_for_ingest.py`'s rejection categories are
+   precision-positive.** `junk:tax`, `low_value:financial`,
+   `pii:ballot`, `junk:government`, `unsupported_category:unknown`
+   filtered out 6 of 6 round-2 candidates that looked plausibly
+   HOA-shaped at the lead stage. Trust the classifier; do not lower
+   the budget cap to force imports.
+
+## Reusable Artifacts (Pass 2)
+
+| Artifact | Reuse |
+|---|---|
+| `state_scrapers/me/queries/me_continuation_targeted.txt` | Round 1 county + statute queries |
+| `state_scrapers/me/queries/me_continuation_round2.txt` | Round 2 condominium + homeowners queries |
+| `state_scrapers/me/scripts/probe_enriched_leads.py` | Custom probe driver (existing) |
+| `state_scrapers/me/scripts/enrich_me_locations.py` | Conservative ZIP-centroid backfill (existing) |

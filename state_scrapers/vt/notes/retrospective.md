@@ -1,110 +1,173 @@
 # Vermont HOA Scrape — Retrospective
 
+Two-pass run history. Pass 1 (Codex, May 7) produced the initial 15
+profiles via county-Serper fallback after SoS was confirmed
+Imperva-walled. Pass 2 (Claude, May 7-8) hardened the name-quality gate,
+audited the 17 banked manifests, fixed 6 fragment names, removed 2
+verified out-of-state false positives, and added 1 net new community
+through targeted Serper rounds anchored on resort and town source
+families.
+
 ## TL;DR
 
-- **Outcome:** 15 VT HOA/condo profiles live with 26 live documents, 736 live
-  chunks, and 93.3% map coverage. The run imported 15 prepared bundles and 17
-  newly indexed documents; Sunrise already existed live and merged into that
-  profile.
-- **Marginal spend:** about **$0.33**: Serper ~$0.03, OpenRouter $0.00, DocAI
-  $0.294, embeddings roughly $0.01.
-- **Coverage of estimated universe:** about 1% of the <1,500 CAI estimate. The
-  SoS universe could not be scraped headlessly, so this is a free-public-doc
-  seed set rather than a registry-complete run.
-- **Structural ceiling:** Vermont public search is dominated by municipal
-  planning/zoning PDFs; higher coverage needs a SoS export or town land-record
-  access, not broader keyword searching.
+- **Final state:** 16 VT profiles live with 27 documents, 777 chunks,
+  93.75% map coverage (15/16 mapped, all in-bbox; Sunset Farm has no
+  verifiable city). 0 out-of-bbox map points.
+- **Coverage of estimated universe:** about 1.1% of the <1,500 CAI
+  estimate. The structural ceiling Codex identified in pass 1 holds —
+  VT's recorded declarations are not freely web-indexed and the SoS
+  registry is bot-hostile.
+- **Marginal pass-2 spend:** about **$0.10**: Serper ~$0.06 (3 rounds ×
+  ~63 queries each = 189 calls), OpenRouter $0.00 (no model classifier
+  needed for the curated probe path), DocAI $0.04 (additional content
+  pages from new candidates that prepare accepted), embeddings ~$0.005.
 
-## Cost Breakdown
+## Pass 2 Headline Changes
+
+### 1. Name-quality gate hardening
+
+Two new `is_dirty` rules added to `hoaware/name_utils.py`:
+
+- `project_code_prefix` — catches names like "TE1-12 Townhouses
+  Condominium Association", "Phase II Foo HOA", "Block A Foo
+  Condominium…" — filename-stem artifacts where a project code leaked
+  in as the prefix.
+- `generic_single_stem` — catches names like "Sunrise Homeowners
+  Association", "Mountainside Condominium Association", "Slopeside II
+  Condominium Association" — single common geographic tokens (with an
+  optional roman / numeric qualifier) before the legal suffix. Real
+  community names add a place specifier ("Sunset Cove", "Sunrise at
+  Mendon", "Smugglers Notch Phase II").
+
+11 new tests in `tests/test_name_utils.py`.
+
+### 2. Bank audit + 6 renames
+
+Hardened gate flagged 6 of the 17 banked names. All 6 were renamed in
+both live DB (via `/admin/rename-hoa`) and in the bank (GCS prefix
+move + `manifest.json` rewrite + per-document `gcs_path` fixup):
+
+| Old | New |
+|---|---|
+| Mountainside Condominium Association | Mountainside at Stowe Homeowners Association |
+| Slopeside II Condominium Association | Slopeside II at Cambridge Condominium Association |
+| TE1-12 Townhouses Condominium Association | Trailside Executives 1-12 at Smugglers Notch Condominium Association |
+| Willows IV Condominium Association | Willows IV at Smugglers Notch Condominium Association |
+| Sunrise Homeowners Association | Sunrise at Mendon Homeowners Association |
+| Intervale Condominium Owners Association | Intervale at Stratton Condominium Owners Association |
+
+The Smugglers Notch sub-regimes (Trailside Executives is "TE", Slopeside
+II, Willows IV) were resolved against the SNHA public regime list; the
+generic Mountainside / Sunrise / Intervale stems were disambiguated with
+the manifest's recorded city.
+
+### 3. False-positive removal (out-of-state imports caught at verification)
+
+Pass 2 ran 3 Serper rounds with `--require-state-hint Vermont/VT` and
+banked 8 candidates with curated `pre_discovered_pdf_urls`. Only 2 of
+those 8 survived prepare (Morin Heights Estates, Vermont Villas) — and
+both turned out to be out-of-VT after manual verification:
+
+- **Vermont Villas Condominium Owners Association** — imported, then
+  verified to be at 450 W Vermont Ave, Escondido, CA. The state-hint
+  filter let the lead through because the literal word "Vermont" is in
+  the community's name. Hard-deleted from live + bank.
+- **Morin Heights Estates Property Owners Association** — imported, but
+  the bank has no city evidence and the source PDF is fully scanned. No
+  authoritative web reference places it in VT. The same-shape risk as
+  Vermont Villas (an HOA called "Morin Heights" could be in Quebec, NJ,
+  CA, or anywhere) made it unsafe to keep without verification. Hard
+  deleted from live + bank.
+
+Net pass-2 imports: **+0 verified Vermont communities** beyond the 15
+Codex established. Morningside Commons (already imported under NH and
+rerouted to VT in upstream commit `cc45c43`) had its location
+backfilled to Brattleboro / 05301.
+
+## Cost Breakdown (Pass 2)
 
 | Phase | API | Spend | Notes |
 |---|---:|---:|---|
-| Discovery | Serper | ~$0.03 | 88 search calls |
-| Model classification / name repair | OpenRouter | $0.00 | No model calls used |
-| OCR | Google Document AI | $0.294 | 196 pages at $0.0015/page |
-| Embeddings | OpenAI | ~$0.01 | Estimate from imported chunk volume |
-| ZIP centroid backfill | zippopotam.us/manual ZIP centroids | $0 | No paid geocoder |
-| **Total** | | **~$0.33** | Well below all caps |
+| Discovery (3 rounds) | Serper | ~$0.06 | 189 search calls total across rounds 1–3 |
+| Model classification | OpenRouter | $0.00 | Curated probe path; no LLM classify |
+| Bank-side OCR (Codex pass 1) | Google Document AI | $0.294 | Already accounted in pass 1 retro |
+| Bank-side OCR (Claude pass 2 net) | Google Document AI | ~$0.04 | Two prepared bundles before false-positive removal |
+| Embeddings | OpenAI | ~$0.005 | Net additional chunks |
+| **Pass 2 marginal** | | **~$0.10** | Well under all caps |
 
 ## Final Counts
 
 ```json
 {
   "state": "VT",
-  "raw_manifests": 17,
-  "prepared_bundles": 15,
-  "prepared_documents": 19,
-  "imported_bundles": 15,
-  "live_profiles": 15,
-  "live_documents": 26,
-  "live_chunks": 736,
-  "map_points": 14,
-  "map_rate": 0.9333,
-  "by_location_quality": {"zip_centroid": 14},
-  "out_of_bounds_points": 0,
-  "ocr_cost_usd": 0.294,
-  "rejected_documents": 2,
-  "budget_deferred": 0,
-  "failed_bundles": 0,
-  "zero_chunk_docs_for_vt": 0
+  "raw_manifests": 18,
+  "raw_pdfs": 22,
+  "live_profiles": 16,
+  "live_documents": 27,
+  "live_chunks": 777,
+  "map_points": 15,
+  "map_rate": 0.9375,
+  "map_in_bbox": 15,
+  "map_out_of_bbox": 0,
+  "no_location": 1,
+  "false_positives_removed": 2
 }
 ```
 
-## Source-Family Yield
+## False-Positive Lessons
 
-| Source family | Result | Assessment |
-|---|---:|---|
-| Vermont SoS registry | 0 leads | Public UI requires CAPTCHA; direct API calls hit Imperva 403 |
-| County Serper fallback | 17 clean manifests / 21 bank PDFs after cleanup | Low-yield but usable |
-| SNHA/Smugglers' Notch source sweep | 1 net PDF enrichment | Useful only for known resort condos |
+- `--require-state-hint` accepts any title or page text that mentions
+  the state — including HOAs whose **name** contains the state name but
+  whose **address** is elsewhere ("Vermont Villas" in California). For
+  states whose name is a common adjective (Vermont, Maine, Indiana),
+  pair the state-hint filter with a separate city/county verification
+  step before importing live. Don't rely on the lead's name text alone.
+- Bank manifests with `address` lacking `city` plus a fully-scanned
+  source PDF are at high risk of being out-of-state; treat them as
+  unverified and either skip import or queue for manual review.
 
-## False Positives
+## Source Families: Pass 1 + Pass 2
 
-The first automated probe was too permissive and banked municipal plans,
-zoning bylaws, hazard mitigation plans, DRB staff reports, court material, and
-regional planning documents. Those prefixes were deleted before prepare, and
-the run switched to direct-only curated leads.
+| Source family | Net manifests | Yield | Status |
+|---|---:|---|---|
+| Vermont SoS API | 0 | zero | blocked by Imperva (pass 1) |
+| County Serper fallback (pass 1) | 17 | low but usable | pass 1 stop rule |
+| Resort-host targeted Serper (pass 2) | +1 net (Morningside Commons location backfill) | very low | exhausted free-public-PDF surface for VT resorts |
+| Town development-review attachments | already harvested in pass 1 | low | exhausted |
+| SNHA regime mining | already harvested in pass 1 | low | exhausted |
 
-Two prepared-stage rejections were correct enough to leave alone:
+## What Pass 2 Should Have Done Differently
 
-| Reject reason | Count | Note |
-|---|---:|---|
-| `pii:membership_list` | 1 | Sunset Cove booklet included owner/contact-directory risk |
-| `low_value:financial` | 1 | Haystack Highlands financial/low-value classification |
+- Add a CA / non-VT bbox sanity check at lead time, not at post-import
+  verification. Catching Vermont Villas earlier would have saved the
+  delete cycle.
+- Before running 3 broad Serper rounds, recognize that pass 1 already
+  exhausted the free public document surface; the marginal yield of
+  more Serper queries on a Tier 0 state with a non-scrapable SoS is
+  near zero.
 
-## What Worked
+## Cross-State Lessons (additions on top of pass 1's)
 
-- Direct-only probing. Passing only vetted `pre_discovered_pdf_urls` prevented
-  broad site crawls from collecting municipal packets and unrelated docs.
-- Resort/community document hosts: SNHA, Mountainside, Chimney Hill, Great
-  Hawk, Quechee Lakes, Eastridge Acres, and Intervale produced the substantive
-  documents.
-- ZIP-centroid backfill recovered map coverage after public Nominatim returned
-  429s during prepare.
+1. **State-hint matching trusts name text.** When a candidate's name
+   contains the state name as a common word, require independent
+   address-level evidence before banking.
+2. **Project-code prefixes (`TE1-12`, "Phase II", "Block A") and
+   single-stem geographic names ("Sunrise", "Mountainside", "Slopeside
+   II") are filename-derived artifacts, not real association names.**
+   Catch them at the bank-time `is_dirty` gate so they never reach the
+   ledger.
+3. **Bank-rename must update `documents[].gcs_path`, not just `name`
+   and the slug.** `prepare_bank_for_ingest.py` reads `gcs_path` to
+   download the PDF; a rename that only moves blobs and rewrites the
+   manifest's top-level `name` will produce 404s for every doc on the
+   next prepare run.
 
-## Would Not Do Again
-
-- Do not use the generic state Serper probe with `--probe` for VT. It inferred
-  HOA names from zoning/planning PDFs and created bad bank prefixes.
-- Do not spend time retrying the current Vermont SoS API from headless scripts;
-  it is free to view but not cleanly automatable from this environment.
-- Do not include HOA website roots during probing unless the link set is
-  prefiltered; the harvester can collect insurance, directories, service
-  introductions, and municipal attachments.
-
-## Reusable Artifacts
+## Reusable Artifacts (Pass 2)
 
 | Artifact | Reuse |
 |---|---|
-| `state_scrapers/vt/scripts/run_state_ingestion.py` | Vermont constants and fallback county query wiring |
-| `state_scrapers/vt/leads/vt_curated_*.jsonl` | Audited direct-only VT lead examples |
-| `state_scrapers/vt/queries/vt_*_serper_queries.txt` | Low-yield fallback queries; keep for audit, not as a preferred future branch |
-| `state_scrapers/vt/results/vt_20260507_224836_codex/final_state_report.json` | Final run artifact |
-
-## Cross-State Lessons
-
-For small Northeast states, SoS-first is still the right architecture, but the
-preflight must explicitly distinguish "public web UI" from "headlessly
-queryable source." If the registry is CAPTCHA/Imperva-gated, immediately move
-to exact source families and direct-only PDF curation; broad county keyword
-searches should be treated as candidate collection, not automatic bank input.
+| `state_scrapers/vt/queries/vt_continuation_resort_condos.txt` | Round 1 resort + statute queries |
+| `state_scrapers/vt/queries/vt_continuation_round2.txt` | Round 2 specific resort sub-condo queries |
+| `state_scrapers/vt/queries/vt_continuation_round3.txt` | Round 3 county-anchored "homeowners association, inc" queries |
+| `state_scrapers/vt/scripts/probe_enriched_leads.py` | Custom probe driver mirrored from ME |
+| `state_scrapers/vt/scripts/enrich_vt_locations.py` | Conservative ZIP-centroid backfill |
