@@ -1,0 +1,17 @@
+"New Mexico" "Lea County" "homeowners association" declaration filetype:pdf
+"New Mexico" "Lea County" "condominium association" bylaws filetype:pdf
+"New Mexico" "Lea County" "owners association" covenants filetype:pdf
+"Hobbs" "New Mexico" "homeowners association" "declaration" filetype:pdf
+"Hobbs" "New Mexico" "condominium association" bylaws filetype:pdf
+"Hobbs" "New Mexico" "covenants" "subdivision" filetype:pdf
+"Hobbs" "New Mexico" "CC&Rs" filetype:pdf
+"Lovington" "New Mexico" "homeowners association" filetype:pdf
+"Eunice" "New Mexico" "homeowners association" filetype:pdf
+"Jal" "New Mexico" "homeowners association" filetype:pdf
+"Hobbs" "New Mexico" "townhouse" "declaration" filetype:pdf
+"Hobbs" "New Mexico" "master association" filetype:pdf
+"Hobbs" "New Mexico" "estates" "covenants" filetype:pdf
+"Hobbs" "New Mexico" "planned community" declaration filetype:pdf
+"New Mexico" "Lea County" "amended and restated declaration" filetype:pdf
+"New Mexico" "Lea County" "articles of incorporation" "homeowners" filetype:pdf
+"Hobbs" "New Mexico" "Recorder" "Declaration" filetype:pdf
