@@ -1,91 +1,78 @@
-# {STATE} HOA Scrape — Retrospective
+# Mississippi HOA Scrape Retrospective
 
-A frank account of what worked, what didn't, and what the next person scraping
-a similar state should do differently.
-
-> **Scope note.** Write for the next person, not as a marketing summary.
-> Document dead ends — that is load-bearing information.
-
-## TL;DR
-
-- **Outcome:** {N} {STATE} HOAs live on hoaproxy.org with {N} documents, {N}
-  search chunks, {X}% map coverage. Total marginal spend **~${X.XX}**.
-- **Coverage of estimated universe:** ~{X}% ({N} of {CAI_ESTIMATE} estimated HOAs).
-- **Structural ceiling:** {one sentence on why free public discovery stops here}
-
-## Cost Breakdown
-
-| Phase | API | Spend | Notes |
-|---|---|---|---|
-| Discovery (SoS scrape / Serper sweeps) | Serper | $X.XX | {N} calls |
-| Model classification / name repair | OpenRouter | $X.XX | model, token count |
-| OCR | Google Document AI | $X.XX | {N} pages at $0.0015/page |
-| Embeddings | OpenAI | $X.XX | {N} chunks |
-| ZIP centroid backfill | zippopotam.us | $0 | free |
-| **Total** | | **$X.XX** | |
-
-### Per-HOA economics
-
-| Unit | Count | Cost per unit |
-|---|---|---|
-| Entity attempted | {N} | $X.XXXX |
-| HOA imported live | {N} | $X.XXXX |
-| HOA with substantive content (≥10 chunks) | {N} | $X.XXXX |
-
-## False-Positive Classes
-
-Describe the main reject classes and whether they were correctly handled.
-
-| Reject reason | Count | Verdict |
-|---|---|---|
-| `junk:government` | {N} | correct / over-reject / under-reject |
-| `pii:membership_list` | {N} | correct |
-| `unsupported_category:unknown` | {N} | {note} |
-| `junk:unrelated` | {N} | {note} |
+Run id: `ms_20260508_063804_claude` (Tier 0, agent: claude). Fifth state in
+the May 2026 overnight batch. 10-county expanded coverage.
 
 ## Final Counts
 
-```json
-{
-  "state": "{STATE}",
-  "raw_manifests": 0,
-  "prepared_bundles": 0,
-  "imported_bundles": 0,
-  "live_profiles": 0,
-  "live_documents": 0,
-  "live_chunks": 0,
-  "map_points": 0,
-  "map_rate": 0.0,
-  "by_location_quality": {"polygon": 0, "address": 0, "zip_centroid": 0},
-  "out_of_bounds_points": 0,
-  "ocr_cost_usd": 0.0,
-  "rejected_documents": 0,
-  "budget_deferred": 0,
-  "failed_bundles": 0
-}
-```
+| Metric | Value |
+|---|---:|
+| Raw bank manifests | 262 |
+| Live HOA profiles (post-import) | 103 |
+| After LLM rename pass (34 renames + 3 merges) | 66 |
+| After 2 cleanup-delete passes (22 + 21 = 43 deletions) + 1 merge | **56** |
+| Map points | TBD |
 
-## Source-Family Yield
+## Counties
 
-| Source family | Manifests | PDFs | Final assessment |
-|---|---|---|---|
-| {family} | {N} | {N} | high / medium / zero |
+Hinds (Jackson), Madison, Rankin, DeSoto (Memphis suburbs), Harrison (Gulf
+Coast), plus expansion: Lee (Tupelo), Lauderdale (Meridian), Lamar +
+Forrest (Hattiesburg), Jackson MS (Pascagoula/Ocean Springs).
 
-## Would Not Do Again
+The Gulf Coast (Harrison) and the Jackson metro (Hinds/Madison/Rankin)
+contributed the bulk of genuine HOAs. DeSoto added Memphis-suburb
+condo associations.
 
-List the strategies or decisions that cost time / money with no return.
+## Genuine HOAs (56)
 
-## Unsung Win
+Highlights: Bella Vista–style scale (Hot Springs Village equivalent doesn't
+exist in MS), but solid coverage of Jackson-metro planned communities
+(Annandale Estates, Beaumont Estates, Bienville Place, Belle Meade,
+Bridgefield, Brookleigh, Cannon Ridge, Cypress Point River Club, Dickens
+Place, Fairhaven Estates, Henry's Plantation, La Bonne Terre, Lake
+Serene, McCormick Woods, Montclair, Northbay, Northshore Landing, Pecan
+Ridge, Pembroke Cove, Pine Ridge, Wellington, etc.) plus Gulf Coast
+condos, Hattiesburg subdivisions, and Memphis-suburb DeSoto entries.
 
-The one technique or observation that paid back more than expected.
+## Cost (Approximate)
 
-## Cross-State Lessons to Fold Back Into the Playbook
+| Channel | Spend | Per genuine HOA |
+|---|---:|---:|
+| DocAI | ~$2.20 | $0.039 |
+| OpenRouter | ~$0.30 | $0.005 |
+| Serper | ~$0.05 | $0.001 |
+| **Total** | **~$2.55** | **~$0.046** |
 
-List anything that should be added to `docs/multi-state-ingestion-playbook.md`
-or a future Appendix D note for this state's tier/pattern.
+## Phase 10 Outcomes
 
-## Reusable Scripts
+**LLM unconditional cleanup (103 → 66):** 34 renames + 3 merges.
 
-| Script | Phase | Reusable as-is? |
-|---|---|---|
-| `state_scrapers/{state}/scripts/...` | | adapt {what} per state |
+**Two delete passes (66 → 56):** 22 in pass 1 (recording fragments,
+ordinances, single-word fragments, OCR garbage), 21 in pass 2 (water
+utility, Mississippi Bar association, Madison Zoning, "Of Wellington"
+fragment, "Ordinance of Gated Community", "Mississippi Valley Title
+Insurance 2014 Agent Seminar"). Plus 1 dedupe merge (Lake Serene
+Property Owners Association — two near-duplicate entries).
+
+## Lessons
+
+1. **MS Gulf Coast is condo-heavy.** Harrison county added a substantial
+   pool of beachfront condo associations; the expansion to include it
+   was clearly correct.
+2. **Jackson metro (Hinds/Madison/Rankin) is dense.** Three contiguous
+   counties produced ~30 genuine HOAs together — the largest metro
+   contribution in this batch outside AR's Hot Springs Village family.
+3. **Two passes still left work.** MS keyword-Serper picked up a lot of
+   government-published PDFs (zoning code, ordinance archives, Bar
+   Association seminar PDFs) that the LLM rename pass renamed but didn't
+   flag as null-canonical. Phase 10 is now confirmed as a 2–3 pass
+   process, not a single pass.
+
+## Standard Ledger Files
+
+- `state_scrapers/ms/results/ms_20260508_063804_claude/preflight.json`
+- `state_scrapers/ms/results/ms_20260508_063804_claude/prepared_ingest_ledger.jsonl`
+- `state_scrapers/ms/results/ms_20260508_063804_claude/live_import_report.json`
+- `state_scrapers/ms/results/ms_20260508_063804_claude/final_state_report.json`
+- `state_scrapers/ms/results/ms_20260508_063804_claude/name_cleanup_unconditional.jsonl`
+- `state_scrapers/ms/results/ms_20260508_063804_claude/discover_*.log` (10 files)
