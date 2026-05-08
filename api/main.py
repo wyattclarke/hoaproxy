@@ -5641,7 +5641,16 @@ def open_document_file(hoa_name: str, path: str) -> FileResponse:
         raise HTTPException(status_code=404, detail="Document not found")
     if doc_path.suffix.lower() != ".pdf":
         raise HTTPException(status_code=400, detail="Only PDF files are supported")
-    if not rel_doc.startswith(f"{resolved_hoa}/"):
+    # Ownership check: the document must be attached to the resolved HOA in the
+    # DB. Pure string-prefix matching breaks after rename, because rename only
+    # updates hoas.name (not documents.relative_path or the on-disk dir).
+    with db.get_connection(settings.db_path) as conn:
+        owns = conn.execute(
+            "SELECT 1 FROM documents d JOIN hoas h ON d.hoa_id = h.id "
+            "WHERE h.name = ? AND d.relative_path = ? LIMIT 1",
+            (resolved_hoa, rel_doc),
+        ).fetchone()
+    if owns is None:
         raise HTTPException(status_code=400, detail="Document does not belong to requested HOA")
     return FileResponse(doc_path, media_type="application/pdf", filename=doc_path.name)
 
@@ -5651,7 +5660,13 @@ def open_document_searchable(hoa_name: str, path: str) -> HTMLResponse:
     settings = load_settings()
     resolved_hoa = _resolve_hoa_name(hoa_name)
     rel_doc = _safe_relative_document_path(path)
-    if not rel_doc.startswith(f"{resolved_hoa}/"):
+    with db.get_connection(settings.db_path) as conn:
+        owns = conn.execute(
+            "SELECT 1 FROM documents d JOIN hoas h ON d.hoa_id = h.id "
+            "WHERE h.name = ? AND d.relative_path = ? LIMIT 1",
+            (resolved_hoa, rel_doc),
+        ).fetchone()
+    if owns is None:
         raise HTTPException(status_code=400, detail="Document does not belong to requested HOA")
     with db.get_connection(settings.db_path) as conn:
         chunks = db.list_document_chunks_for_hoa(conn, resolved_hoa, rel_doc)
