@@ -1,44 +1,76 @@
 {
-  "by_location_quality": {
-    "zip_centroid": 57
-  },
-  "chunk_buckets": {
-    "0": 0,
-    "1-2": 1,
-    "10+": 98,
-    "3-9": 11
-  },
+  "state": "NH",
+  "tier": 1,
+  "run_id": "nh_20260507_225937_claude",
   "discovery_mode": "keyword-serper",
-  "estimated_docai_usd_cap": 8.049,
-  "live_chunks": 8305,
-  "live_documents": 146,
-  "live_profiles": 110,
-  "map_points": 57,
-  "map_rate": 0.518,
+
+  "raw_manifests_initial": 385,
+  "prepared_bundles_initial": 126,
+  "prepared_documents_initial": 137,
+  "rejected_documents_at_prepare": 145,
+
+  "live_profiles_pre_cleanup": 110,
+  "live_documents_pre_cleanup": 146,
+  "live_chunks_pre_cleanup": 8305,
+  "substantive_hoa_count_ge_10_chunks_pre_cleanup": 98,
+
+  "live_profiles_post_cleanup": 31,
+  "live_documents_post_cleanup": 41,
+  "live_chunks_post_cleanup": 1489,
+  "substantive_hoa_count_ge_10_chunks_post_cleanup": 25,
+  "rerouted_to_other_state": [
+    {
+      "hoa_id_after_reroute": 15357,
+      "name": "Morningside Commons",
+      "from_bank": "gs://hoaproxy-bank/v1/NH/cheshire/morningside-commons/",
+      "to_bank": "gs://hoaproxy-bank/v1/VT/windham/morningside-commons/",
+      "reason": "morningsidecommonsvt.com is a Brattleboro VT condo; banked under NH due to county-name overlap"
+    }
+  ],
+  "junk_consolidated_then_deleted": {
+    "sink_hoa_id": 15326,
+    "sink_name": "[NH-JUNK] not-an-HOA",
+    "merged_source_rows": 77,
+    "doc_count": 105,
+    "chunk_count": 6816,
+    "deleted_via": "POST /admin/delete-hoa (added in commit c41d0fb)"
+  },
+
+  "map_points_pre_cleanup": 57,
+  "map_rate_pre_cleanup": 0.518,
+  "by_location_quality_pre_cleanup": {"zip_centroid": 57},
   "out_of_state_points": 0,
-  "out_of_state_sample": [],
-  "prepared_bundles": 126,
-  "prepared_documents": 137,
-  "prepared_pages": 5366,
-  "raw_manifests": 385,
-  "rejected_documents": 145,
-  "rejection_reasons": {
-    "duplicate:prepared": 7,
-    "junk:court": 5,
+  "zero_chunk_docs": 0,
+
+  "rejection_reasons_at_prepare": {
     "junk:government": 40,
+    "unsupported_category:unknown": 35,
     "junk:unrelated": 28,
     "low_value:financial": 16,
-    "low_value:insurance": 1,
-    "low_value:minutes": 2,
-    "page_cap:222": 2,
     "page_cap:735": 7,
+    "duplicate:prepared": 7,
+    "junk:court": 5,
+    "page_cap:222": 2,
+    "low_value:minutes": 2,
     "pii:membership_list": 2,
-    "unsupported_category:unknown": 35
+    "low_value:insurance": 1
   },
-  "run_id": "nh_20260507_225937_claude",
-  "state": "NH",
-  "substantive_hoa_count_ge_10_chunks": 98,
-  "thin_hoa_count_le_2_chunks": 1,
-  "tier": 1,
-  "zero_chunk_docs": 0
+  "prepared_pages": 5366,
+  "estimated_docai_usd_cap": 8.05,
+  "total_run_cost_usd_estimated": 9.50,
+
+  "ceiling_explanation": [
+    "NH SoS QuickStart is Akamai-walled; no open-data SoS export available",
+    "Keyword-Serper banks ~70% noise (town planning packets, ADU explainers, court opinions) in NE states with municipal-website indexing; classifier doesn't always reject them, so a post-import LLM-assisted rename pass is required",
+    "Real condo-mgmt portals (TownSq, AppFolio, CINC, ManageBuilding) are walled per-resident-login"
+  ],
+  "next_step_to_break_ceiling": "either build a Playwright NH SoS scraper, or fold the LLM-assisted post-import rename + delete pass into the runner so the cleanup happens automatically",
+
+  "new_admin_endpoints_landed_during_run": [
+    {
+      "endpoint": "POST /admin/delete-hoa",
+      "commit": "c41d0fb",
+      "purpose": "hard-delete one or more HOAs (cascade chunks/documents/hoa_locations/proxy tables); needed because rename-hoa merge can only consolidate, never delete the final consolidated target"
+    }
+  ]
 }

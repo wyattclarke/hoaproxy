@@ -11,9 +11,16 @@ fell back to keyword-Serper-per-county.
 
 ## TL;DR
 
-- **Outcome:** 110 NH HOAs live on hoaproxy.org with 146 documents, 8,305
-  search chunks. **89% substantive** (98/110 ≥10 chunks; 1 thin profile;
-  0 zero-chunk docs). Total marginal spend **~$10**:
+- **Initial import:** 110 NH HOAs / 146 docs / 8,305 chunks.
+- **After hand-curated cleanup pass (this session):** **31 NH HOAs / 41 docs
+  / 1,489 chunks**. 25/31 substantive (≥10 chunks, 81%). 1 record
+  rerouted to VT (Morningside Commons in Brattleboro) where it actually
+  belongs. The keyword-Serper sweep banked ~70% noise — town zoning
+  ordinances, planning packets, ADU explainers, court opinions — that
+  the prepare-time classifier kept because they tagged as `unknown` or
+  `articles`-shaped, but the LLM (this session) judged not-an-HOA after
+  a name + source-URL review.
+- Total marginal spend **~$10**:
   - Serper: ~$1.00 (≈195 queries × 10 results across 10 counties)
   - OpenRouter classifier (deepseek-v4-flash): ~$0.40
   - Google Document AI: **≤$8.05** (5,366 prepared pages × $0.0015 cap;
@@ -268,6 +275,60 @@ has 5 counties and one dominant population. Consider a
    The reliable path is `extract-doc-zips → backfill-locations` post-
    import.
 
+## Hand-curated cleanup pass (post-import)
+
+After import the live state had 110 NH HOAs, but ~70% had names like
+"Zoning Ordinance HOA", "Subdivision HOA", or "Town of <X> Zoning
+Ordinance HOA" — keyword-Serper had picked up town planning packets
+that mention "HOA" in passing, the classifier tagged them as
+`articles` or `unknown`-but-keep, and the prepare phase imported them
+because their text was substantive.
+
+I (Claude) hand-reviewed all 110 entries against:
+- The HOA name string
+- The first document's filename
+- The first document's source URL host
+
+…and produced a rename plan at `/tmp/nh_rename_plan.py`. Real HOAs got
+clean canonical names; non-HOAs all got merged via
+`/admin/rename-hoa`'s merge path into a single `[NH-JUNK] not-an-HOA`
+sink HOA. The merge path moves docs and deletes the source row in one
+transaction, so 77 fake-HOA rows collapsed into 1.
+
+**Required two new admin endpoints to land cleanly on Render:**
+
+1. `POST /admin/rename-hoa` already existed but was being called as one
+   big batch and timing out at 600s on the merge path (each merge
+   re-touches O(chunks) embeddings to repartition the vec0 index).
+   Fixed by chunking renames into batches of ≤8.
+2. `POST /admin/delete-hoa` did **not** exist — added in commit
+   `c41d0fb`, deployed via Render API, then called to drop the
+   `[NH-JUNK]` sink (105 docs, 6,816 chunks). The merge mechanism can
+   only ever consolidate; it can't delete the consolidated target.
+   With this endpoint, the playbook's "post-import name cleanup" step
+   (Phase 10 closing step) can now also drop the consolidated junk
+   without raw SQL access.
+
+**One reroute discovered during cleanup:** Morningside Commons (live id
+15214) was banked under NH because the keyword-Serper sweep matched
+"morningside" + NH state hints, but the source domain
+`morningsidecommonsvt.com` made it obvious this was a Brattleboro VT
+condo. The bank manifest was copied from
+`gs://hoaproxy-bank/v1/NH/cheshire/morningside-commons/` to
+`gs://hoaproxy-bank/v1/VT/windham/morningside-commons/` (with state
+and county corrected), the NH prepared bundle was deleted, and the
+canonical VT bundle was prepared and imported via
+`/admin/ingest-ready-gcs?state=VT`. The HOA now lives at id 15357,
+state=VT, city=Brattleboro, with all 41 chunks intact.
+
+**This pattern (state misrouting) will recur** in any keyword-Serper
+state where county/town names overlap, especially in NE where the
+same town name can be in CT/MA/ME/NH/RI/VT. A stronger pre-bank guard
+would extract the public TLD from the source domain and reject
+in-state hits whose only state evidence is the county-name search
+hint, when the source URL's domain explicitly includes another
+state's two-letter abbreviation. Filed as a future improvement.
+
 ## Final state, for reference
 
 ```json
@@ -275,17 +336,24 @@ has 5 counties and one dominant population. Consider a
   "state": "NH",
   "tier": 1,
   "discovery_mode": "keyword-serper",
-  "raw_manifests": 385,
-  "prepared_bundles": 126,
+  "raw_manifests_initial": 385,
+  "prepared_bundles_initial": 126,
   "prepared_documents": 137,
-  "rejected_documents": 145,
-  "live_profiles": 110,
-  "live_documents": 146,
-  "live_chunks": 8305,
-  "substantive_hoa_count_ge_10_chunks": 98,
-  "thin_hoa_count_le_2_chunks": 1,
-  "map_points": 57,
-  "map_rate": 0.518,
+  "rejected_documents_at_prepare": 145,
+  "live_profiles_pre_cleanup": 110,
+  "live_profiles_post_cleanup": 31,
+  "live_documents_post_cleanup": 41,
+  "live_chunks_post_cleanup": 1489,
+  "substantive_hoa_count_ge_10_chunks_post_cleanup": 25,
+  "rerouted_to_other_state": [
+    {"hoa_id": 15357, "name": "Morningside Commons", "from": "NH/cheshire", "to": "VT/windham"}
+  ],
+  "junk_consolidated_then_deleted": {
+    "hoa_id": 15326, "name": "[NH-JUNK] not-an-HOA",
+    "merged_sources": 77, "doc_count": 105, "chunk_count": 6816
+  },
+  "map_points_pre_cleanup": 57,
+  "map_rate_pre_cleanup": 0.518,
   "by_location_quality": {"zip_centroid": 57},
   "out_of_state_points": 0,
   "zero_chunk_docs": 0,
@@ -293,10 +361,10 @@ has 5 counties and one dominant population. Consider a
   "total_run_cost_usd": 9.50,
   "ceiling_explanation": [
     "NH SoS QuickStart is Akamai-walled; no open-data SoS export",
-    "~50 of 110 imported HOAs are doc-fragment names from town zoning/ADU PDFs (not real HOAs)",
+    "Keyword-Serper banked ~70% noise (town planning packets etc.) that the classifier kept; needs hand-curated rename pass post-import",
     "Real condo-mgmt portals (TownSq, AppFolio, CINC, ManageBuilding) are walled per-resident-login"
   ],
-  "next_step_to_break_ceiling": "either build a Playwright NH SoS scraper, or accept Tier-1 keyword-Serper as the floor and ship paid Tyler/Cott town-clerk feeds for the recorded declarations"
+  "next_step_to_break_ceiling": "either build a Playwright NH SoS scraper, or fold the LLM-assisted post-import rename pass (with delete-hoa) into the runner so the cleanup happens automatically"
 }
 ```
 

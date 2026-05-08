@@ -926,8 +926,10 @@ Additional field for provenance tracking:
 | `/agent/precheck` | POST | Classify a PDF before upload | Returns category hint |
 | `/admin/ingest-ready-gcs` | POST | Import prepared GCS bundles to live site | Cap 50/call; `dry_run=true` param |
 | `/admin/backfill-locations` | POST | Upsert location metadata post-import | Accepts polygon/address/place/zip_centroid |
-| `/admin/extract-doc-zips` | GET | Extract ZIPs from doc text for a state | `?state=XX`; run before backfill-locations |
+| `/admin/extract-doc-zips` | POST | Extract ZIPs from doc text for a state | `?state=XX`; run before backfill-locations. Note: POST, not GET — earlier playbook examples were wrong. |
 | `/admin/zero-chunk-docs` | GET | List docs with 0 chunks post-import | Use for post-import verification |
+| `/admin/rename-hoa` | POST | Rename or merge HOAs by id | Body: `{"renames":[{"hoa_id":N,"new_name":"..."}],"dry_run":bool}`; merging into an existing target name re-attaches docs and deletes the source row. Re-touches `chunks.embedding` so vec0 hoa_id partition follows; **slow per merged HOA — do batches of ≤8 to avoid Render 600s timeouts**. |
+| `/admin/delete-hoa` | POST | Hard-delete one or more HOAs | Body: `{"hoa_ids":[N,M],"dry_run":bool}`; cascades chunks → documents → hoa_locations → proxy/membership tables. Use after rename-hoa-merge consolidation to drop a junk-sink. |
 | `/admin/costs` | GET | All-time and per-month DocAI cost dashboard | Admin auth |
 | `/admin/costs/docai-alert` | GET | Set DocAI spend alert threshold | `?threshold_usd=N&hours=24&notify=true` |
 | `/hoas/summary` | GET | Live HOA count by state | `?state=XX` |

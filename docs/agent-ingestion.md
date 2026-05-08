@@ -192,6 +192,26 @@ text sidecars, and calls `ingest_pdf_paths()` with `pre_extracted_pages`.
 It never runs Render-side OCR. If `texts/{sha}.json` is missing or invalid, the
 bundle is marked `failed`.
 
+### `POST /admin/rename-hoa`
+
+Rename or merge HOAs by id. Auth: `Bearer <JWT_SECRET>`.
+
+```json
+{"renames":[{"hoa_id":123,"new_name":"..."}],"dry_run":false}
+```
+
+If `new_name` matches an existing HOA, this becomes a merge: documents move from source to target, embeddings are re-touched so the vec0 hoa_id partition follows, and the source row is deleted. **Merging is O(chunks); batch ≤8 renames per call to avoid the 600s Render timeout.** Pure renames (new name unused) are O(1) and can be batched larger.
+
+### `POST /admin/delete-hoa`
+
+Hard-delete one or more HOAs. Auth: `Bearer <JWT_SECRET>`.
+
+```json
+{"hoa_ids":[15326],"dry_run":false}
+```
+
+Cascades chunks → documents → hoa_locations → membership_claims/delegates/proxy_assignments/proxy_audit/proposals/meetings → hoas. Use after `rename-hoa` merge consolidation to drop a junk-sink HOA (the rename merge path can consolidate but never deletes the final target row).
+
 ## Categories
 
 Defined in `hoaware/doc_classifier.py`.
