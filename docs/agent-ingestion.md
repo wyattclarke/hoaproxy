@@ -242,7 +242,17 @@ If DocAI is not configured and the agent says `text_extractable=false`, those pa
 
 The DocAI request batches pages in chunks of `HOA_DOCAI_CHUNK_PAGES` (default 10) to fit Document AI's per-call page limit. When `text_extractable=null` (legacy), DocAI is invoked only on the specific page numbers PyPDF couldn't read — not the whole document. That's a key change from pre-PR-1 behavior.
 
-There's a hard guard: documents with > 200 pages skip OCR entirely (`MAX_PAGES_FOR_OCR` in `pdf_utils.py`). Real governing docs don't exceed this; if a 1000-page archive sneaks through, it stays unembedded rather than burning $1.50.
+Two page caps live in `hoaware/pdf_utils.py`:
+
+- **`MAX_PAGES_FOR_OCR_SCANNED` = 25.** Applies when the agent says
+  `text_extractable=false`. A scanned >25-page PDF is almost always a
+  misclassified bulk archive (county records dump, multi-HOA filings packet),
+  not a single governing doc. DocAI is refused; `prepare_bank_for_ingest.py`
+  marks the doc `page_cap_scanned:{N}` before any DocAI billable call.
+- **`MAX_PAGES_FOR_OCR` = 200.** Absolute hard guard regardless of
+  text-extractability. Backstops the scanned cap for any code path that
+  bypasses the text-extractable check; documents over this stay unembedded
+  rather than burning DocAI dollars on a 1000-page archive.
 
 ### Offloading OCR to the agent
 

@@ -376,6 +376,12 @@ def main() -> int:
     p.add_argument("--max-text-chars", type=int, default=3500)
     p.add_argument("--apply", action="store_true")
     p.add_argument("--sleep-s", type=float, default=0.05)
+    p.add_argument(
+        "--no-dirty-filter", action="store_true",
+        help="Run the LLM rename pass over every live HOA, not just is_dirty()"
+        " hits. Use after a state run where bank-stage name extraction was weak"
+        " (Tier 0 keyword-Serper without SoS leads, etc.)."
+    )
     args = p.parse_args()
 
     client = _llm_client()
@@ -385,12 +391,15 @@ def main() -> int:
     summaries = _fetch_summaries(args.base_url, args.state.upper())
     dirty = []
     for r in summaries:
+        if args.no_dirty_filter:
+            dirty.append((r, "no_dirty_filter"))
+            continue
         ok, why = is_dirty(r.get("hoa") or "")
         if ok:
             dirty.append((r, why))
     if args.limit:
         dirty = dirty[: args.limit]
-    print(f"dirty HOAs to process: {len(dirty)}", file=sys.stderr)
+    print(f"HOAs to process: {len(dirty)} (no_dirty_filter={args.no_dirty_filter})", file=sys.stderr)
 
     decisions: list[dict[str, Any]] = []
     seen_names: set[str] = {(r.get("hoa") or "") for r in summaries}

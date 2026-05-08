@@ -621,6 +621,34 @@ for the unconditional pass on a Tier 0 state with ~150 live HOAs.
   --out state_scrapers/{state}/results/{run_id}/name_cleanup_unconditional.jsonl
 ```
 
+**Tag the residual non-HOAs.** When the LLM declines to propose a name with
+`canonical_name=null` and a reason like "document is a county planning memo"
+or "no HOA name found" or "not an HOA governing document", the live entry is
+not actually an HOA. Bank-stage misclassification put it there. Until a
+proper admin-delete endpoint lands, tag those entries with a `[non-HOA] `
+prefix via `/admin/rename-hoa` so the live HOA list visibly groups them at
+the top and operators / search UIs can filter them out. WY's run produced 46
+such residuals out of 131 live entries (35%) — keyword-Serper discovery on
+gov-heavy hosts (county recorders, planning boards) leaks a lot of titles
+that look HOA-shaped only because the bank suffix appended "HOA" to them.
+
+**Watch for duplicate-merge candidates.** The LLM rename pass can map
+multiple bank-side bad names to the same canonical name. The `/admin/rename-hoa`
+endpoint already supports merge-on-collision (renaming to an existing name
+moves docs/chunks/locations to the target and deletes the source). After the
+unconditional pass, scan for near-duplicates (e.g., "199 E. Pearl Condominium
+Association" + "199 East Pearl Condominium", "The Burton Flats Condominiums"
++ "The Burton Flats Condominium Association") and force a merge by renaming
+the lower-quality one to match the higher-quality one verbatim.
+
+**Sqlite write-lock retries.** `/admin/rename-hoa` returns HTTP 500 with
+`sqlite3.OperationalError: database is locked` when the live SQLite WAL is
+held by a concurrent writer (a backup VACUUM, a slow ingestion, etc.).
+Retry the same call with a 20-30 second backoff; the lock typically clears
+within one or two retries. Don't batch in chunks of 100 if you can't
+guarantee idempotency on partial-batch failure — single-rename calls with
+6× retries are safer for unattended runs.
+
 ---
 
 ## Tier-Specific Run Shapes
@@ -773,7 +801,7 @@ Applied before every model call or bank write:
 
 ---
 
-## Cross-State Lessons (Consolidated from GA / RI / TN)
+## Cross-State Lessons (Consolidated from GA / RI / TN / WY)
 
 Findings that generalized across three retrospectives and should be treated as invariants for new state runs.
 
@@ -796,6 +824,12 @@ Findings that generalized across three retrospectives and should be treated as i
 9. **Keep every Serper result directory.** Re-mining old noisy results with updated source-family knowledge recovers real docs at zero marginal Serper cost. TN proved this.
 
 10. **Live `JWT_SECRET` drifts from local `settings.env`.** Every runner that calls the live API must fetch the secret via the Render API at runtime (see Phase 8 for the canonical implementation). Treat this as a runner-class invariant, not a one-off workaround.
+
+11. **`is_dirty()` regex is necessary but not sufficient for keyword-Serper states.** WY's run had 28 dirty names by regex but ~46 additional bank-side misclassifications that only the unconditional LLM rename pass surfaced. For SoS-blocked Tier 0/1 states, run `clean_dirty_hoa_names.py --no-dirty-filter --apply` as a default closing step.
+
+12. **Bucket-binds-bbox is a hard invariant, not a soft check.** A live HOA may carry a coordinate inside state X's bbox only if its bank manifest lives under `gs://hoaproxy-bank/v1/X/...`. Phase 6 enrichment, Phase 8 import, and Phase 9 verification must each enforce this — see Phase 6 "Bucket-binds-bbox invariant" callout.
+
+13. **OCR cap for scanned PDFs is 25 pages, not 200.** `MAX_PAGES_FOR_OCR_SCANNED = 25` rejects scanned >25-page PDFs as `page_cap_scanned:{N}` before any DocAI billable call. Text-extractable PDFs are uncapped at this layer (PyPDF cost is zero); the absolute `MAX_PAGES_FOR_OCR = 200` hard guard backstops both. WY's run revealed this matters for keyword-Serper hosts that publish bulk archives (county records dumps, multi-HOA filings packets) — without the scanned cap they pull tens of dollars of DocAI on misclassified bundles.
 
 ---
 

@@ -25,8 +25,16 @@ from .docai import OCRFailedError, extract_with_document_ai
 logger = logging.getLogger(__name__)
 
 
-# Hard cap to refuse OCR on absurdly large PDFs (entire HOA archives accidentally
-# bundled into one file). Real governing docs do not exceed this.
+# Two caps:
+#  MAX_PAGES_FOR_OCR_SCANNED — applies only to fully-scanned PDFs (text_extractable=False
+#  or unknown with all-blank PyPDF). Most legitimate scanned governing-doc PDFs are
+#  well under this; over-cap usually means an HOA archive or a county records dump.
+#  Lowering this is the cheapest way to kill DocAI cost overruns and also weeds out
+#  irrelevant gov reports that happen to be scanned.
+#
+#  MAX_PAGES_FOR_OCR — absolute hard guard. Catches text-extractable archives we
+#  shouldn't even read with PyPDF.
+MAX_PAGES_FOR_OCR_SCANNED = 25
 MAX_PAGES_FOR_OCR = 200
 
 
@@ -98,16 +106,16 @@ def extract_pages(
                 "not_configured",
                 f"OCR required for {path.name} but Document AI is not configured",
             )
-        if total_pages > MAX_PAGES_FOR_OCR:
+        if total_pages > MAX_PAGES_FOR_OCR_SCANNED:
             logger.error(
-                "Refusing OCR for %s: %d pages exceeds cap of %d",
+                "Refusing OCR for %s: %d pages exceeds scanned cap of %d",
                 path,
                 total_pages,
-                MAX_PAGES_FOR_OCR,
+                MAX_PAGES_FOR_OCR_SCANNED,
             )
             raise OCRFailedError(
                 "page_cap_exceeded",
-                f"OCR refused for {path.name}: {total_pages} pages > cap of {MAX_PAGES_FOR_OCR}",
+                f"OCR refused for {path.name}: {total_pages} pages > scanned cap of {MAX_PAGES_FOR_OCR_SCANNED}",
             )
         try:
             docai_pages = extract_with_document_ai(

@@ -36,7 +36,7 @@ from hoaware.config import load_settings
 from hoaware.cost_tracker import COST_DOCAI_PER_PAGE
 from hoaware.doc_classifier import REJECT_JUNK, REJECT_PII, classify_from_text
 from hoaware.name_utils import is_dirty as _is_dirty_name
-from hoaware.pdf_utils import MAX_PAGES_FOR_OCR, extract_pages
+from hoaware.pdf_utils import MAX_PAGES_FOR_OCR, MAX_PAGES_FOR_OCR_SCANNED, extract_pages
 from hoaware.prepared_ingest import (
     DEFAULT_PREPARED_BUCKET,
     PREPARED_KEEP_CATEGORIES,
@@ -354,6 +354,16 @@ def _reject_reason(
     page_count = precheck.get("page_count")
     if isinstance(page_count, int) and page_count > MAX_PAGES_FOR_OCR:
         return f"page_cap:{page_count}"
+    # Tighter cap for scanned PDFs (text_extractable=False) — full-document
+    # DocAI on >25 pages is almost always a misclassified bulk archive or a
+    # gov records dump, not a real governing doc. Text-extractable PDFs are
+    # not capped here (PyPDF cost is zero).
+    if (
+        isinstance(page_count, int)
+        and page_count > MAX_PAGES_FOR_OCR_SCANNED
+        and precheck.get("text_extractable") is False
+    ):
+        return f"page_cap_scanned:{page_count}"
     if hard_only:
         return None
     if category in LOW_VALUE_CATEGORIES and not include_low_value:
