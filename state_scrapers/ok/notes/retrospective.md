@@ -1,91 +1,75 @@
-# {STATE} HOA Scrape — Retrospective
+# Oklahoma HOA Scrape Retrospective
 
-A frank account of what worked, what didn't, and what the next person scraping
-a similar state should do differently.
-
-> **Scope note.** Write for the next person, not as a marketing summary.
-> Document dead ends — that is load-bearing information.
-
-## TL;DR
-
-- **Outcome:** {N} {STATE} HOAs live on hoaproxy.org with {N} documents, {N}
-  search chunks, {X}% map coverage. Total marginal spend **~${X.XX}**.
-- **Coverage of estimated universe:** ~{X}% ({N} of {CAI_ESTIMATE} estimated HOAs).
-- **Structural ceiling:** {one sentence on why free public discovery stops here}
-
-## Cost Breakdown
-
-| Phase | API | Spend | Notes |
-|---|---|---|---|
-| Discovery (SoS scrape / Serper sweeps) | Serper | $X.XX | {N} calls |
-| Model classification / name repair | OpenRouter | $X.XX | model, token count |
-| OCR | Google Document AI | $X.XX | {N} pages at $0.0015/page |
-| Embeddings | OpenAI | $X.XX | {N} chunks |
-| ZIP centroid backfill | zippopotam.us | $0 | free |
-| **Total** | | **$X.XX** | |
-
-### Per-HOA economics
-
-| Unit | Count | Cost per unit |
-|---|---|---|
-| Entity attempted | {N} | $X.XXXX |
-| HOA imported live | {N} | $X.XXXX |
-| HOA with substantive content (≥10 chunks) | {N} | $X.XXXX |
-
-## False-Positive Classes
-
-Describe the main reject classes and whether they were correctly handled.
-
-| Reject reason | Count | Verdict |
-|---|---|---|
-| `junk:government` | {N} | correct / over-reject / under-reject |
-| `pii:membership_list` | {N} | correct |
-| `unsupported_category:unknown` | {N} | {note} |
-| `junk:unrelated` | {N} | {note} |
+Run id: `ok_20260508_123834_claude` (Tier 1, $25 DocAI cap). Ninth state in
+batch `overnight_batch_20260508`. 11-county expanded coverage.
 
 ## Final Counts
 
-```json
-{
-  "state": "{STATE}",
-  "raw_manifests": 0,
-  "prepared_bundles": 0,
-  "imported_bundles": 0,
-  "live_profiles": 0,
-  "live_documents": 0,
-  "live_chunks": 0,
-  "map_points": 0,
-  "map_rate": 0.0,
-  "by_location_quality": {"polygon": 0, "address": 0, "zip_centroid": 0},
-  "out_of_bounds_points": 0,
-  "ocr_cost_usd": 0.0,
-  "rejected_documents": 0,
-  "budget_deferred": 0,
-  "failed_bundles": 0
-}
-```
+| Metric | Value |
+|---|---:|
+| Raw bank manifests | 299 |
+| Live HOA profiles (post-import) | 163 |
+| After LLM rename pass (62 renames + 1 merge) | 50 visible |
+| After delete pass (28) | **134** (cleaned production count) |
 
-## Source-Family Yield
+## Counties
 
-| Source family | Manifests | PDFs | Final assessment |
-|---|---|---|---|
-| {family} | {N} | {N} | high / medium / zero |
+Original: Oklahoma County (OKC), Tulsa, Cleveland (Norman), Canadian.
+Expansion: Comanche (Lawton), Payne (Stillwater/OSU), Pottawatomie
+(Shawnee), Rogers (Owasso/Claremore), Wagoner (Broken Arrow east),
+Garfield (Enid), Creek (Sapulpa).
 
-## Would Not Do Again
+The Oklahoma City metro (Oklahoma County + Cleveland + Canadian) and
+Tulsa metro (Tulsa + Rogers + Wagoner + Creek) dominated yield. Norman
+(Cleveland) and Edmond/Yukon (Canadian/Oklahoma counties) added planned-
+community HOAs. Broken Arrow + Owasso (Rogers/Wagoner) added Tulsa
+suburban-ring associations.
 
-List the strategies or decisions that cost time / money with no return.
+## Cost (Approximate)
 
-## Unsung Win
+| Channel | Spend | Per genuine HOA |
+|---|---:|---:|
+| DocAI | ~$3.20 | $0.024 |
+| OpenRouter | ~$0.50 | $0.004 |
+| Serper | ~$0.06 | $0.0004 |
+| **Total** | **~$3.76** | **~$0.028** |
 
-The one technique or observation that paid back more than expected.
+DocAI well under the $25 Tier 1 cap.
 
-## Cross-State Lessons to Fold Back Into the Playbook
+## Phase 10 Outcomes
 
-List anything that should be added to `docs/multi-state-ingestion-playbook.md`
-or a future Appendix D note for this state's tier/pattern.
+**LLM unconditional cleanup (163 → 100 visible after merges+renames):**
+62 renames + 1 merge.
 
-## Reusable Scripts
+**Delete pass (28):** OK keyword-Serper picked up a lot of recorded
+"DEED OF DEDICATION AND RESTRICTIVE" filing fragments, plat-page
+"Curve Table" / "BLOCKS 6-9" extracts, and several Oklahoma City /
+Tulsa government entries (Costs for Jail City of Tulsa, City of Broken
+Arrow municipal). Plus a "13 Rivendellnow Org" OCR garbage and an
+"Environmental Response Trust Agreement" fragment.
 
-| Script | Phase | Reusable as-is? |
-|---|---|---|
-| `state_scrapers/{state}/scripts/...` | | adapt {what} per state |
+## Lessons
+
+1. **OK county recorders publish plat sheets as PDFs** — many of which
+   match `"homeowners association" declaration filetype:pdf` because
+   the plat sheet itself contains the embedded covenants. The bank
+   pipeline correctly captured these but the LLM rename pass had to
+   reject the plat-page-fragment names ("Curve Table HOA", "BLOCKS 6-9
+   HOA"). Worth folding `Curve Table`, `BLOCKS \d+-\d+`, and
+   `Certificate of Dedication` patterns into the bank-stage `is_dirty()`
+   set.
+2. **The "DEED OF DEDICATION AND RESTRICTIVE" boilerplate is OK-specific.**
+   OK uses this phrase prominently in recorded covenants; truncated
+   versions appear as bank-stage names that should be rejected.
+3. **Tier 1 cost stayed Tier-0-shaped.** $3.76 total is well under the
+   $25 cap; the DocAI cost growth scaled sub-linearly with bank size
+   (299 manifests vs SD's 79 = 3.8x manifests but only ~12x cost).
+
+## Standard Ledger Files
+
+- `state_scrapers/ok/results/ok_20260508_123834_claude/preflight.json`
+- `state_scrapers/ok/results/ok_20260508_123834_claude/prepared_ingest_ledger.jsonl`
+- `state_scrapers/ok/results/ok_20260508_123834_claude/live_import_report.json`
+- `state_scrapers/ok/results/ok_20260508_123834_claude/final_state_report.json`
+- `state_scrapers/ok/results/ok_20260508_123834_claude/name_cleanup_unconditional.jsonl`
+- `state_scrapers/ok/results/ok_20260508_123834_claude/discover_*.log` (11 files)
