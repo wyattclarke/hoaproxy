@@ -6,16 +6,19 @@ Instruction: continue autonomously for WY. Do not stop at checkpoints. Commit
 or hand off as needed, then immediately keep scraping. Only send a final
 response if blocked, out of budget, or asked for status.
 
-## Current State
+## Current State (RUN COMPLETE)
 
 - Bank prefix: `gs://hoaproxy-bank/v1/WY/`
-- Initial bank count: 2 manifests, 2 PDFs (both misattributed pre-existing —
-  `WY/broward/westview/` and `WY/pike/williamson-county-road-and-bridge-from-stone-canyon/`
-  appear to be cross-state contamination from prior runs; left untouched).
+- Final bank count: 314 manifests across 9 swept counties + 44 in `_unresolved-name/`.
+  Plus 2 stale legacy entries under `WY/broward/` and `WY/pike/` (cross-state
+  contamination from a prior run; left untouched).
+- Live profiles: 133, documents: 137, chunks: 7,019.
+- Map coverage: 48 / 133 = 36% (zip_centroid only); 0 out-of-state.
+- Spend: DocAI $2.20, OpenRouter ~$0.45, Serper ~$0.05; all under cap.
 - Run ID: `wy_20260507_225444_claude`
 - Tier/budget: Tier 0; `--max-docai-cost-usd 5`; OpenRouter cap $5; Serper cap $3.
 - Discovery branch: SoS-first preflight failed (wyobiz.wyo.gov is F5/Akamai
-  TSPD bot-protected — same blocker as Vermont). Falling back to county-scoped
+  TSPD bot-protected — same blocker as Vermont). Pivoted to county-scoped
   keyword Serper anchored on the 9 HOA-bearing counties.
 - Secrets policy: keys are loaded from `settings.env`; do not echo them.
 
