@@ -333,6 +333,48 @@ Sidecar shape:
 }
 ```
 
+**Post-OCR content cross-validation (mandatory).** Once page-one (or full)
+sidecar text exists for a manifest, validate that the HOA name and address
+on the manifest are consistent with the *actual* document content. The
+classic failure this catches: a single PDF hosted on a multi-state
+management-company site (e.g. `russellpm.com/.../WET-Rules-and-Regulations.pdf`)
+gets banked under multiple state slugs because Serper sees the state name
+on the surrounding HTML, not in the document; the manifest claims state X
+but the PDF text says "Greenville, NC" or "Manchester, MO."
+
+Required checks per manifest, comparing each candidate document's sidecar
+text against the manifest's `name`, `address.state`, and (when present)
+`address.city` / `address.county`:
+
+1. **State conflict.** Extract every two-letter state code and full state
+   name appearing in the first ~3000 chars of OCR text. If the bank-prefix
+   state (`v1/{STATE}/...`) does not appear AND another state appears two
+   or more times AND it appears in a recorder/address-style context
+   (e.g. `Greenville, NC 27858`, `recorded in Pitt County, North Carolina`),
+   reject the manifest with `decision: "manifest_rejected", reason:
+   "ocr_state_mismatch:{detected_state}"`. The same-PDF-different-state
+   leak (Westpointe Townhomes seen in IN/IA/FL/GA buckets) is caught here.
+
+2. **Name conflict.** Tokenize the manifest's HOA name (drop generic
+   tokens: `homeowners`, `association`, `the`, `of`, etc.). If none of
+   the specific tokens appear anywhere in the first ~5000 chars of any
+   document's OCR text, mark the manifest `decision: "name_unverified"`
+   in the ledger and route the bundle through the dirty-name pipeline
+   (`hoaware/name_utils.is_dirty()` + `derive_clean_slug()`) before
+   import — the auto-extracted name is almost always wrong when the
+   document doesn't even mention it.
+
+3. **City/county mismatch (soft).** If `address.city` is set but no
+   recognizable form of that city appears in the document text, demote
+   `location_quality` to `city_only` (the address is unverified) but
+   still allow the bundle to import — the name match is the load-bearing
+   check; geo evidence is recoverable in Phase 6 / 9.
+
+These checks share the OCR text already produced by Phase 5, so they add
+no DocAI cost. They run inside `prepare_bank_for_ingest.py` between the
+sidecar write and the bundle write, with all decisions captured in the
+prepared-ingest ledger so retrospectives can quantify the leak rate.
+
 ### Phase 6 — OCR-Assisted Geography
 
 Run after Phase 5, before prepared bundles. OCR text from declarations, plats, recorder stamps, minutes, budgets, and insurance certificates contributes city/county/ZIP/subdivision clues.
@@ -596,16 +638,65 @@ for the unconditional pass on a Tier 0 state with ~150 live HOAs.
   --out state_scrapers/{state}/results/{run_id}/name_cleanup_unconditional.jsonl
 ```
 
-**Tag the residual non-HOAs.** When the LLM declines to propose a name with
-`canonical_name=null` and a reason like "document is a county planning memo"
-or "no HOA name found" or "not an HOA governing document", the live entry is
-not actually an HOA. Bank-stage misclassification put it there. Until a
-proper admin-delete endpoint lands, tag those entries with a `[non-HOA] `
-prefix via `/admin/rename-hoa` so the live HOA list visibly groups them at
-the top and operators / search UIs can filter them out. WY's run produced 46
-such residuals out of 131 live entries (35%) — keyword-Serper discovery on
-gov-heavy hosts (county recorders, planning boards) leaks a lot of titles
-that look HOA-shaped only because the bank suffix appended "HOA" to them.
+**Hard-delete the residual non-HOAs.** When the LLM declines to propose a
+name with `canonical_name=null` and a reason like "document is a county
+planning memo" or "no HOA name found" or "not an HOA governing document",
+the live entry is not actually an HOA — bank-stage misclassification put it
+there. **Use `POST /admin/delete-hoa` to remove these entries entirely**;
+they should not appear on the public HOA list at all. The endpoint cascades
+through `chunks → documents → hoa_locations → proxy/membership` tables, so
+one call cleans everything.
+
+```bash
+curl -sS -X POST "https://hoaproxy.org/admin/delete-hoa" \
+  -H "Authorization: Bearer $LIVE_JWT_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"hoa_ids":[15866,15854,...],"dry_run":false}'
+```
+
+The `[non-HOA] ` prefix tag (via `/admin/rename-hoa`) was the historical
+workaround when no delete endpoint existed; it is now superseded. WY's run
+produced 46 such residuals out of 131 live entries (35%); SD's produced 9
+out of 19 (47%) — keyword-Serper discovery on gov-heavy hosts (county
+recorders, planning boards, utility cooperatives, legislative archives)
+leaks a lot of titles that look HOA-shaped only because the bank suffix
+appended "HOA" to them. **Always delete; never tag.**
+
+**Doc-filename audit (Phase 10 closing step).** After the rename + delete
+passes, filename-audit each surviving live HOA against its source documents.
+Flag (and hard-delete) entries where:
+
+1. The document filename mentions a *different* HOA name than the host HOA
+   (e.g., `SAHA-2021-1.pdf` under "Meadow Lake Resort", `Hendricks` /
+   `Hancock` under what was renamed to "Millstone Village" — those are
+   foreign-state HOA fragments).
+2. The document source URL host is generic, utility, news, or government
+   rather than HOA-owned or recorder-owned (`siouxvalleyenergy.com`,
+   `*.gov/AgendaCenter`, `legis.{state}.gov`). SD's run found a Sunset
+   Harbor entry whose only doc was a January 2024 cooperative newsletter
+   from the local utility — banked because the keyword-Serper hit on
+   "covenants" inside the newsletter, never caught by page-one OCR.
+3. The HOA has `doc_count > 3` and the earliest document timestamp predates
+   the current run's `started_at`. These are pre-existing **junk-sinks**
+   where one HOA name accumulated docs from multiple unrelated sources
+   across prior state imports. The unconditional LLM rename pass picks up
+   *one* document's HOA name and slaps it on the whole sink, masking the
+   problem. SD's run found `hoa_id 15616` ("Untitled HOA" → renamed to
+   "Millstone Village Community Association") with 9 docs from at least 5
+   distinct HOAs (filenames suggested Minnesota provenance: `Hendricks`,
+   `Hancock`). Hard-delete these — do not try to dismantle and re-attach.
+
+```python
+# canonical doc-filename audit (run after rename + delete passes)
+import sqlite3, requests
+# ... (pseudocode — fold into clean_dirty_hoa_names.py or a sibling script)
+# For each live HOA in state STATE:
+#   1. fetch /hoas/{name}/documents
+#   2. flag if any filename contains a state token != STATE
+#   3. flag if any source_url host matches utility/.gov/news patterns
+#   4. flag if doc_count > 3 and last_ingested for any doc < run_started_at
+# Build a delete list; POST to /admin/delete-hoa.
+```
 
 **Watch for duplicate-merge candidates.** The LLM rename pass can map
 multiple bank-side bad names to the same canonical name. The `/admin/rename-hoa`
@@ -800,6 +891,25 @@ Findings that generalized across three retrospectives and should be treated as i
 12. **Bucket-binds-bbox is a hard invariant, not a soft check.** A live HOA may carry a coordinate inside state X's bbox only if its bank manifest lives under `gs://hoaproxy-bank/v1/X/...`. Phase 6 enrichment, Phase 8 import, and Phase 9 verification must each enforce this — see Phase 6 "Bucket-binds-bbox invariant" callout.
 
 13. **OCR cap for scanned PDFs is 25 pages, not 200.** `MAX_PAGES_FOR_OCR_SCANNED = 25` rejects scanned >25-page PDFs as `page_cap_scanned:{N}` before any DocAI billable call. Text-extractable PDFs are uncapped at this layer (PyPDF cost is zero); the absolute `MAX_PAGES_FOR_OCR = 200` hard guard backstops both. WY's run revealed this matters for keyword-Serper hosts that publish bulk archives (county records dumps, multi-HOA filings packets) — without the scanned cap they pull tens of dollars of DocAI on misclassified bundles.
+
+14. **Tag-then-stop is not Phase 10. Hard-delete is.** WY's `[non-HOA] ` prefix
+    workaround was correct when the delete endpoint didn't exist; it shipped
+    in commit `c41d0fb` and is now the canonical close. Tagged entries still
+    appear on the public HOA list, just sorted to the top — that's not what
+    the user wants. Every Phase 10 run must:
+
+    a. Rename via `clean_dirty_hoa_names.py --no-dirty-filter --apply`.
+    b. Hard-delete the residuals (LLM `canonical_name=null`) via
+       `/admin/delete-hoa`.
+    c. **Doc-filename audit** the survivors: delete entries whose docs
+       belong to a different HOA, whose source URL is utility/news/gov, or
+       whose pre-run doc accumulation marks them as a junk-sink.
+
+    SD's run produced 19 live HOAs initially. After (a) + (b) + (c): 8
+    genuine. The mismatch audit alone caught 2 entries (Sunset Harbor's
+    utility newsletter; Millstone Village junk-sink with 9 mixed-HOA docs
+    from a prior import) that the rename pass had silently confirmed as
+    HOAs by picking *one* document's name.
 
 ---
 

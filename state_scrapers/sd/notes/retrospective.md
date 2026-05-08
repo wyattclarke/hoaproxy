@@ -21,8 +21,9 @@ Wall time: ~30 min end-to-end (preflight 02:35 UTC → import-finished 03:06 UTC
 | Map rate | 5% (1/19) |
 | Out-of-state map points | 0 (all coords inside SD bbox) |
 | Names auto-cleaned (unconditional pass) | 6 renamed |
-| `[non-HOA]` residuals tagged | 9 / 19 (47%) |
-| Genuine live HOAs after cleanup | 10 (53%) |
+| `[non-HOA]` residuals tagged → **hard-deleted** | 9 |
+| Doc-HOA mismatch hard-deletes | 2 (Sunset Harbor utility newsletter, Millstone Village pre-existing 9-HOA junk-sink) |
+| **Genuine live HOAs after full cleanup** | **8** |
 
 The 5% map rate is below the Tier 0 target (≥80%) but the absolute count
 (19 live HOAs, of which only ~5 looked like genuine HOA names before the
@@ -99,19 +100,54 @@ OCR text. 6 renames applied:
 | 15865 | `Restated of Reservations and Restrictive HOA` | `Red Rock Meadows Homeowners' Association, Inc.` |
 | 15868 | `Pennington County , as shown by the plats thereof on file in ... Owners Association` | `Spring Brook Acres Homeowners Association, Inc.` |
 
-9 residual entries were tagged with `[non-HOA] ` prefix (the model declined a
-canonical name with confidence=0): three government titles (TITLE 5
+9 residual entries were initially tagged with `[non-HOA] ` prefix (the model
+declined a canonical name with confidence=0): three government titles (TITLE 5
 SUBDIVISION HOA, MEADE COUNTY REGISTER OF DEEDS HOA, SD Legislature Senate
 Journal), one radio club (Rara Rockford), one street-address-only fragment
 (621 Sixth Street HOA), one meeting-agenda title (Consent Agenda Plats),
-and three OCR-fragment names. Total residual rate: 47% — slightly higher
-than WY's 35%, consistent with SD's smaller universe and the higher
-proportion of government-published PDFs in the keyword sweeps.
+and three OCR-fragment names. Total tag rate: 47% — slightly higher than WY's
+35%, consistent with SD's smaller universe and the higher proportion of
+government-published PDFs in the keyword sweeps.
 
-The remaining 10 entries (53%) are genuine HOAs: 220 Beech, Countryside
-South, Dakota Highland Estates, Highpointe Ranch, Long Meadow Estates,
-Meadow Lake Resort, Millstone Village, Red Rock Meadows, Spring Brook
-Acres, Sunset Harbor.
+**Tagging is not a final state. The 9 tagged entries were hard-deleted via
+`POST /admin/delete-hoa`** because they are not HOAs and don't belong on the
+live site even with a prefix. Tagging is a useful intermediate when an admin
+endpoint would be slow or risky — but for stateless content like this,
+deletion is the canonical Phase 10 close. See updated playbook Phase 10.
+
+## Doc-HOA Mismatch Audit (Phase 10 closing step)
+
+After the rename + delete passes, the 10 surviving entries were filename-
+audited against their HOA name. Two further hard-deletes were needed:
+
+| hoa_id | Name | Doc | Reason |
+|---|---|---|---|
+| 15859 | Sunset Harbor Homeowners Association | `svecc_2024_01january.pdf` (siouxvalleyenergy.com) | Sioux Valley Electric Cooperative newsletter, not an HOA doc. Bank-stage misclassification — keyword match on "homeowners" or "covenants" inside a utility newsletter. |
+| 15616 | Millstone Village Community Association, Inc. | 9 mixed-HOA docs (Mapleton Highlands, Mydland, Northpark, Twin Oaks Sec 2, etc.) | Pre-existing junk-sink (`hoa_id` predates this SD run; was named "Untitled HOA" before the unconditional rename pass picked one filename's HOA name). 9 docs from at least 5 unrelated HOAs (Hendricks/Hancock filenames suggest Minnesota origin). |
+
+The remaining 8 entries are genuine SD HOAs: **220 Beech Association,
+Countryside South HOA, Dakota Highland Estates HOA, Highpointe Ranch HOA,
+Long Meadow Estates, Meadow Lake Resort HOA, Red Rock Meadows HOA, Spring
+Brook Acres HOA.** Three of these have opaque filenames (`zq84...pdf`,
+`1259448_28e4962a-...pdf`, `250228_Filed_Restated_Covenants_...pdf`) — they
+look like CMS-generated upload IDs and warrant first-page-text spot-checks
+in a future cleanup pass, but the source URLs and bank manifests don't
+flag them as obvious mismatches.
+
+**Lesson for the playbook:** Phase 10 needs an explicit "doc-filename audit"
+step *after* LLM rename and *before* the retrospective is finalized. The
+audit should flag (and propose deletion for):
+
+1. Documents whose filename mentions a different HOA name than the host HOA
+   (`SAHA-2021` under "Meadow Lake Resort", `Hendricks` under "Millstone
+   Village").
+2. Documents whose source URL host is generic/utility/news/government, not
+   an HOA-owned or recorder-owned domain (`siouxvalleyenergy.com`,
+   `*.gov/AgendaCenter`, `legis.sd.gov`).
+3. HOAs with `doc_count > 3` that pre-date this state's run (timestamp on
+   the earliest document is before the current run's `started_at`) — these
+   are usually pre-existing junk-sinks where one HOA name accumulated docs
+   from multiple sources.
 
 ## Bank-Stage `is_dirty()` Misses (worth folding into the regex set)
 
