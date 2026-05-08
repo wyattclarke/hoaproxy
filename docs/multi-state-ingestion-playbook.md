@@ -8,10 +8,10 @@ This is the single canonical reference for autonomous LLM-driven HOA discovery, 
 
 | CAI estimate | Tier | Approach | OCR budget | Parallelism | Wall time |
 |---|---|---|---|---|---|
-| < 1,500 | 0 — Tiny | Batch 3–5 unmonitored sessions | $5–8 each | 3–5 states at once | ~1 day/batch |
-| 1,500–4,000 | 1 — Small | Solo unmonitored run | $10–20 | 1 state per session | 1–2 days |
-| 4,000–10,000 | 2 — Medium | Phased; OCR-cost gate after Phase A | $20–40 | 1 state per session | 2–4 days |
-| 10,000–25,000 | 3 — Large | Operator-supervised, county-batched | $50–150 | Sequential counties | Multi-week |
+| < 1,500 | 0 — Tiny | Batch 3–5 unmonitored sessions, or sequential queue overnight | $10–15 each | 3–5 states at once | ~1 day/batch |
+| 1,500–4,000 | 1 — Small | Solo unmonitored run | $20–30 | 1 state per session | 1–2 days |
+| 4,000–10,000 | 2 — Medium | Phased; OCR-cost gate after Phase A | $40–75 | 1 state per session | 2–4 days |
+| 10,000–25,000 | 3 — Large | Operator-supervised, county-batched | $100–250 | Sequential counties | Multi-week |
 | > 25,000 | 4 — Huge | Own state-specific plan | $500+ | N/A | Months |
 
 ---
@@ -69,11 +69,11 @@ Source: `docs/cai_state_hoa_counts.txt`. Status as of 2026-05-07.
 | AL | >3,000 | 1 | not-started | — |
 | ID | <3,000 | 1 | not-started | — |
 | IA | <3,000 | 1 | not-started | — |
-| RI | <1,250 | 1 | done | SoS-first canonical Tier 1 |
+| RI | <1,250 | 1 | done | Done (historical SoS-first run; not the recommended pattern — see retrospective) |
 | NE | <1,200 | 0 | not-started | — |
 | DE | <1,500 | 0 | done | Open-portal (PaxHOA) + Serper supplement |
 | DC | <1,500 | 0 | not-started | Open-portal (DC Recorder of Deeds; unified municipal) |
-| VT | <1,500 | 0 | not-started | Keyword-Serper recommended; SoS-first risky (NH precedent) |
+| VT | <1,500 | 0 | not-started | Keyword-Serper recommended |
 | NM | <1,500 | 0 | not-started | — |
 | AK | <1,000 | 0 | not-started | — |
 | AR | <1,000 | 0 | not-started | — |
@@ -139,19 +139,6 @@ Expected output:
 }
 ```
 
-**SoS preflight (10-min spike).** When the candidate strategy is SoS-first or SoS-supplement, validate the registry is usable BEFORE committing budget. Abort SoS-first immediately on any of these signals:
-
-- **Akamai / Cloudflare WAF challenge** — response body contains `Reference #`, edge-server IDs, `cf-mitigated`, or a JS challenge page. NH's SoS QuickStart is Akamai-walled; Python clients are blocked regardless of headers.
-- **reCAPTCHA on search submit** — IN's INBiz is gated this way; bypass costs $9,500/year.
-- **Paywall / subscription required** — body contains `subscription`, `purchase`, `pricing`, or returns 402.
-- **Login wall** — search submit redirects to a login page or returns 401/403 unauthenticated.
-- **ASP.NET VIEWSTATE pagination breaks** after 1-2 pages with `__VIEWSTATEENCRYPTED` mismatch errors. Often recoverable, but if 3+ retries fail, abort.
-- **Zero HOA-shaped hits** — searches for `condominium`, `homeowners`, `owners association` return 0 active entities. The registry exists but isn't HOA-rich; pivot to keyword-Serper.
-
-If any abort signal trips, fall back immediately to `keyword-Serper-per-county` for that state. Do not retry SoS-first. Document the failure mode in `state_scrapers/{state}/notes/discovery-handoff.md` so the next operator skips the SoS spike.
-
-Empirically as of May 2026: RI is the only confirmed SoS-first success in production. NH fell back to keyword-Serper after Akamai blocked the QuickStart endpoint. Treat SoS-first as opportunistic, not load-bearing.
-
 ### Phase 2 — Discovery And Raw Banking
 
 Bank everything plausible. False positives are cheaper than false negatives here.
@@ -160,29 +147,17 @@ Bank everything plausible. False positives are cheaper than false negatives here
 
 **Mandatory association only.** Signals that indicate mandatory: Declaration of Covenants, CC&Rs, Restrictive Covenants, Master Deed, Articles of Incorporation of an HOA, "Bylaws of \<community\> Homeowners Association" tied to a recorded declaration. Voluntary signals to skip: standalone Architectural Guidelines with no CC&R reference, civic-association meeting minutes, garden-club bylaws.
 
-**Discovery source selection:**
+**Discovery source selection.** Every state goes county-by-county. The variant depends on what kind of public data the counties expose:
 
 | Pattern | Use when | Reference states |
 |---|---|---|
-| Keyword Serper per county | County/town names are nationally unique; recorder `.gov` sites publish PDFs | TN, KS, GA |
-| SoS-registry first, Serper enrichment | Small population OR county/town names overlap other states (Bristol, Newport, Washington) | RI; recommended for CT, NH, ME, VT, HI, DC |
-| Open-portal scrape | Public recorder exposes recorded instruments without payment | DE (PaxHOA New Castle) |
+| Keyword Serper per county | Default for every state. Recorder `.gov` sites publish PDFs; HOA websites and management-co portals show up in Serper hits anchored on county/town names. | TN, KS, GA, NH (after fallback) |
+| Open-portal scrape | Public recorder exposes recorded instruments without payment for one or more counties | DE Sussex (PaxHOA Landmark) |
 | Aggregator harvest | Strong third-party directory exists with names + linked HOA websites | NC (Closing Carolina, CASNC) |
 
-**SoS-registry specifics:**
-- "Contains" searches need single-word patterns (`condominium`, `homeowners`, `owners`, `civic`, `townhouse`, `estates`, `village`, `commons`); multi-word may return zero hits even when the substring exists.
-- POST to `response.url` (not the GET URL) and preserve full hidden-field set including `__VIEWSTATEENCRYPTED` and `__LASTFOCUS` across pagination.
-- Post-filter with name-pattern regex to drop generic hits (`Civic Initiatives LLC`, `Townhouse Pizza`).
-- Filter mailing address to in-state; keep `--include-out-of-state` flag for management-co audit.
-- Stock `probe-batch` CLI ignores extra keys in the lead JSONL — including `pre_discovered_pdf_urls` — because `Lead(**d)` strips unknown fields. Discovery flows that hand probe a curated list of PDF URLs need a custom probe driver that calls `probe(lead, pre_discovered_pdf_urls=[...])` directly. Reference implementation: `state_scrapers/ri/scripts/probe_enriched_leads.py`.
-- SoS corporate-filing PDFs (e.g. `business.sos.<state>.gov/CORP_DRIVE/.../...pdf`) are first-class governing documents — score them positively, do not block.
+**SoS-business-registry-first discovery is not used.** Past attempts (NH QuickStart Akamai-walled; IN INBiz reCAPTCHA-walled with a $9,500 paywall; multiple registries that returned 0 HOA-shaped entities) burned operator time without producing usable universes. RI is the one historical exception — see its retrospective for context, but do not use it as a model for new state runs. Treat any open SoS document drive as one possible Serper hit source within the keyword-Serper flow, not as a universe-building strategy.
 
-**SoS-first enrichment query template.** For each lead derived from the SoS registry, run two per-entity Serper queries:
-
-    "<exact entity name>" {state-name} filetype:pdf
-    "<exact entity name>" "{state-name}" declaration OR bylaws OR covenants
-
-Score candidates on **specific** (non-generic) name-token overlap. Reject any candidate whose hit contains only the generic tokens (`condominium|association|{state-lower-words}` — e.g. for Vermont reject hits whose only overlap is `condominium / association / vermont`). SoS corporate-filing PDFs hosted on the state SoS document drive (e.g. `business.sos.<state>.gov/CORP_DRIVE/.../...pdf`) are first-class governing documents — accept articles of incorporation and bylaws-as-exhibits.
+**Probe driver note (for custom flows that carry pre-discovered PDFs).** Stock `probe-batch` CLI ignores extra keys in the lead JSONL — including `pre_discovered_pdf_urls` — because `Lead(**d)` strips unknown fields. Discovery flows that hand probe a curated list of PDF URLs (from an aggregator, an open portal, or a host-family direct-PDF sweep) need a custom probe driver that calls `probe(lead, pre_discovered_pdf_urls=[...])` directly. Reference implementation: `state_scrapers/ri/scripts/probe_enriched_leads.py`.
 
 **Bank path:**
 ```text
@@ -599,11 +574,11 @@ Write before the state is considered done.
 - `live_import_report.json` — bundle import results (one entry per claimed bundle)
 - `final_state_report.json` — the top-level report shown in Phase 9
 
-**Exemplars:** `state_scrapers/ri/RI_SCRAPE_RETROSPECTIVE.md` (Tier 1 SoS-first), `state_scrapers/ga/` (Tier 3 per-county Serper), `state_scrapers/tn/notes/retrospective.md` (Tier 2 per-county Serper).
+**Exemplars:** `state_scrapers/ks/notes/discovery-handoff.md` (canonical Tier 1 keyword-Serper), `state_scrapers/tn/notes/retrospective.md` (Tier 2 keyword-Serper), `state_scrapers/ga/notes/retrospective.md` (Tier 3 keyword-Serper). `state_scrapers/ri/notes/retrospective.md` documents the historical SoS-first run for context only.
 
 **Budget the post-import name cleanup as a named closing step**, not an afterthought. Expect ~14-16% of live HOAs to need it even with good discovery (GA's 1,800-bank run produced 16% dirty names). Run `state_scrapers/ga/scripts/clean_dirty_hoa_names.py --state {STATE} --apply` (or its hoisted equivalent) and target the `year_prefix`, `doc_fragment_anywhere`, and `stopword_prefix` buckets first as the highest-yield classes.
 
-**For SoS-blocked Tier 0/1 keyword-Serper runs, run cleanup with
+**For Tier 0/1 keyword-Serper runs, run cleanup with
 `--no-dirty-filter`.** The default `is_dirty()` regex misses ~60% of bad names
 in keyword-Serper-discovered states because the bank pipeline mechanically
 appends "HOA" to whatever title fragment it found. The unconditional pass
@@ -615,7 +590,7 @@ missed and only the unconditional LLM pass surfaced. Budget ~$0.50 OpenRouter
 for the unconditional pass on a Tier 0 state with ~150 live HOAs.
 
 ```bash
-# Unconditional cleanup (recommended for keyword-Serper / SoS-blocked states)
+# Unconditional cleanup (recommended for every keyword-Serper state)
 .venv/bin/python state_scrapers/ga/scripts/clean_dirty_hoa_names.py \
   --state {STATE} --no-dirty-filter --apply \
   --out state_scrapers/{state}/results/{run_id}/name_cleanup_unconditional.jsonl
@@ -659,9 +634,9 @@ guarantee idempotency on partial-batch failure — single-rename calls with
 
 Batch 3–5 in parallel autonomous LLM sessions. Each session writes under its own `state_scrapers/{state}/results/{run_id}/`.
 
-- SoS-first discovery typically suffices; county/town name overlap is the main risk.
+- Keyword-Serper per county. Concentrate budget on the 3-5 highest-density counties; rural / sparse-population counties are usually a waste of queries.
 - Census ZCTA centroid is the map fallback (zippopotam.us free at this scale).
-- Per-state OCR budget: $5–8. Stop conditions before completion are rare since the universe is small.
+- Per-state OCR budget: $10–15. Stop conditions before completion are rare since the universe is small.
 - 1-day end-to-end per batch.
 - Coordination: per-batch cost ceiling tracked via `/admin/costs`; sessions are independent.
 
@@ -671,10 +646,9 @@ Batch 3–5 in parallel autonomous LLM sessions. Each session writes under its o
 
 Solo autonomous run per state. 1–2 days.
 
-- SoS-first OR per-county keyword Serper based on whether SoS is open and HOA-shaped.
-- Aggregator harvest as supplement when present.
-- RI is the canonical Tier 1 SoS-first run. KS is the canonical Tier 1/2 keyword-Serper-per-county run.
-- Per-state OCR budget: $10–20.
+- Per-county keyword Serper. Aggregator harvest as supplement when one exists.
+- KS is the canonical Tier 1 keyword-Serper-per-county run; TN is the canonical Tier 2.
+- Per-state OCR budget: $20–30.
 
 ### Tier 2 — Medium (4,000–10,000)
 
@@ -687,7 +661,7 @@ Phased solo run per state:
 
 KS and TN are the canonical Tier 2 keyword-Serper-per-county references.
 
-Per-state OCR budget: $20–40.
+Per-state OCR budget: $40–75.
 
 ### Tier 3 — Large (10,000–25,000)
 
@@ -698,7 +672,7 @@ NOT unmonitored. Operator-supervised, county-batched. Multi-week per state.
 - GA and FL are the canonical Tier 3 reference runs.
 - NC has aggregators (Closing Carolina, CASNC, Seaside OBX, Triad, Wilson PM, Wake/Mecklenburg GIS) — start there.
 - TX: TX SOS-like open registry but huge volume.
-- Per-state OCR budget: $50–150; OpenRouter: $20–50.
+- Per-state OCR budget: $100–250; OpenRouter: $30–75.
 
 Do not attempt a Tier 3 state unmonitored.
 
@@ -785,14 +759,12 @@ Applied before every model call or bank write:
 
 ## State-Specific Guardrails (Lessons Learned)
 
-- **Choose discovery source before writing queries.** Broad keyword Serper drowns small or name-overlapping states (Bristol, Newport, Washington appear in many states). For states where county/town names are not nationally unique, anchor on SoS first.
+- **Always anchor queries on a county/town name.** Bare statewide Serper drowns in noise — Bristol, Newport, Washington, Springfield appear in many states. The per-county anchor is the precision gate; never run a Serper sweep without one.
 - **Public Nominatim is not a production dependency.** Rate-limits hard once tripped; treat polygons as a bonus and budget for ZIP centroid (zippopotam.us or Census ZCTA) as the primary fallback.
-- **SoS corporate-filing PDFs: let the classifier decide, don't pre-tag.** Articles of Incorporation, Restated Articles, Amendments-to-Articles are correctly tagged `articles`. Annual Reports (RI Form 631), change-of-agent filings are correctly rejected as `junk:government`. Force-tagging SoS filings as `articles` feeds Annual Reports into the wrong category.
 - **Postal village names are not municipalities.** Bake a village→municipality lookup into the state-local scraper. RI: `Chepachet → Glocester`, `Rumford → East Providence`, `Greenville → Smithfield`, `Wakefield → South Kingstown`.
-- **`probe-batch` drops unknown lead keys** including `pre_discovered_pdf_urls`. SoS-first flows that carry curated PDF URLs need `state_scrapers/ri/scripts/probe_enriched_leads.py`.
+- **`probe-batch` drops unknown lead keys** including `pre_discovered_pdf_urls`. Flows that carry curated PDF URLs (from aggregators, open portals, host-family direct-PDF sweeps) need `state_scrapers/ri/scripts/probe_enriched_leads.py`.
 - **Live `JWT_SECRET` drifts from local `settings.env`.** Read it at runtime via the Render API for all admin endpoint calls.
 - **`/admin/ingest-ready-gcs` caps at 50 per call.** Count imports by walking `results[]`, not top-level fields.
-- **SoS Annual Reports are not governing docs.** RI run: 66 SoS filings survived as `articles`; 231 Annual Reports correctly rejected as `junk:government`.
 - **`city_only` stays hidden from the map.** Stacked pins for an entire city are worse than no pin.
 - **Every automated decision needs a ledger entry.** Random sample review catches systematic false negatives before they reach the live site.
 - **Deployment of new `location_quality` values must precede importing records that use them.**
@@ -805,9 +777,7 @@ Applied before every model call or bank write:
 
 Findings that generalized across three retrospectives and should be treated as invariants for new state runs.
 
-1. **SoS-first vs. county-Serper is structural, not preference.** Use SoS-first when county/town names overlap with other states (any small Northeast state) or land records are walled. Use county-Serper when county recorders publish public PDFs (FL, TX, GA, CA). RI's first county-Serper attempt: 0 HOAs.
-
-2. **Bare statewide Serper produces noise.** The per-county anchor is the precision gate. Every state that tried bare statewide queries regretted it.
+1. **Bare statewide Serper produces noise.** The per-county anchor is the precision gate. Every state that tried bare statewide queries regretted it.
 
 3. **Productive source families must be promoted to deterministic scraping.** Once two sweeps confirm a host family (CDN paths, Squarespace `/s/` aliases, mgmt-co domains), stop Serpering and mine the URL pattern directly with exact-source dedup.
 
@@ -825,7 +795,7 @@ Findings that generalized across three retrospectives and should be treated as i
 
 10. **Live `JWT_SECRET` drifts from local `settings.env`.** Every runner that calls the live API must fetch the secret via the Render API at runtime (see Phase 8 for the canonical implementation). Treat this as a runner-class invariant, not a one-off workaround.
 
-11. **`is_dirty()` regex is necessary but not sufficient for keyword-Serper states.** WY's run had 28 dirty names by regex but ~46 additional bank-side misclassifications that only the unconditional LLM rename pass surfaced. For SoS-blocked Tier 0/1 states, run `clean_dirty_hoa_names.py --no-dirty-filter --apply` as a default closing step.
+11. **`is_dirty()` regex is necessary but not sufficient for keyword-Serper states.** WY's run had 28 dirty names by regex but ~46 additional bank-side misclassifications that only the unconditional LLM rename pass surfaced. For every keyword-Serper Tier 0/1 state, run `clean_dirty_hoa_names.py --no-dirty-filter --apply` as a default closing step.
 
 12. **Bucket-binds-bbox is a hard invariant, not a soft check.** A live HOA may carry a coordinate inside state X's bbox only if its bank manifest lives under `gs://hoaproxy-bank/v1/X/...`. Phase 6 enrichment, Phase 8 import, and Phase 9 verification must each enforce this — see Phase 6 "Bucket-binds-bbox invariant" callout.
 
@@ -845,8 +815,6 @@ Findings that generalized across three retrospectives and should be treated as i
 | ZIP extraction | `GET /admin/extract-doc-zips?state=XX` | Extract ZIPs from doc text before backfill. |
 | Zero-chunk check | `GET /admin/zero-chunk-docs` | Post-import verification. |
 | Keyword Serper discovery | `benchmark/scrape_state_serper_docpages.py` | Per-county query files + `site:` / `filetype:pdf`. |
-| SoS-registry discovery | `state_scrapers/ri/scripts/scrape_ri_sos.py` | RI pattern; adapt for any open SoS registry. |
-| Serper enrichment | `state_scrapers/ri/scripts/enrich_ri_leads_with_serper.py` | Exact-name PDF lookups after SoS extraction. |
 | Custom probe driver | `state_scrapers/ri/scripts/probe_enriched_leads.py` | Preserves `pre_discovered_pdf_urls`; required when lead JSONL carries curated PDF URLs. |
 | Mgmt-co harvesting | `state_scrapers/ri/scripts/find_mgmt_companies.py` | Discover management companies for a state. |
 | Mgmt-co bulk harvest | `state_scrapers/ri/scripts/harvest_mgmt_companies.py` | Batch harvest mgmt-co HOA lists. |
@@ -939,17 +907,17 @@ Additional field for provenance tracking:
 
 ## Appendix D — Per-State Launch Packet
 
-This table assigns every remaining jurisdiction a primary discovery recommendation based on Phase 2's decision matrix and existing per-state experience. **Default for not-started Tier 0/1 states is `keyword-Serper-per-county`** — SoS-first is reserved for jurisdictions with specific evidence the registry is open, HOA-shaped, and not WAF-walled. Always run the Phase 1 SoS preflight (10-min spike) before committing to any SoS-first path; pivot to keyword-Serper immediately on any abort signal (Akamai/Cloudflare WAF, reCAPTCHA, paywall, login wall, VIEWSTATE breaks, zero HOA-shaped hits). **Tentative** is implicit for any not-started row — only DE/FL/GA/KS/RI/TN have lived experience. Empirically as of May 2026, RI is the only confirmed SoS-first success in production; NH fell back to keyword-Serper after Akamai blocked its QuickStart endpoint.
+**Every state goes county-by-county.** The default discovery pattern is `keyword-Serper-per-county` everywhere; the per-state row tells you the productive county set, any aggregator/open-portal supplement that's worth a try, and noted gotchas. **Tentative** is implicit for any not-started row — only DE/FL/GA/KS/NH/RI/TN have lived experience. SoS-business-registry-first discovery has been retired (see Phase 2); it produced usable results only on RI and burned operator time on NH/IN.
 
 | State | CAI | Tier | Status | Primary discovery | Notes |
 |---|---|---|---|---|---|
-| AK | <1,000 | 0 | not-started | keyword-Serper | Sparse population; SoS Akamai/login risk untested |
+| AK | <1,000 | 0 | not-started | keyword-Serper | Sparse population; concentrate on Anchorage / Mat-Su / Fairbanks |
 | AL | >3,000 | 1 | not-started | keyword-Serper | Southern county-recorder pattern |
-| AR | <1,000 | 0 | not-started | keyword-Serper | County recorders publish; SoS may be thin |
+| AR | <1,000 | 0 | not-started | keyword-Serper | County recorders publish; concentrate on Pulaski (Little Rock), Benton/Washington (NW Arkansas), Faulkner, Saline |
 | AZ | 10,200 | 3 | not-started | keyword-Serper | Maricopa/Pima dominate |
 | CA | 51,250 | 4 | not-started | custom-plan | Own state-specific plan; multi-month, $500+ |
 | CO | 11,700 | 3 | not-started | keyword-Serper | Front Range concentrates HOAs |
-| CT | 5,150 | 2 | in-progress | SoS-first | Active session; do not modify |
+| CT | 5,150 | 2 | in-progress | keyword-Serper | Active session uses historical SoS-first approach; do not modify the in-flight session |
 | DC | <1,500 | 0 | not-started | open-portal | DC Recorder of Deeds is unified municipal |
 | DE | <1,500 | 0 | done | open-portal | Sussex Landmark open portal; Serper supplement |
 | FL | 50,100 | 4 | done | sunbiz-style | Sunbiz bulk + per-county Serper; canonical Tier 4 |
@@ -962,9 +930,9 @@ This table assigns every remaining jurisdiction a primary discovery recommendati
 | KS | <2,000 | 1 | done | keyword-Serper | Per-county Serper; canonical Tier 1 keyword run |
 | KY | 2,500 | 1 | not-started | keyword-Serper | Southern county-recorder pattern |
 | LA | 2,200 | 1 | not-started | keyword-Serper | Parish-based (not counties); adapt slugs |
-| MA | 11,600 | 3 | not-started | keyword-Serper | NE pattern; SoS-first risky (NH precedent); aggregator alternative |
+| MA | 11,600 | 3 | not-started | keyword-Serper | Greater Boston / Worcester / Springfield concentrate HOAs; aggregator supplement worth trying |
 | MD | 7,200 | 2 | not-started | keyword-Serper | DC metro concentrates HOAs |
-| ME | <2,000 | 1 | not-started | keyword-Serper | NE small-state pattern; SoS spike if registry is open |
+| ME | <2,000 | 1 | not-started | keyword-Serper | Concentrate on Cumberland (Greater Portland), York (Kennebunk/Old Orchard), Hancock (Bar Harbor), Kennebec (Augusta), Penobscot (Bangor) |
 | MI | 8,700 | 2 | not-started | keyword-Serper | Large metros |
 | MN | 8,000 | 2 | not-started | keyword-Serper | County recorders |
 | MO | 5,750 | 2 | not-started | keyword-Serper | County recorders |
@@ -972,7 +940,7 @@ This table assigns every remaining jurisdiction a primary discovery recommendati
 | MT | >2,000 | 1 | not-started | keyword-Serper | Sparse population; county-recorder pattern |
 | NC | 15,050 | 3 | not-started | aggregator | Closing Carolina + CASNC primary |
 | ND | <750 | 0 | not-started | keyword-Serper | Small universe; county-recorder pattern |
-| NE | <1,200 | 0 | not-started | keyword-Serper | Small-state pattern; SoS spike optional |
+| NE | <1,200 | 0 | not-started | keyword-Serper | Concentrate on Douglas (Omaha), Lancaster (Lincoln), Sarpy |
 | NH | <2,500 | 1 | done | keyword-Serper | SoS QuickStart Akamai-walled; keyword-Serper fallback used |
 | NJ | 7,200 | 2 | not-started | keyword-Serper | Aggregator candidates exist (NJ HOA dirs) |
 | NM | <1,500 | 0 | not-started | keyword-Serper | NM HOA Act registration also possible |
@@ -982,32 +950,34 @@ This table assigns every remaining jurisdiction a primary discovery recommendati
 | OK | <2,000 | 1 | not-started | keyword-Serper | Southern county-recorder pattern |
 | OR | 4,150 | 2 | not-started | keyword-Serper | County recorders |
 | PA | 7,150 | 2 | not-started | keyword-Serper | County recorders + condo |
-| RI | <1,250 | 0 | done | SoS-first | SoS-first canonical Tier 0/1 |
+| RI | <1,250 | 0 | done | keyword-Serper | Done historically via SoS-first; current strategy for new RI work would be keyword-Serper |
 | SC | 7,500 | 2 | partial | keyword-Serper | Only benchmarks done |
 | SD | <600 | 0 | not-started | keyword-Serper | Tiny universe; county-recorder pattern |
 | TN | 5,400 | 2 | done | keyword-Serper | Per-county Serper; canonical Tier 2 keyword run |
-| TX | 22,900 | 3 | not-started | sunbiz-style | TX SoS bulk + per-county Serper (FL pattern) |
+| TX | 22,900 | 3 | not-started | keyword-Serper | Per-county recorder pattern; very large universe, operator-supervised; aggregator supplement worth trying |
 | UT | 3,700 | 1 | not-started | keyword-Serper | County recorders + LDS-region notes |
 | VA | 9,200 | 2 | not-started | keyword-Serper | Has legal corpus already loaded |
-| VT | <1,500 | 0 | not-started | keyword-Serper | NE small-state; SoS spike before committing |
+| VT | <1,500 | 0 | not-started | keyword-Serper | Concentrate on Chittenden (Burlington), Rutland, Washington (Stowe/Montpelier), Bennington |
 | WA | 10,900 | 3 | not-started | keyword-Serper | County recorders |
 | WI | 5,650 | 2 | not-started | keyword-Serper | County recorders |
-| WV | <1,000 | 0 | not-started | keyword-Serper | County recorders; SoS adequacy unverified |
+| WV | <1,000 | 0 | not-started | keyword-Serper | Concentrate on Kanawha (Charleston), Berkeley (Martinsburg), Monongalia (Morgantown), Cabell (Huntington) |
 | WY | <750 | 0 | not-started | keyword-Serper | Sparse population; HOAs concentrated in Teton/Laramie |
 
 ### Per-Tier Cost Defaults
 
 ```
-Tier 0:  --max-docai-cost-usd  5    expected wall time 4-12 h
-Tier 1:  --max-docai-cost-usd 10    expected wall time 1-2 days
-Tier 2:  --max-docai-cost-usd 30    expected wall time 3-5 days, phased
-Tier 3:  --max-docai-cost-usd 75    operator-supervised; multi-week
+Tier 0:  --max-docai-cost-usd  10   expected wall time 4-12 h
+Tier 1:  --max-docai-cost-usd  25   expected wall time 1-2 days
+Tier 2:  --max-docai-cost-usd  60   expected wall time 3-5 days, phased
+Tier 3:  --max-docai-cost-usd 150   operator-supervised; multi-week
 Tier 4:  custom-plan; expect $500+
 ```
 
+These are working ceilings, not targets. A run that organically completes under cap is normal; one that approaches the ceiling should produce a partial retrospective and stop rather than push through.
+
 ### Parallel-Batch Budget Arithmetic
 
-Running 4 Tier-0 sessions in parallel at $5 each = $20 total DocAI. The GCP `hoaware` project monthly cap is $600 (auto-shutoff via stop-billing Cloud Function); 4 × $5 × 30 days = $600 ceiling — plan accordingly. The Render-side `/upload` daily cap (`DAILY_DOCAI_BUDGET_USD=20`) only affects pages OCR'd through `/upload`; this pipeline OCRs in `prepare_bank_for_ingest.py` against GCP directly.
+Running 4 Tier-0 sessions in parallel at $10 each = $40 total DocAI per batch. The GCP `hoaware` project monthly cap is $600 (auto-shutoff via stop-billing Cloud Function); pace batches accordingly — roughly 15 batches × $40 = $600/month, or fewer batches at higher Tier 1/2 budgets. A single 10-state sequential overnight queue at Tier 0/1 mix typically lands at $80–150 DocAI total. The Render-side `/upload` daily cap (`DAILY_DOCAI_BUDGET_USD=20`) only affects pages OCR'd through `/upload`; this pipeline OCRs in `prepare_bank_for_ingest.py` against GCP directly.
 
 ### Per-State Launch Checklist
 

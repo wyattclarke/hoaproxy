@@ -25,9 +25,9 @@ below before pasting the **Prompt Body** block into a fresh session.
 | `{state-lower}` | 2-letter USPS code, lowercase | `vt` |
 | `{TIER}` | Tier number 0–4 (Appendix D) | `0` |
 | `{CAI_BOUND}` | CAI estimate string from Appendix D | `<1,250` |
-| `{MAX_DOCAI_USD}` | Per-tier DocAI cap (see table below) | `5` |
-| `{DISCOVERY_PRIMARY}` | Primary discovery source from Appendix D, with brief amplification | `SoS-first (Vermont Secretary of State business registry)` |
-| `{DISCOVERY_FALLBACK_NOTE}` | Brief fallback note | `with the keyword-Serper pattern as fallback if SoS proves inadequate` |
+| `{MAX_DOCAI_USD}` | Per-tier DocAI cap (see table below) | `10` |
+| `{DISCOVERY_PRIMARY}` | Primary discovery source from Appendix D, with brief amplification | `keyword-Serper-per-county` |
+| `{DISCOVERY_FALLBACK_NOTE}` | Brief fallback note | `with aggregator/open-portal supplement only when Appendix D documents one for this state` |
 | `{PARALLEL_STATES}` | Comma-separated list of other parallel runs, or `[none]` | `NH, ME, WY` |
 | `{COUNTY_GUIDANCE}` | One paragraph: county list + density hints (Appendix D notes) | `Vermont's 14 counties (Addison, Bennington, ...). Highest HOA density: Chittenden (Burlington), Rutland, Washington (Montpelier/Stowe), Bennington, Lamoille (resort condos).` |
 | `{NAME_PATTERN_NOTES}` | State-specific HOA name patterns, or empty string | `` (empty) or `Many WY HOAs are organized as "ranch" or "club" associations rather than condominium associations; do not exclude those name patterns.` |
@@ -38,11 +38,13 @@ below before pasting the **Prompt Body** block into a fresh session.
 
 | Tier | CAI band | `--max-docai-cost-usd` | Wall time |
 |---|---|---|---|
-| 0 | < 1,500 | 5 | 4–12 h |
-| 1 | 1,500 – 4,000 | 10 | 1–2 days |
-| 2 | 4,000 – 10,000 | 30 | 3–5 days, phased |
-| 3 | 10,000 – 25,000 | 75 | multi-week, operator-supervised |
+| 0 | < 1,500 | 10 | 4–12 h |
+| 1 | 1,500 – 4,000 | 25 | 1–2 days |
+| 2 | 4,000 – 10,000 | 60 | 3–5 days, phased |
+| 3 | 10,000 – 25,000 | 150 | multi-week, operator-supervised |
 | 4 | > 25,000 | custom | own state-specific plan |
+
+These are working ceilings, not targets. A run that organically completes under cap is normal; one approaching the ceiling should produce a partial retrospective and stop rather than push through.
 
 ## Run-id format
 
@@ -57,7 +59,7 @@ attribution and cross-batch performance comparison.
 `---PROMPT START---`
 
 ```
-You are in /Users/ngoshaliclarke/Documents/GitHub/hoaproxy. Read CLAUDE.md (or AGENTS.md for Codex), then docs/multi-state-ingestion-playbook.md, docs/agent-ingestion.md, and at least one prior handoff. state_scrapers/ks/notes/discovery-handoff.md is the most detailed; state_scrapers/ri/notes/retrospective.md is a strong reference for SoS-first methodology. Do not let any single state's specific choices constrain you.
+You are in /Users/ngoshaliclarke/Documents/GitHub/hoaproxy. Read CLAUDE.md (or AGENTS.md for Codex), then docs/multi-state-ingestion-playbook.md, docs/agent-ingestion.md, and at least one prior handoff. state_scrapers/ks/notes/discovery-handoff.md is the most detailed Tier 1 keyword-Serper exemplar; state_scrapers/tn/notes/retrospective.md and state_scrapers/ga/notes/retrospective.md cover Tier 2/3. Do not let any single state's specific choices constrain you.
 
 Other state runs ({PARALLEL_STATES}) are active in parallel right now. Coexist gracefully on rate limits. Do not edit shared files actively touched by another run unless you have a specific reason. git pull --rebase before every git push so concurrent sessions don't collide.
 
@@ -98,7 +100,7 @@ Delegate to cheaper subagents (Explorer / Runner / Curator / Verifier roles as d
 
 4. Universe pass: scrape the primary source for HOA-shaped name patterns (condominium, homeowners, owners, civic, townhouse, estates, village, condominium trust, property owners). {NAME_PATTERN_NOTES} Apply post-filter to drop generic single-keyword hits. Filter by mailing-address state == {STATE} (keep an --include-out-of-state flag for management-co audit, but live HOAs must be in-state).
 
-5. Per-entity enrichment: for each lead, run "<exact entity name>" {state-name} filetype:pdf and "<exact entity name>" {state-name} declaration OR bylaws OR covenants. Score on specific (non-generic) name-token overlap. Reject hits whose only overlap is generic ({GENERIC_REJECT_TOKENS}). SoS corporate-filing PDFs hosted on the {state-name} SoS document drive are first-class governing documents — accept articles of incorporation and bylaws-as-exhibits.
+5. Per-county Serper sweeps: for each county in {COUNTY_GUIDANCE}, run targeted queries combining county/town anchors with HOA-shape tokens (e.g. `"<County> County, {state-name}" "Declaration of Covenants" filetype:pdf`, plus the host-family patterns from Appendix E of the playbook). Score candidates on specific (non-generic) name-token overlap. Reject hits whose only overlap is generic ({GENERIC_REJECT_TOKENS}). Promote any host family to deterministic-mode scraping after two productive sweeps — see Phase 2 source-family promotion rule.
 
    {STATE_SPECIFIC_NOTES}
 
@@ -121,7 +123,7 @@ Begin now.
 
 ---
 
-## Worked example: VT (Tier 0, SoS-first)
+## Worked example: VT (Tier 0, keyword-Serper)
 
 Substitution table:
 
@@ -132,9 +134,9 @@ Substitution table:
 | `{state-lower}` | `vt` |
 | `{TIER}` | `0` |
 | `{CAI_BOUND}` | `<1,250` |
-| `{MAX_DOCAI_USD}` | `5` |
-| `{DISCOVERY_PRIMARY}` | `SoS-first (Vermont Secretary of State business registry)` |
-| `{DISCOVERY_FALLBACK_NOTE}` | `with the keyword-Serper pattern as fallback if SoS proves inadequate` |
+| `{MAX_DOCAI_USD}` | `10` |
+| `{DISCOVERY_PRIMARY}` | `keyword-Serper-per-county` |
+| `{DISCOVERY_FALLBACK_NOTE}` | `with aggregator/open-portal supplement only when Appendix D documents one for this state` |
 | `{PARALLEL_STATES}` | `NH, ME, WY` |
 | `{COUNTY_GUIDANCE}` | `Vermont's 14 counties (Addison, Bennington, Caledonia, Chittenden, Essex, Franklin, Grand Isle, Lamoille, Orange, Orleans, Rutland, Washington, Windham, Windsor). Highest HOA density: Chittenden (Burlington), Rutland, Washington (Montpelier/Stowe), Bennington, Lamoille (resort condos).` |
 | `{NAME_PATTERN_NOTES}` | (empty) |
@@ -153,6 +155,7 @@ Substitution table:
 - `docs/multi-state-ingestion-playbook.md` — canonical playbook (Phase 0 through Phase 10)
 - `docs/multi-state-ingestion-playbook.md` Appendix D — per-state launch packet (CAI counts, tiers, recommended discovery sources)
 - `state_scrapers/_template/README.md` — runner template usage
-- `state_scrapers/ri/notes/retrospective.md` — Tier 1 SoS-first retrospective exemplar
+- `state_scrapers/ks/notes/discovery-handoff.md` — most detailed Tier 1 keyword-Serper exemplar
+- `state_scrapers/ri/notes/retrospective.md` — Tier 0 retrospective for context (historical SoS-first run; not the recommended pattern)
 - `state_scrapers/ga/notes/retrospective.md` — Tier 3 keyword-Serper retrospective exemplar
 - `state_scrapers/tn/notes/retrospective.md` — Tier 2 keyword-Serper retrospective exemplar
