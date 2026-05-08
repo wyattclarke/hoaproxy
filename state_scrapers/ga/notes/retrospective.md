@@ -208,6 +208,65 @@ Across all four cleanup rounds combined: **145 in-place renames + 79
 merges + 0 errors** — i.e. roughly 13% of live GA HOAs at landing
 needed either a rename or a merge.
 
+## Round 4: misrouted-state correction (out-of-bbox map pins)
+
+After the rename + dedup passes, a sample HOA on the GA map
+(`Westbank Townhomes Owners Association`) had a Manhattan-KS pin even
+though `state` was set to `GA`. Audit of every live GA HOA whose
+lat/lng falls outside the GA bounding box found **87 misrouted
+records**. The root cause:
+
+- During bank discovery, some PDFs got banked under
+  `gs://hoaproxy-bank/v1/GA/<county>/<slug>/` even though they're
+  about HOAs in other states (the Westbank Townhomes manifest was
+  filed both under `v1/GA/bulloch/` and the correct `v1/KS/riley/`).
+- The GA prepare/import pipeline took the GA-prefixed manifest at
+  face value and called `db.upsert_hoa_location(..., state="GA", ...)`
+  which uses `COALESCE(?, state)` — overwriting any existing non-GA
+  state on a name collision, and stamping new rows as GA when they
+  shouldn't be.
+- Pre-existing non-GA lat/lng often survived the upsert (the GA
+  prepared bundle had no polygon to overwrite with), giving the
+  classic "state=GA but the pin is in Kansas/Texas/Oregon" symptom.
+
+`state_scrapers/ga/scripts/correct_misrouted_state.py` repaired this
+per-HOA, not by blanket demotion. For each suspect it pulled the OCR
+text of the first 1-2 docs, counted full-state-name mentions and ZIP
+prefixes, and chose one of four patterns:
+
+| pattern | OCR truth | lat/lng | action |
+|---|---|---|---|
+| `state_only_fix` (29) | non-GA | inside that state's bbox | set `state` to truth, leave coords |
+| `state_fix_and_demote` (11) | non-GA | not inside that state's bbox | set `state` to truth, demote `location_quality` to `city_only` |
+| `ga_demote` (24) | GA | wrong | keep `state=GA`, demote |
+| `ambiguous_demote` (22) | no clear signal | — | use the lat/lng's bbox to pick the state |
+
+A follow-up pass cleared `boundary_geojson` and lat/lng for the 23
+remaining cases where `state` is now `GA` but the geometry was set by
+a wrong-Nominatim hit during prepare (the `/admin/backfill-locations`
+endpoint accepts `clear_coordinates: true` and
+`clear_boundary_geojson: true` which is why the demote-by-quality
+alone wasn't enough — the map_points endpoint includes any HOA with
+a non-NULL `boundary_geojson` regardless of quality flag).
+
+After all four rounds:
+- **Live GA HOAs:** 1,005 (was 1,153 at landing — combined effect of
+  rename/dedup merges and the misroute relocations)
+- **Map points:** 563 (56.0% of GA), **0 outside the GA bbox**
+- 41 HOAs successfully relocated to their actual state via this fix
+  (TX +18, KS +14, NC +7, etc.) — those records now appear under the
+  correct state's `/hoas/summary` and `/hoas/map-points` filters.
+
+Lesson for future state runners: the `db.upsert_hoa_location` call in
+the import path uses `COALESCE` semantics for `state`, so any
+mistakenly-cross-state-banked manifest will silently overwrite real
+state metadata on collision. Either:
+- Tighten cross-state re-routing during discovery so this can't happen
+  (clean leaks at the bank level, not the live level), or
+- Add a state-mismatch guard at import time that refuses to overwrite
+  a pre-existing state with the bundle's claimed state when the two
+  disagree.
+
 ## OCR efficiency
 
 DocAI is the dominant cost (60% of GA spend), so the right thing to
@@ -270,10 +329,12 @@ How to do better next time:
 ```
 2,688  PDFs banked
 2,074  PDFs accepted by prepare/OCR (73.8%)
-2,054  PDFs live (after dedupe on import + later HOA merges)
-1,072  HOAs live (after rename + dedup cleanup)
-  653  HOAs on the map (60.9%)
-57,482 chunks indexed
+1,892  PDFs live under state=GA (after dedupe on import + HOA merges
+                                 + 162 PDFs relocated to other states
+                                 with their owner HOAs)
+1,005  HOAs live under state=GA (after rename + dedup + misroute fix)
+  563  HOAs on the GA map (56.0%, 0 outside GA bbox)
+53,290 chunks indexed under state=GA
 ```
 
 Final report: `state_scrapers/ga/results/final_state_report.json`.
