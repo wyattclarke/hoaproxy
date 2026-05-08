@@ -89,6 +89,10 @@ COUNTY_RUNS: list[tuple[str, str | None]] = [
     ("ak_matanuska_susitna_serper_queries.txt", "Matanuska-Susitna"),
     ("ak_fairbanks_north_star_serper_queries.txt", "Fairbanks North Star"),
     ("ak_kenai_peninsula_serper_queries.txt", "Kenai Peninsula"),
+    ("ak_juneau_serper_queries.txt", "Juneau"),
+    ("ak_kodiak_island_serper_queries.txt", "Kodiak Island"),
+    ("ak_sitka_serper_queries.txt", "Sitka"),
+    ("ak_ketchikan_gateway_serper_queries.txt", "Ketchikan Gateway"),
 ]
 
 
