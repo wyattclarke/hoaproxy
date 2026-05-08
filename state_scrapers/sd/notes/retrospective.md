@@ -170,6 +170,36 @@ These all confirm the playbook callout that `is_dirty()` is **necessary but
 not sufficient** for keyword-Serper states; the unconditional Phase 10 LLM
 pass is the only reliable arbiter.
 
+## Server Bug Fixed Mid-Run: Doc-File Endpoint After Rename
+
+**Symptom:** After the unconditional name-cleanup pass renamed 6 of SD's 19
+live HOAs, every doc-open request for those 6 returned HTTP 400 "Document
+does not belong to requested HOA."
+
+**Root cause:** `/admin/rename-hoa` only updates `hoas.name`. It does not
+update `documents.relative_path` (still has the old HOA name as its first
+segment) and does not move the on-disk PDF directory under
+`hoa_docs/{old_name}/`. The file-serve endpoint
+(`GET /hoas/{name}/documents/file`) validated ownership with a string-prefix
+check `rel_doc.startswith(f"{resolved_hoa}/")` — which falsely failed because
+`resolved_hoa` was the new name and `rel_doc` still had the old prefix.
+
+**Fix (commit `b935807`):** Replaced the prefix string check with a
+documents-table ownership lookup:
+
+```sql
+SELECT 1 FROM documents d JOIN hoas h ON d.hoa_id = h.id
+WHERE h.name = ? AND d.relative_path = ?
+```
+
+Same fix applied to the searchable-HTML endpoint. No DB schema changes; no
+on-disk dir rename needed. Deployed via `rebuild` skill at 03:35 UTC.
+
+**Cross-state implication:** WY's run produced 7 renames + 1 merge that
+will have been similarly broken since then. Post-deploy verification of
+WY doc-opens recommended; if any are broken, they're now fixed by the same
+endpoint patch.
+
 ## Lessons For The Playbook
 
 1. The 4-county selection (Minnehaha, Pennington, Lincoln, Brown) was right;
