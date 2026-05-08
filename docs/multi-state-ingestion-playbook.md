@@ -65,15 +65,15 @@ Source: `docs/cai_state_hoa_counts.txt`. Status as of 2026-05-07.
 | NH | <2,500 | 1 | done | Keyword-Serper after SoS-first failed (Akamai-walled QuickStart) |
 | NV | 3,800 | 1 | not-started | — |
 | UT | 3,700 | 1 | not-started | — |
-| HI | 1,600 | 1 | not-started | SoS-first recommended |
+| HI | 1,600 | 1 | not-started | Condo-registry (HI Bureau of Conveyances); condo-heavy |
 | AL | >3,000 | 1 | not-started | — |
 | ID | <3,000 | 1 | not-started | — |
 | IA | <3,000 | 1 | not-started | — |
 | RI | <1,250 | 1 | done | SoS-first canonical Tier 1 |
 | NE | <1,200 | 0 | not-started | — |
 | DE | <1,500 | 0 | done | Open-portal (PaxHOA) + Serper supplement |
-| DC | <1,500 | 0 | not-started | SoS-first recommended |
-| VT | <1,500 | 0 | not-started | SoS-first recommended |
+| DC | <1,500 | 0 | not-started | Open-portal (DC Recorder of Deeds; unified municipal) |
+| VT | <1,500 | 0 | not-started | Keyword-Serper recommended; SoS-first risky (NH precedent) |
 | NM | <1,500 | 0 | not-started | — |
 | AK | <1,000 | 0 | not-started | — |
 | AR | <1,000 | 0 | not-started | — |
@@ -139,6 +139,19 @@ Expected output:
 }
 ```
 
+**SoS preflight (10-min spike).** When the candidate strategy is SoS-first or SoS-supplement, validate the registry is usable BEFORE committing budget. Abort SoS-first immediately on any of these signals:
+
+- **Akamai / Cloudflare WAF challenge** — response body contains `Reference #`, edge-server IDs, `cf-mitigated`, or a JS challenge page. NH's SoS QuickStart is Akamai-walled; Python clients are blocked regardless of headers.
+- **reCAPTCHA on search submit** — IN's INBiz is gated this way; bypass costs $9,500/year.
+- **Paywall / subscription required** — body contains `subscription`, `purchase`, `pricing`, or returns 402.
+- **Login wall** — search submit redirects to a login page or returns 401/403 unauthenticated.
+- **ASP.NET VIEWSTATE pagination breaks** after 1-2 pages with `__VIEWSTATEENCRYPTED` mismatch errors. Often recoverable, but if 3+ retries fail, abort.
+- **Zero HOA-shaped hits** — searches for `condominium`, `homeowners`, `owners association` return 0 active entities. The registry exists but isn't HOA-rich; pivot to keyword-Serper.
+
+If any abort signal trips, fall back immediately to `keyword-Serper-per-county` for that state. Do not retry SoS-first. Document the failure mode in `state_scrapers/{state}/notes/discovery-handoff.md` so the next operator skips the SoS spike.
+
+Empirically as of May 2026: RI is the only confirmed SoS-first success in production. NH fell back to keyword-Serper after Akamai blocked the QuickStart endpoint. Treat SoS-first as opportunistic, not load-bearing.
+
 ### Phase 2 — Discovery And Raw Banking
 
 Bank everything plausible. False positives are cheaper than false negatives here.
@@ -161,8 +174,15 @@ Bank everything plausible. False positives are cheaper than false negatives here
 - POST to `response.url` (not the GET URL) and preserve full hidden-field set including `__VIEWSTATEENCRYPTED` and `__LASTFOCUS` across pagination.
 - Post-filter with name-pattern regex to drop generic hits (`Civic Initiatives LLC`, `Townhouse Pizza`).
 - Filter mailing address to in-state; keep `--include-out-of-state` flag for management-co audit.
-- Stock `probe-batch` CLI ignores extra keys including `pre_discovered_pdf_urls`. Use `state_scrapers/ri/scripts/probe_enriched_leads.py` when handing curated PDF URLs.
+- Stock `probe-batch` CLI ignores extra keys in the lead JSONL — including `pre_discovered_pdf_urls` — because `Lead(**d)` strips unknown fields. Discovery flows that hand probe a curated list of PDF URLs need a custom probe driver that calls `probe(lead, pre_discovered_pdf_urls=[...])` directly. Reference implementation: `state_scrapers/ri/scripts/probe_enriched_leads.py`.
 - SoS corporate-filing PDFs (e.g. `business.sos.<state>.gov/CORP_DRIVE/.../...pdf`) are first-class governing documents — score them positively, do not block.
+
+**SoS-first enrichment query template.** For each lead derived from the SoS registry, run two per-entity Serper queries:
+
+    "<exact entity name>" {state-name} filetype:pdf
+    "<exact entity name>" "{state-name}" declaration OR bylaws OR covenants
+
+Score candidates on **specific** (non-generic) name-token overlap. Reject any candidate whose hit contains only the generic tokens (`condominium|association|{state-lower-words}` — e.g. for Vermont reject hits whose only overlap is `condominium / association / vermont`). SoS corporate-filing PDFs hosted on the state SoS document drive (e.g. `business.sos.<state>.gov/CORP_DRIVE/.../...pdf`) are first-class governing documents — accept articles of incorporation and bylaws-as-exhibits.
 
 **Bank path:**
 ```text
@@ -211,6 +231,39 @@ Dirty-name patterns currently in production cleanup (`clean_dirty_hoa_names.py::
 - `county_prefix` — starts with `\w+ County of `
 - `starts_lowercase`, `longdigit_prefix`
 
+**`is_dirty()` is necessary but not sufficient.** WY's keyword-Serper run
+(May 2026) produced 133 live HOAs of which only 28 (21%) tripped any
+`is_dirty()` rule, yet the live list contained another ~50 names that were
+clearly not HOAs (gov titles like "Annexation Agreement HOA", "Wyoming Data
+Center Facts HOA", realty broker names like "CENTURY 21 BHJ Realty, Inc HOA",
+fragment titles like "Conditions" and "Restrictive HOA"). The bank-stage
+pipeline mechanically appends "HOA" / "Homeowners Association" to whatever
+title fragment it found, so the regex set cannot anchor on the suffix alone.
+
+Failure modes the regex misses, and what to add:
+
+- **Government / civic titles** survive when they don't start with a stopword:
+  "Annexation Agreement HOA", "Subdivision Regs", "Joint Information Meeting
+  HOA", "TOWN OF ALPINE ORDINANCE NO. 2026-010 AN HOA". Add a `gov_title_anywhere`
+  pattern that hits `\b(ordinance|annexation|zoning|subdivision\s+reg|joint\s+information|public\s+hearing|planning\s+commission|board\s+of\s+county)\b`.
+- **Realty / management-co names** survive: "CENTURY 21 BHJ Realty, Inc HOA",
+  "flexmls Web HOA", "Mountain Property Management Jackson Hole Homeowners
+  Association". Add a `realty_broker_anywhere` pattern that hits `\b(century\s*21|coldwell|sothebys|re/?max|berkshire\s+hathaway|flexmls|property\s+management|mls|realty)\b`.
+- **All-caps fragments** survive: "OF TRUST HOA", "CHAPTER 7 HOA",
+  "CHAPTER XII HOA", "ZFE O HOA", "Cc Rsorg". Tighten `shouting_prefix` to
+  trigger on `len > 12` instead of `len > 40`, and add an `acronym_only`
+  rule for names that are <30 chars and >50% uppercase letters.
+- **Single-word generic fragments** survive: "Conditions", "Restrictive",
+  "Archive", "Clusters", "Protective", "Spring Creek", "Alpine". For names
+  with no HOA/POA suffix and no city/county anchor, treat as dirty unless
+  the bank manifest carries strong corroborating metadata (street address,
+  recorded subdivision label, plat ID).
+
+The complete fix is to run the **Phase 7 / 10 LLM rename pass unconditionally**
+for keyword-Serper-discovered states (see Phase 10 below). Patching the regex
+helps, but the LLM is the only reliable arbiter when the source HTML/snippet
+is genuinely ambiguous.
+
 **Per-branch pivot order:**
 1. County sweeps dry → host-family expansion.
 2. Source family stops → legal-phrase searches over recorded documents (`Register of Deeds`, `{state} not-for-profit corporation`, `Articles of Incorporation`, `Amendment to Declaration`, `Restated Bylaws`, `Supplemental Declaration`).
@@ -242,13 +295,16 @@ Apply only hard safety/cost rejects before page-one OCR:
 - PII-risk: directories, ballots, violation notices, owner rosters, filled forms.
 - Unsupported file type.
 - Wrong-state evidence.
-- Page count over the configured OCR cap.
+- Page count over `MAX_PAGES_FOR_OCR_SCANNED` (25) when the agent hint is
+  `text_extractable=False` → reject as `page_cap_scanned:{N}` before DocAI.
+- Page count over the absolute `MAX_PAGES_FOR_OCR` hard guard (200) regardless
+  of text-extractability → reject as `page_cap:{N}`.
 
 Everything else gets page-one review before exclusion. Do not reject solely from title, filename, or link text. Title-only filtering caused false negatives in KS.
 
 **`--include-low-value` default policy:** `minutes`, `financial`, and `insurance` documents are included by default when page-one/full text shows they belong to the HOA. Pass `--include-low-value` explicitly to enable; omit to restrict to the primary governing categories.
 
-**`documents.hidden_reason` semantics** (from `docs/agent-ingestion.md`): documents hidden from the live site carry an explicit reason string (`pii:*`, `junk:*`, `unsupported_category:*`, `page_cap:*`, `docai_budget`, `duplicate`). Every rejection must write this field in the ledger.
+**`documents.hidden_reason` semantics** (from `docs/agent-ingestion.md`): documents hidden from the live site carry an explicit reason string (`pii:*`, `junk:*`, `unsupported_category:*`, `page_cap:*`, `page_cap_scanned:*`, `docai_budget`, `duplicate`). Every rejection must write this field in the ledger.
 
 Accepted live categories: `ccr`, `bylaws`, `articles`, `rules`, `amendment`, `resolution`, `plat`, `minutes`, `financial`, `insurance`.
 
@@ -270,7 +326,14 @@ Run OCR locally or in a GCP worker. Never on Render for bulk ingestion.
 
 **Operational parameters:**
 - `HOA_DOCAI_CHUNK_PAGES` default: 10 pages per DocAI request.
-- `MAX_PAGES_FOR_OCR` hard guard: 200 pages; reject over-cap PDFs before OCR.
+- **`MAX_PAGES_FOR_OCR_SCANNED` cap: 25 pages.** Applies to fully-scanned PDFs
+  (`text_extractable=False` agent hint, or all-blank PyPDF). A scanned >25-page
+  PDF is almost always a misclassified bulk archive (county records dump,
+  multi-HOA filings packet) rather than a single governing doc — reject as
+  `page_cap_scanned:{N}` before any DocAI call. Text-extractable PDFs are
+  uncapped at this layer (PyPDF cost is zero).
+- `MAX_PAGES_FOR_OCR` absolute hard guard: 200 pages. Backstops the scanned cap
+  for any code path that bypasses the text-extractable check; never raise this.
 - `extracted_texts` sidecar cap: 10 MB; truncate at page boundary if exceeded.
 - Ingest semaphore: `Semaphore(1)` — serializes `/upload` calls; faster triggers Render OOM.
 
@@ -308,9 +371,30 @@ Run after Phase 5, before prepared bundles. OCR text from declarations, plats, r
 
 **Public Nominatim warning:** rate-limits hard above ~100 sequential requests; `Retry-After: 0` persists 15+ minutes even at 1.2s+ inter-request delay. Budget for ZIP centroid as the primary production fallback; treat Nominatim polygons as a bonus. RI achieved 99.5% map coverage with `zip_centroid` alone. When `geo_enrichment_error` rows mention `nominatim.openstreetmap.org` 429s, run post-import backfill via `POST /admin/backfill-locations` rather than retrying.
 
-**Location quality enum:** `polygon` (credible boundary) | `address` (street-level) | `zip_centroid` (repeated ZIP evidence) | `city_only` (profile only, hidden from map) | `unknown`. Map shows only first three.
+**Location quality enum:** `polygon` (credible boundary) | `address` (street-level) | `place_centroid` (subdivision/neighborhood/place result without street address) | `zip_centroid` (repeated ZIP evidence) | `city_only` (profile only, hidden from map) | `unknown`. Map shows the first four; `city_only` and `unknown` are hidden.
 
 **Guardrails:** reject candidates outside state bounding box; reject management-company offices unless HOA is the named place; reject senior living, apartment, law firm, city office, and unrelated business categories; require strong normalized name overlap; cache all geocoder/search responses.
+
+**Bucket-binds-bbox invariant.** A live HOA may only carry a map coordinate
+(`polygon`, `address`, or `zip_centroid` quality) inside state X's bounding
+box if its bank manifest lives under `gs://hoaproxy-bank/v1/X/...`. The bank
+prefix is the state's authoritative claim on that HOA; a coordinate inside
+the bbox without a matching bucket prefix is cross-state contamination (the
+classic case: a same-name HOA from a prior state import retaining the old
+state's centroid). Enforcement points:
+
+1. **Phase 6 enrichment** must read the bank-state from the manifest URI
+   (`v1/{STATE}/...`) and reject any geocoder candidate whose centroid lies
+   outside that state's bbox — even if the candidate scores well on name match.
+2. **Phase 8 import** writes location only when the bundle's `state` field
+   matches the bbox the centroid falls in. The drain worker uses
+   `db.upsert_hoa_location(..., clear_coordinates=True, clear_boundary_geojson=True)`
+   when the bundle has no trustworthy spatial evidence, so a later state's
+   import never inherits the prior state's geometry.
+3. **Phase 9 verification** must `GET /hoas/map-points?state={STATE}` and
+   demote (`location_quality=city_only`) any pin whose lat/lon falls outside
+   the state bbox. This is the canonical fix for the TN-style bug where
+   same-name HOAs from prior runs carried over old coordinates.
 
 ### Phase 7 — Prepared Bundle Creation
 
@@ -465,9 +549,9 @@ Expected final state report:
   "imported_bundles": 96,
   "live_profiles": 96,
   "live_documents": 312,
-  "map_points": 84,
+  "map_points": 80,
   "map_rate": 0.875,
-  "by_location_quality": {"polygon": 40, "address": 18, "zip_centroid": 10},
+  "by_location_quality": {"polygon": 40, "address": 18, "place_centroid": 12, "zip_centroid": 10},
   "ocr_cost_usd": 8.42,
   "rejected_documents": 211,
   "budget_deferred": 0,
@@ -477,7 +561,10 @@ Expected final state report:
 
 **Required checks:**
 - `/hoas/summary?state={STATE}` count matches imported bundle count within expected dedupe collisions.
-- `/hoas/map-points?state={STATE}` returns no out-of-state coordinates.
+- `/hoas/map-points?state={STATE}` returns no out-of-state coordinates. Per
+  the **bucket-binds-bbox invariant** (Phase 6): only HOAs whose bank manifest
+  lives under `gs://hoaproxy-bank/v1/{STATE}/...` may carry a coordinate inside
+  this state's bbox. Demote any violator to `city_only` immediately.
 - Every imported document has `chunk_count > 0` unless explicitly hidden.
 - No `failed` prepared bundles remain without a documented reason.
 - Rejected sample review includes random direct links from each rejection class.
@@ -503,9 +590,36 @@ Write before the state is considered done.
 - Source families attempted vs productive.
 - Lessons learned to fold back into this playbook.
 
+**Standard ledger files.** Write the following into `state_scrapers/{state}/results/{run_id}/` so retrospective fields can be backed by ledgers, not memory:
+
+- `discovery_ledger.jsonl` — every banked candidate with source URL, score, decision, reason
+- `prepared_ingest_ledger.jsonl` — per-document prepare decisions, OCR pages, cost
+- `geography_candidates.json` — geocoder/Places candidates per HOA with accept/reject reasons
+- `rejected_document_sample.json` — random sample from each rejection class for audit
+- `live_import_report.json` — bundle import results (one entry per claimed bundle)
+- `final_state_report.json` — the top-level report shown in Phase 9
+
 **Exemplars:** `state_scrapers/ri/RI_SCRAPE_RETROSPECTIVE.md` (Tier 1 SoS-first), `state_scrapers/ga/` (Tier 3 per-county Serper), `state_scrapers/tn/notes/retrospective.md` (Tier 2 per-county Serper).
 
 **Budget the post-import name cleanup as a named closing step**, not an afterthought. Expect ~14-16% of live HOAs to need it even with good discovery (GA's 1,800-bank run produced 16% dirty names). Run `state_scrapers/ga/scripts/clean_dirty_hoa_names.py --state {STATE} --apply` (or its hoisted equivalent) and target the `year_prefix`, `doc_fragment_anywhere`, and `stopword_prefix` buckets first as the highest-yield classes.
+
+**For SoS-blocked Tier 0/1 keyword-Serper runs, run cleanup with
+`--no-dirty-filter`.** The default `is_dirty()` regex misses ~60% of bad names
+in keyword-Serper-discovered states because the bank pipeline mechanically
+appends "HOA" to whatever title fragment it found. The unconditional pass
+LLM-evaluates every live HOA against its own OCR text and proposes renames
+when the document body contains a clearly-better name — at ~$0.002/HOA, the
+cost is trivial. WY's May 2026 run: 28 dirty names caught by `is_dirty()`
+(7 renames + 1 merge applied) versus ~50 additional bad names that the regex
+missed and only the unconditional LLM pass surfaced. Budget ~$0.50 OpenRouter
+for the unconditional pass on a Tier 0 state with ~150 live HOAs.
+
+```bash
+# Unconditional cleanup (recommended for keyword-Serper / SoS-blocked states)
+.venv/bin/python state_scrapers/ga/scripts/clean_dirty_hoa_names.py \
+  --state {STATE} --no-dirty-filter --apply \
+  --out state_scrapers/{state}/results/{run_id}/name_cleanup_unconditional.jsonl
+```
 
 ---
 
@@ -789,11 +903,11 @@ Additional field for provenance tracking:
 
 ## Appendix D — Per-State Launch Packet
 
-This table assigns every remaining jurisdiction a primary discovery recommendation based on Phase 2's decision matrix and existing per-state experience. Verify the recommendation in Phase 1 preflight (10-minute spike); pivot if the recommended source is closed, paywalled, or yields zero hits in two short sweeps. **Tentative** is implicit for any not-started row — only DE/FL/GA/KS/RI/TN have lived experience.
+This table assigns every remaining jurisdiction a primary discovery recommendation based on Phase 2's decision matrix and existing per-state experience. **Default for not-started Tier 0/1 states is `keyword-Serper-per-county`** — SoS-first is reserved for jurisdictions with specific evidence the registry is open, HOA-shaped, and not WAF-walled. Always run the Phase 1 SoS preflight (10-min spike) before committing to any SoS-first path; pivot to keyword-Serper immediately on any abort signal (Akamai/Cloudflare WAF, reCAPTCHA, paywall, login wall, VIEWSTATE breaks, zero HOA-shaped hits). **Tentative** is implicit for any not-started row — only DE/FL/GA/KS/RI/TN have lived experience. Empirically as of May 2026, RI is the only confirmed SoS-first success in production; NH fell back to keyword-Serper after Akamai blocked its QuickStart endpoint.
 
 | State | CAI | Tier | Status | Primary discovery | Notes |
 |---|---|---|---|---|---|
-| AK | <1,000 | 0 | not-started | SoS-first | Alaska Div. of Corporations; sparse population |
+| AK | <1,000 | 0 | not-started | keyword-Serper | Sparse population; SoS Akamai/login risk untested |
 | AL | >3,000 | 1 | not-started | keyword-Serper | Southern county-recorder pattern |
 | AR | <1,000 | 0 | not-started | keyword-Serper | County recorders publish; SoS may be thin |
 | AZ | 10,200 | 3 | not-started | keyword-Serper | Maricopa/Pima dominate |
@@ -812,17 +926,17 @@ This table assigns every remaining jurisdiction a primary discovery recommendati
 | KS | <2,000 | 1 | done | keyword-Serper | Per-county Serper; canonical Tier 1 keyword run |
 | KY | 2,500 | 1 | not-started | keyword-Serper | Southern county-recorder pattern |
 | LA | 2,200 | 1 | not-started | keyword-Serper | Parish-based (not counties); adapt slugs |
-| MA | 11,600 | 3 | not-started | SoS-first | NE pattern; aggregator alternative |
+| MA | 11,600 | 3 | not-started | keyword-Serper | NE pattern; SoS-first risky (NH precedent); aggregator alternative |
 | MD | 7,200 | 2 | not-started | keyword-Serper | DC metro concentrates HOAs |
-| ME | <2,000 | 1 | not-started | SoS-first | NE small-state pattern |
+| ME | <2,000 | 1 | not-started | keyword-Serper | NE small-state pattern; SoS spike if registry is open |
 | MI | 8,700 | 2 | not-started | keyword-Serper | Large metros |
 | MN | 8,000 | 2 | not-started | keyword-Serper | County recorders |
 | MO | 5,750 | 2 | not-started | keyword-Serper | County recorders |
 | MS | <1,000 | 0 | not-started | keyword-Serper | County recorders dominant in the South |
-| MT | >2,000 | 1 | not-started | SoS-first | Sparse population |
+| MT | >2,000 | 1 | not-started | keyword-Serper | Sparse population; county-recorder pattern |
 | NC | 15,050 | 3 | not-started | aggregator | Closing Carolina + CASNC primary |
-| ND | <750 | 0 | not-started | SoS-first | Small universe; simple |
-| NE | <1,200 | 0 | not-started | SoS-first | Small-state pattern |
+| ND | <750 | 0 | not-started | keyword-Serper | Small universe; county-recorder pattern |
+| NE | <1,200 | 0 | not-started | keyword-Serper | Small-state pattern; SoS spike optional |
 | NH | <2,500 | 1 | done | keyword-Serper | SoS QuickStart Akamai-walled; keyword-Serper fallback used |
 | NJ | 7,200 | 2 | not-started | keyword-Serper | Aggregator candidates exist (NJ HOA dirs) |
 | NM | <1,500 | 0 | not-started | keyword-Serper | NM HOA Act registration also possible |
@@ -834,16 +948,16 @@ This table assigns every remaining jurisdiction a primary discovery recommendati
 | PA | 7,150 | 2 | not-started | keyword-Serper | County recorders + condo |
 | RI | <1,250 | 0 | done | SoS-first | SoS-first canonical Tier 0/1 |
 | SC | 7,500 | 2 | partial | keyword-Serper | Only benchmarks done |
-| SD | <600 | 0 | not-started | SoS-first | Tiny universe |
+| SD | <600 | 0 | not-started | keyword-Serper | Tiny universe; county-recorder pattern |
 | TN | 5,400 | 2 | done | keyword-Serper | Per-county Serper; canonical Tier 2 keyword run |
 | TX | 22,900 | 3 | not-started | sunbiz-style | TX SoS bulk + per-county Serper (FL pattern) |
 | UT | 3,700 | 1 | not-started | keyword-Serper | County recorders + LDS-region notes |
 | VA | 9,200 | 2 | not-started | keyword-Serper | Has legal corpus already loaded |
-| VT | <1,500 | 0 | not-started | SoS-first | NE small-state pattern (RI-style) |
+| VT | <1,500 | 0 | not-started | keyword-Serper | NE small-state; SoS spike before committing |
 | WA | 10,900 | 3 | not-started | keyword-Serper | County recorders |
 | WI | 5,650 | 2 | not-started | keyword-Serper | County recorders |
 | WV | <1,000 | 0 | not-started | keyword-Serper | County recorders; SoS adequacy unverified |
-| WY | <750 | 0 | not-started | SoS-first | Sparse population |
+| WY | <750 | 0 | not-started | keyword-Serper | Sparse population; HOAs concentrated in Teton/Laramie |
 
 ### Per-Tier Cost Defaults
 
@@ -869,3 +983,92 @@ Copy-paste at the start of each session:
 4. Confirm per-tier `--max-docai-cost-usd` is set in the runner before applying.
 5. Tag `--run-id` with both `{state}_{YYYYMMDD_HHMMSS}` and the agent name (`claude` or `codex`) for cross-batch attribution.
 6. Run autonomously; produce Phase 10 retrospective at `state_scrapers/{state}/notes/retrospective.md`.
+
+---
+
+## Appendix E — Host-Family Query Catalog
+
+These query patterns surfaced productive HOA documents in past state runs (Kansas was the original yield study). After two successful sweeps in any host family, **promote it to deterministic-mode scraping** — mine the URL pattern directly with exact-source dedup; stop using models on it except for compact name repair.
+
+The query examples below use literal `Kansas` / city names from the May 2026 KS pass. Substitute your target `{state-name}` and metro names when reusing them. **The host patterns themselves are nationwide, not Kansas-specific.**
+
+### eNeighbors-style public pages
+
+```text
+site:eneighbors.com {state-name} HOA documents covenants
+site:eneighbors.com {state-name} "Homeowners Association" "documents"
+site:eneighbors.com/!h_ "public-document" "{state-name}" "Homeowners Association"
+site:eneighbors.com/p/ "{Metro}" HOA
+```
+
+### Municipal document centers
+
+```text
+site:.gov/DocumentCenter/View {state-name} "Homeowners Association" "Declaration"
+site:.gov/DocumentCenter/View {state-name} "Declaration of Restrictions" subdivision
+site:.gov/AgendaCenter/ViewFile {state-name} "Homeowners Association" "Declaration"
+site:{municipality}.gov/DocumentCenter/View "Declaration" "Association"
+site:{municipality}.gov/Archive.aspx "Homeowners Association"
+```
+
+### Management-company community pages
+
+```text
+site:cobaltreks.com/hoa-management "HOA" "Covenants"
+site:cobaltreks.com/hoa-management "Declaration" "HOA"
+site:cobaltreks.com/hoa-management "{state-name}" "Homeowners Association"
+```
+
+### Document-host CDN expansion (after direct-PDF hits)
+
+```text
+site:gogladly.com/connect/document "{state-name}" "homeowners association" bylaws
+site:pmtechsol.sfo2.cdn.digitaloceanspaces.com/hmsft-documents "deed restrictions" "{state-name}"
+inurl:hmsft-doc "{state-name}" "homes association" "deed restrictions"
+inurl:/file/document/ "{state-name}" "homeowners association" covenants
+inurl:/wp-content/uploads/ "{state-name}" "homeowners association" bylaws
+inurl:/wp-content/uploads/ "{state-name}" "homes association" restrictions
+```
+
+### Recorded governing-document phrase searches
+
+High precision: bylaws, declarations, and amendments often contain formal corporation language and county recording language.
+
+```text
+filetype:pdf "{state-name} not-for-profit corporation" "Homeowners Association"
+filetype:pdf "{state-name} non-profit corporation" "Homes Association"
+filetype:pdf "Register of Deeds" "{County} County, {state-name}" "Homes Association"
+filetype:pdf "{County} County, {state-name}" "Declaration of Covenants" "Homeowners Association"
+filetype:pdf "{County} County, {state-name}" "Declaration of Restrictions" "Homes Association"
+```
+
+### Late-stage amendment / article variants
+
+```text
+filetype:pdf "Articles of Incorporation" "{County} County, {state-name}" "Homeowners Association"
+filetype:pdf "Amendment to Declaration" "{County} County, {state-name}" "Homes Association"
+filetype:pdf "Restated Bylaws" "{state-name}" "Homeowners Association"
+filetype:pdf "Supplemental Declaration" "{state-name}" "Homes Association"
+```
+
+### Independent community domains (after a productive metro is identified)
+
+Anchor with `-eneighbors` (or whichever family you've already exhausted) so you don't re-mine the same hits:
+
+```text
+"{state-name}" "HOA documents" "bylaws" -eneighbors
+"{state-name}" "governing documents" "homeowners association" -eneighbors
+"{Metro}" "HOA documents" -eneighbors
+"{Metro}" "homes association" documents -eneighbors
+```
+
+### Architectural-guidelines anchoring
+
+When writing queries that include `"Architectural Guidelines"`, `"design guidelines"`, or `"architectural review"`, **always anchor to a mandatory-HOA signal in the same query**:
+
+```text
+"Architectural Guidelines" "Declaration of Covenants" filetype:pdf
+"Architectural Review" "{state-name}" "Homeowners Association" filetype:pdf
+```
+
+A bare `"Architectural Guidelines" filetype:pdf` query picks up voluntary-association docs and pollutes the bank.
