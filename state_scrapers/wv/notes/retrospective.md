@@ -1,91 +1,86 @@
-# {STATE} HOA Scrape — Retrospective
+# West Virginia HOA Scrape Retrospective
 
-A frank account of what worked, what didn't, and what the next person scraping
-a similar state should do differently.
-
-> **Scope note.** Write for the next person, not as a marketing summary.
-> Document dead ends — that is load-bearing information.
-
-## TL;DR
-
-- **Outcome:** {N} {STATE} HOAs live on hoaproxy.org with {N} documents, {N}
-  search chunks, {X}% map coverage. Total marginal spend **~${X.XX}**.
-- **Coverage of estimated universe:** ~{X}% ({N} of {CAI_ESTIMATE} estimated HOAs).
-- **Structural ceiling:** {one sentence on why free public discovery stops here}
-
-## Cost Breakdown
-
-| Phase | API | Spend | Notes |
-|---|---|---|---|
-| Discovery (SoS scrape / Serper sweeps) | Serper | $X.XX | {N} calls |
-| Model classification / name repair | OpenRouter | $X.XX | model, token count |
-| OCR | Google Document AI | $X.XX | {N} pages at $0.0015/page |
-| Embeddings | OpenAI | $X.XX | {N} chunks |
-| ZIP centroid backfill | zippopotam.us | $0 | free |
-| **Total** | | **$X.XX** | |
-
-### Per-HOA economics
-
-| Unit | Count | Cost per unit |
-|---|---|---|
-| Entity attempted | {N} | $X.XXXX |
-| HOA imported live | {N} | $X.XXXX |
-| HOA with substantive content (≥10 chunks) | {N} | $X.XXXX |
-
-## False-Positive Classes
-
-Describe the main reject classes and whether they were correctly handled.
-
-| Reject reason | Count | Verdict |
-|---|---|---|
-| `junk:government` | {N} | correct / over-reject / under-reject |
-| `pii:membership_list` | {N} | correct |
-| `unsupported_category:unknown` | {N} | {note} |
-| `junk:unrelated` | {N} | {note} |
+Run id: `wv_20260508_081725_claude` (Tier 0). Sixth state in batch
+`overnight_batch_20260508`. 11-county expanded coverage.
 
 ## Final Counts
 
-```json
-{
-  "state": "{STATE}",
-  "raw_manifests": 0,
-  "prepared_bundles": 0,
-  "imported_bundles": 0,
-  "live_profiles": 0,
-  "live_documents": 0,
-  "live_chunks": 0,
-  "map_points": 0,
-  "map_rate": 0.0,
-  "by_location_quality": {"polygon": 0, "address": 0, "zip_centroid": 0},
-  "out_of_bounds_points": 0,
-  "ocr_cost_usd": 0.0,
-  "rejected_documents": 0,
-  "budget_deferred": 0,
-  "failed_bundles": 0
-}
-```
+| Metric | Value |
+|---|---:|
+| Raw bank manifests | 219 |
+| Live HOA profiles (post-import) | 35 |
+| After LLM rename pass (19 renames + 1 merge) | 34 |
+| After delete pass (10) + dedupe merge + 1 final delete | **22** |
 
-## Source-Family Yield
+## Counties
 
-| Source family | Manifests | PDFs | Final assessment |
-|---|---|---|---|
-| {family} | {N} | {N} | high / medium / zero |
+Original: Kanawha (Charleston), Berkeley (Martinsburg), Monongalia
+(Morgantown), Cabell (Huntington), Marshall, Ohio (Wheeling).
+Expansion: Wood (Parkersburg), Harrison (Clarksburg), Mercer
+(Bluefield/Princeton), Raleigh (Beckley), Jefferson WV (Charles Town).
 
-## Would Not Do Again
+Strongest contributors: Berkeley + Jefferson (Eastern Panhandle —
+DC-metro commuter HOAs), Greenbrier-area resort HOAs (caught from
+Raleigh sweeps).
 
-List the strategies or decisions that cost time / money with no return.
+## Genuine HOAs (22)
 
-## Unsung Win
+- Blackthorn Mountain Estates (resort)
+- Brierwood Section 1
+- Cloverdale Heights
+- Creekside Condo Owners
+- Dry Run Commons Subdivision
+- Glade Springs Village Property Owners Association, Inc. (resort —
+  merged from "Glade Springs Village POA" duplicate)
+- Hidden Point Subdivision
+- Imperial Woods, Indian Head, Lake View Owners
+- Marina Tower Condominium
+- Meadow Land Property Owners
+- Misty River Resort, Pleasant Hills, Potomac Overlook Estates
+- Sheridan, Spring. Mills Subdivision Unit Owners
+- Spruce Hill South, The Backwaters, The Woods, Timberwalk
+- Windwood Village Owners
 
-The one technique or observation that paid back more than expected.
+## Cost (Approximate)
 
-## Cross-State Lessons to Fold Back Into the Playbook
+| Channel | Spend | Per genuine HOA |
+|---|---:|---:|
+| DocAI | ~$1.80 | $0.082 |
+| OpenRouter | ~$0.20 | $0.009 |
+| Serper | ~$0.04 | $0.002 |
+| **Total** | **~$2.04** | **~$0.093** |
 
-List anything that should be added to `docs/multi-state-ingestion-playbook.md`
-or a future Appendix D note for this state's tier/pattern.
+## Phase 10 Outcomes
 
-## Reusable Scripts
+- LLM rename: 19 renames + 1 merge (35 → 34)
+- Regex+LLM-null delete: 10 entries (Berkeley County Subdivision Ordinance,
+  Caroline Horton House Landmark Nomination, Clerk of County Commission
+  fragment, Condemnation Deed Restrictions, Grassroots Advocacy Overview,
+  In Olympian West Condominium Association, Quarterly Journal-OCC,
+  Raleigh County Planning Ordinance, Serenity Ridge Subdivision
+  fragment, Subdivision HOA)
+- Dedupe merge: Glade Springs Village POA → Property Owners Association
+- Final delete: 1 fragment ("West Virginia's 55 counties. ... Owners
+  Association")
 
-| Script | Phase | Reusable as-is? |
-|---|---|---|
-| `state_scrapers/{state}/scripts/...` | | adapt {what} per state |
+## Lessons
+
+1. **Eastern Panhandle (Jefferson, Berkeley) was the highest-yield**
+   region — DC-metro commuter belt. Worth re-running if a future deeper
+   pass is launched.
+2. **Greenbrier resort area underrepresented.** The Raleigh-county
+   sweep caught Glade Springs Village (a ~3,000-home resort) but didn't
+   hit the Greenbrier Sporting Club or Snowshoe HOAs that exist in the
+   region. Future expansion: Pocahontas County (Snowshoe), Greenbrier
+   County (resort).
+3. **WV is small and the keyword-Serper pattern works cleanly here.**
+   Lower noise rate than AR (10 of 35 deletes vs AR's 58 of 104).
+
+## Standard Ledger Files
+
+- `state_scrapers/wv/results/wv_20260508_081725_claude/preflight.json`
+- `state_scrapers/wv/results/wv_20260508_081725_claude/prepared_ingest_ledger.jsonl`
+- `state_scrapers/wv/results/wv_20260508_081725_claude/live_import_report.json`
+- `state_scrapers/wv/results/wv_20260508_081725_claude/final_state_report.json`
+- `state_scrapers/wv/results/wv_20260508_081725_claude/name_cleanup_unconditional.jsonl`
+- `state_scrapers/wv/results/wv_20260508_081725_claude/discover_*.log` (11 files)
