@@ -4551,107 +4551,124 @@ def admin_extract_doc_zips(request: Request, state: str | None = None, limit: in
     return {"hoas": out, "total": len(out)}
 
 
-def _run_admin_backup(db_path: str, docs_root) -> None:
-    # Synchronous backup worker. Logs progress so server logs are the
-    # source of truth for whether a scheduled backup actually finished.
-    import sqlite3 as _sqlite3
-    import tempfile
-    from datetime import datetime, timezone
-    from google.cloud import storage as gcs
+# Tables holding user-created or user-action data. Everything else in the DB
+# (catalog, embeddings, legal corpus) is rebuildable from the bank or by
+# re-running ingest, so it's deliberately excluded from the backup.
+_BACKUP_TABLES = (
+    "users",
+    "membership_claims",
+    "delegates",
+    "proxy_assignments",
+    "proxy_audit",
+    "proposals",
+    "proposal_cosigners",
+    "proposal_upvotes",
+    "participation_records",
+)
 
-    bucket_name = os.environ.get("BACKUP_GCS_BUCKET", "hoaproxy-backups")
-    max_backups = int(os.environ.get("BACKUP_MAX_COPIES", "7"))
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
-    started = time.monotonic()
-    log = logging.getLogger("admin.backup")
-    log.info("backup start stamp=%s", stamp)
 
-    client = gcs.Client()
-    gcs_bucket = client.bucket(bucket_name)
-    uploaded: list[str] = []
-    errors: list[str] = []
-
-    # --- 1. SQLite DB snapshot ---
-    # pages=5000 (~20 MB per batch) with 5 ms sleep keeps the live DB
-    # responsive while finishing a 50+ GB snapshot in minutes, not hours.
-    tmp_dir = tempfile.mkdtemp()
-    tmp_db = os.path.join(tmp_dir, "backup.db")
-    try:
-        t0 = time.monotonic()
-        src = _sqlite3.connect(db_path)
-        dst = _sqlite3.connect(tmp_db)
-        src.backup(dst, pages=5000, sleep=0.005)
-        dst.close()
-        src.close()
-        log.info("backup snapshot done in %.1fs (%d bytes)",
-                 time.monotonic() - t0, os.path.getsize(tmp_db))
-        t1 = time.monotonic()
-        blob_name = f"db/hoa_index-{stamp}.db"
-        gcs_bucket.blob(blob_name).upload_from_filename(tmp_db)
-        uploaded.append(blob_name)
-        log.info("backup upload done in %.1fs blob=%s", time.monotonic() - t1, blob_name)
-    except Exception as exc:
-        log.exception("backup db step failed")
-        errors.append(f"db: {exc}")
-    finally:
-        if os.path.exists(tmp_db):
-            os.unlink(tmp_db)
-        if os.path.isdir(tmp_dir):
-            os.rmdir(tmp_dir)
-
-    # --- 2. PDF docs (upsert: only upload new/changed files) ---
-    if docs_root.exists() and any(docs_root.iterdir()):
-        try:
-            t2 = time.monotonic()
-            remote_docs: dict[str, int] = {}
-            for b in gcs_bucket.list_blobs(prefix="docs/files/"):
-                remote_docs[b.name.removeprefix("docs/files/")] = b.size or 0
-            upserted = 0
-            for doc_path in sorted(docs_root.rglob("*")):
-                if not doc_path.is_file():
-                    continue
-                rel = str(doc_path.relative_to(docs_root))
-                if rel in remote_docs and remote_docs[rel] == doc_path.stat().st_size:
-                    continue
-                gcs_bucket.blob(f"docs/files/{rel}").upload_from_filename(str(doc_path))
-                upserted += 1
-            if upserted:
-                uploaded.append(f"docs/files/ ({upserted} upserted)")
-            log.info("backup docs done in %.1fs upserted=%d", time.monotonic() - t2, upserted)
-        except Exception as exc:
-            log.exception("backup docs step failed")
-            errors.append(f"docs: {exc}")
-
-    # --- 3. Retention: keep only the most recent DB snapshots ---
-    try:
-        db_blobs = list(gcs_bucket.list_blobs(prefix="db/"))
-        db_blobs.sort(key=lambda b: b.name, reverse=True)
-        for old_blob in db_blobs[max_backups:]:
-            old_blob.delete()
-    except Exception as exc:
-        log.exception("backup retention step failed")
-        errors.append(f"retention(db): {exc}")
-
-    log.info("backup finish elapsed=%.1fs uploaded=%d errors=%d",
-             time.monotonic() - started, len(uploaded), len(errors))
+def _dump_tables_sql(conn, tables: tuple[str, ...]) -> str:
+    # Emit a SQL text dump of just the named tables (schema + data + their
+    # indexes). Restorable with `sqlite3 newdb.db < dump.sql`.
+    out: list[str] = ["PRAGMA foreign_keys=OFF;", "BEGIN TRANSACTION;"]
+    for table in tables:
+        row = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name=?", (table,)
+        ).fetchone()
+        if not row:
+            continue
+        out.append(f"DROP TABLE IF EXISTS {table};")
+        out.append(f"{row[0]};")
+        for record in conn.execute(f"SELECT * FROM {table}"):
+            vals = []
+            for v in record:
+                if v is None:
+                    vals.append("NULL")
+                elif isinstance(v, bool):
+                    vals.append("1" if v else "0")
+                elif isinstance(v, (int, float)):
+                    vals.append(repr(v))
+                elif isinstance(v, bytes):
+                    vals.append("X'" + v.hex() + "'")
+                else:
+                    vals.append("'" + str(v).replace("'", "''") + "'")
+            out.append(f"INSERT INTO {table} VALUES ({','.join(vals)});")
+    placeholders = ",".join("?" * len(tables))
+    for row in conn.execute(
+        f"SELECT sql FROM sqlite_master "
+        f"WHERE type IN ('index','trigger') "
+        f"  AND tbl_name IN ({placeholders}) "
+        f"  AND sql IS NOT NULL",
+        tables,
+    ).fetchall():
+        out.append(f"{row[0]};")
+    out.append("COMMIT;")
+    return "\n".join(out) + "\n"
 
 
 @app.post("/admin/backup")
-def admin_backup(request: Request, background_tasks: BackgroundTasks):
-    """Trigger a backup of the SQLite DB and uploaded PDFs to GCS.
+def admin_backup(request: Request):
+    """Snapshot the user-created tables to GCS as a gzipped SQL dump.
 
-    Returns 202 immediately and runs the work in a background task — a
-    snapshot of the multi-GB DB takes minutes, well past Render's edge
-    timeout. Watch server logs (logger=admin.backup) for completion.
+    Deliberately excludes catalog/embedding/legal tables and uploaded PDFs:
+    those are either in the bank or rebuildable from ingest. The dump is
+    typically a few MB and finishes in seconds, so this is synchronous.
     """
     _require_admin(request)
+    import gzip
+    import sqlite3 as _sqlite3
+    from datetime import datetime, timezone
+    from google.cloud import storage as gcs
+
     settings = load_settings()
-    background_tasks.add_task(_run_admin_backup, settings.db_path, settings.docs_root)
-    return Response(
-        status_code=202,
-        content=json.dumps({"status": "started", "message": "backup running in background"}),
-        media_type="application/json",
+    bucket_name = os.environ.get("BACKUP_GCS_BUCKET", "hoaproxy-backups")
+    max_backups = int(os.environ.get("BACKUP_MAX_COPIES", "30"))
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    log = logging.getLogger("admin.backup")
+    started = time.monotonic()
+
+    src_uri = f"file:{settings.db_path}?mode=ro"
+    src = _sqlite3.connect(src_uri, uri=True)
+    try:
+        sql_text = _dump_tables_sql(src, _BACKUP_TABLES)
+    finally:
+        src.close()
+
+    payload = gzip.compress(sql_text.encode("utf-8"))
+    blob_name = f"db/precious-{stamp}.sql.gz"
+    client = gcs.Client()
+    gcs_bucket = client.bucket(bucket_name)
+    gcs_bucket.blob(blob_name).upload_from_string(
+        payload, content_type="application/gzip"
     )
+
+    pruned = 0
+    try:
+        blobs = sorted(
+            gcs_bucket.list_blobs(prefix="db/precious-"),
+            key=lambda b: b.name,
+            reverse=True,
+        )
+        for old in blobs[max_backups:]:
+            old.delete()
+            pruned += 1
+    except Exception:
+        log.exception("backup retention failed")
+
+    elapsed = time.monotonic() - started
+    log.info(
+        "backup ok elapsed=%.1fs blob=%s sql_bytes=%d gz_bytes=%d pruned=%d",
+        elapsed, blob_name, len(sql_text), len(payload), pruned,
+    )
+    return {
+        "status": "ok",
+        "uploaded": blob_name,
+        "sql_bytes": len(sql_text),
+        "gz_bytes": len(payload),
+        "elapsed_sec": round(elapsed, 2),
+        "tables": list(_BACKUP_TABLES),
+        "retention": f"keeping last {max_backups}",
+    }
 
 
 # ---------------------------------------------------------------------------
