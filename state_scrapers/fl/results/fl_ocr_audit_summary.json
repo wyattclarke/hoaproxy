@@ -1,0 +1,235 @@
+{
+  "generated_at": "2026-05-09T03:17:01Z",
+  "summary": {
+    "county_breakdown": {
+      "_unknown-county": {
+        "docai_pages": 17,
+        "manifests": 11
+      },
+      "alachua": {
+        "docai_pages": 174,
+        "manifests": 43
+      },
+      "bay": {
+        "docai_pages": 135,
+        "manifests": 60
+      },
+      "brevard": {
+        "docai_pages": 985,
+        "manifests": 287
+      },
+      "brooks": {
+        "docai_pages": 0,
+        "manifests": 1
+      },
+      "broward": {
+        "docai_pages": 787,
+        "manifests": 372
+      },
+      "bulloch": {
+        "docai_pages": 0,
+        "manifests": 1
+      },
+      "charlotte": {
+        "docai_pages": 544,
+        "manifests": 155
+      },
+      "citrus": {
+        "docai_pages": 397,
+        "manifests": 88
+      },
+      "clay": {
+        "docai_pages": 97,
+        "manifests": 43
+      },
+      "collier": {
+        "docai_pages": 935,
+        "manifests": 359
+      },
+      "columbia": {
+        "docai_pages": 0,
+        "manifests": 1
+      },
+      "duval": {
+        "docai_pages": 862,
+        "manifests": 266
+      },
+      "escambia": {
+        "docai_pages": 322,
+        "manifests": 122
+      },
+      "flagler": {
+        "docai_pages": 417,
+        "manifests": 129
+      },
+      "hart": {
+        "docai_pages": 0,
+        "manifests": 1
+      },
+      "heard": {
+        "docai_pages": 0,
+        "manifests": 1
+      },
+      "hernando": {
+        "docai_pages": 157,
+        "manifests": 46
+      },
+      "hillsborough": {
+        "docai_pages": 987,
+        "manifests": 384
+      },
+      "indian-river": {
+        "docai_pages": 227,
+        "manifests": 49
+      },
+      "lake": {
+        "docai_pages": 491,
+        "manifests": 154
+      },
+      "lee": {
+        "docai_pages": 726,
+        "manifests": 301
+      },
+      "leon": {
+        "docai_pages": 150,
+        "manifests": 33
+      },
+      "liberty": {
+        "docai_pages": 0,
+        "manifests": 1
+      },
+      "lowndes": {
+        "docai_pages": 0,
+        "manifests": 1
+      },
+      "madison": {
+        "docai_pages": 0,
+        "manifests": 6
+      },
+      "manatee": {
+        "docai_pages": 743,
+        "manifests": 246
+      },
+      "marion": {
+        "docai_pages": 146,
+        "manifests": 52
+      },
+      "martin": {
+        "docai_pages": 727,
+        "manifests": 226
+      },
+      "meriwether": {
+        "docai_pages": 0,
+        "manifests": 1
+      },
+      "miami-dade": {
+        "docai_pages": 764,
+        "manifests": 346
+      },
+      "mitchell": {
+        "docai_pages": 0,
+        "manifests": 1
+      },
+      "nassau": {
+        "docai_pages": 34,
+        "manifests": 18
+      },
+      "okaloosa": {
+        "docai_pages": 251,
+        "manifests": 59
+      },
+      "orange": {
+        "docai_pages": 786,
+        "manifests": 348
+      },
+      "osceola": {
+        "docai_pages": 550,
+        "manifests": 175
+      },
+      "palm-beach": {
+        "docai_pages": 1087,
+        "manifests": 484
+      },
+      "pasco": {
+        "docai_pages": 394,
+        "manifests": 115
+      },
+      "pickens": {
+        "docai_pages": 0,
+        "manifests": 1
+      },
+      "pinellas": {
+        "docai_pages": 1298,
+        "manifests": 340
+      },
+      "polk": {
+        "docai_pages": 708,
+        "manifests": 209
+      },
+      "rabun": {
+        "docai_pages": 6,
+        "manifests": 1
+      },
+      "santa-rosa": {
+        "docai_pages": 160,
+        "manifests": 54
+      },
+      "sarasota": {
+        "docai_pages": 466,
+        "manifests": 159
+      },
+      "seminole": {
+        "docai_pages": 401,
+        "manifests": 161
+      },
+      "st-johns": {
+        "docai_pages": 271,
+        "manifests": 80
+      },
+      "st-lucie": {
+        "docai_pages": 80,
+        "manifests": 56
+      },
+      "sumter": {
+        "docai_pages": 79,
+        "manifests": 55
+      },
+      "unknown-county": {
+        "docai_pages": 16,
+        "manifests": 6
+      },
+      "unresolved-name": {
+        "docai_pages": 227,
+        "manifests": 115
+      },
+      "volusia": {
+        "docai_pages": 541,
+        "manifests": 277
+      },
+      "walton": {
+        "docai_pages": 0,
+        "manifests": 1
+      },
+      "ware": {
+        "docai_pages": 0,
+        "manifests": 1
+      }
+    },
+    "docai_pages_total": 18145,
+    "estimated_cost_usd": 27.22,
+    "hoas_with_any_selection": 4985,
+    "hoas_with_docai_selection": 1917,
+    "pdfs_by_class": {
+      "docai_candidate": 2070,
+      "pypdf_ok": 3659,
+      "skip_hard_reject": 1275,
+      "skip_page_cap_200": 138,
+      "skip_page_cap_scanned": 957
+    },
+    "pypdf_pages_total": 0,
+    "selected_docai_pages": 18145,
+    "selected_pypdf_docs": 3659,
+    "total_manifests": 13212,
+    "zero_doc_manifests": 6710
+  }
+}

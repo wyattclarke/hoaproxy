@@ -1,0 +1,145 @@
+{
+  "results": [
+    {
+      "hoa": "a-meeting-of-board-of-directors-of",
+      "hoa_name": "A meeting of the Board of Directors of the Homeowners Association",
+      "docs_processed": [
+        {
+          "sha": "96cccc304fbd2293",
+          "class": "pypdf_ok",
+          "reason": "text_extractable",
+          "pages": 38,
+          "outcome": "sidecar_exists",
+          "docai_pages": 0
+        }
+      ],
+      "name_repair": null,
+      "geo_extraction": null,
+      "state_mismatch": null
+    },
+    {
+      "hoa": "around-lakeway",
+      "outcome": "no_eligible_docs"
+    },
+    {
+      "hoa": "beacon",
+      "hoa_name": "The Beacon HOA",
+      "docs_processed": [
+        {
+          "sha": "b277b681998be505",
+          "class": "pypdf_ok",
+          "reason": "text_extractable",
+          "pages": 12,
+          "outcome": "sidecar_exists",
+          "docai_pages": 0
+        }
+      ],
+      "name_repair": null,
+      "geo_extraction": null,
+      "state_mismatch": null
+    },
+    {
+      "hoa": "berea",
+      "hoa_name": "Berea HOA",
+      "docs_processed": [
+        {
+          "sha": "f216a9d57fd00e10",
+          "class": "pypdf_ok",
+          "reason": "text_extractable",
+          "pages": 13,
+          "outcome": "sidecar_exists",
+          "docai_pages": 0
+        }
+      ],
+      "name_repair": null,
+      "geo_extraction": {
+        "county": "Sumter",
+        "postal_code": "32162"
+      },
+      "state_mismatch": null
+    },
+    {
+      "hoa": "bluffs-of-webster",
+      "hoa_name": "The Bluffs of Webster Homeowners Association",
+      "docs_processed": [
+        {
+          "sha": "76b9d3c058e70db6",
+          "class": "docai_candidate",
+          "reason": "scanned,pages=15",
+          "pages": 15,
+          "outcome": "sidecar_exists",
+          "docai_pages": 15
+        }
+      ],
+      "name_repair": null,
+      "geo_extraction": null,
+      "state_mismatch": null
+    },
+    {
+      "hoa": "bluffs-of-wildwood",
+      "hoa_name": "The Bluffs of Wildwood Homeowners Association",
+      "docs_processed": [
+        {
+          "sha": "c3cbc0cecd9fe949",
+          "class": "pypdf_ok",
+          "reason": "text_extractable",
+          "pages": 1,
+          "outcome": "sidecar_exists",
+          "docai_pages": 0
+        }
+      ],
+      "name_repair": null,
+      "geo_extraction": null,
+      "state_mismatch": null
+    },
+    {
+      "hoa": "carriage-houses-at-glenview",
+      "hoa_name": "Carriage Houses at Glenview HOA",
+      "docs_processed": [
+        {
+          "sha": "8500267ffead044e",
+          "class": "pypdf_ok",
+          "reason": "text_extractable",
+          "pages": 14,
+          "outcome": "sidecar_exists",
+          "docai_pages": 0
+        }
+      ],
+      "name_repair": null,
+      "geo_extraction": {
+        "city": "Oxford",
+        "state": "FL",
+        "postal_code": "34484"
+      },
+      "state_mismatch": null
+    },
+    {
+      "hoa": "city-of-webster-land-development-code",
+      "outcome": "no_eligible_docs"
+    },
+    {
+      "hoa": "claration-of-sumter-d1-s1-697-hickory-hill-hammock-hammock-or-a",
+      "hoa_name": "claration-of- -sumter-d1-S1-697-hickory-hill-hammock. Hammock, or a Homeowners Association",
+      "docs_processed": [
+        {
+          "sha": "db7210710a6feff7",
+          "class": "pypdf_ok",
+          "reason": "text_extractable",
+          "pages": 50,
+          "outcome": "sidecar_exists",
+          "docai_pages": 0
+        }
+      ],
+      "name_repair": null,
+      "geo_extraction": {
+        "postal_code": "34749"
+      },
+      "state_mismatch": null
+    },
+    {
+      "hoa": "coronado",
+      "outcome": "no_eligible_docs"
+    }
+  ],
+  "total_cost_usd": 0.0
+}
