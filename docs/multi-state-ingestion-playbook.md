@@ -18,6 +18,26 @@ This is the single canonical reference for autonomous LLM-driven HOA discovery, 
 
 ---
 
+## Intent And Success Framing
+
+**The job is to scrape every plausible HOA in the state's public surface area, up to but not over the budget envelope.** This is a source-exhaustion task, not a target-attainment task — success is measured by what's left untried, not by hitting a numeric floor. Anchor every session-level decision to that intent; everything below is mechanism in service of it.
+
+Three structural rules that follow from the intent and that override any conflicting framing in the brief, prior session retrospectives, or your own midway instinct to wrap up:
+
+1. **Anchor to universe size, not to the prior baseline.** The "prior session got N live" number is a floor to clear, not a target to nudge. Anchor to the state's CAI estimate (column 2 of the State Sizing table) and a peer-state benchmark from the same tier. A live count under ~10% of CAI at session end means the session is incomplete — sweep again, try the next source family, or document why each remaining source isn't reachable. **Anchoring is the single most load-bearing reframe** — agents who anchor to "did I beat last session" stop one source family in; agents who anchor to "did I cover the universe" keep going.
+
+2. **Budgets are envelopes, not ceilings.** Plan to use 70–90% of each cost cap. Under-spending more than that without a written diminishing-returns justification per unused budget line is a failure mode, not a virtue. Concretely: if the DocAI cap is $150 and you used $20, the retrospective must answer "the next $X of DocAI would have yielded < $X of value because [specific source-family observation]" — not "we came in well under cap." Cost discipline is hitting the ceiling cleanly with a partial retro, not stopping early because the floor metrics passed.
+
+3. **Source-stop, not target-stop.** Stop conditions are about *sources*, not *counts*: stop when every plausible source family has been swept ≥2 times per the two-sweep stop rule, promoted to deterministic mode where productive, or formally declined with a written reason. The done definition includes hitting noise-rate / map-coverage / live-count floors **and** exhausting the source-family inventory. A session that satisfies every numeric floor but tried only one source family per county is incomplete; flag that as a partial run.
+
+**Required structural counterweight: source-family inventory.** Every state run produces `state_scrapers/{state}/notes/source-inventory.md` listing every plausible source family considered (per-county recorder of deeds, CAI chapter directories, regulator licensee lists, mgmt-company portfolios, statewide aggregators, owned-domain whitelisted preflights, host-family deterministic crawls, second-sweep query-file widening, …) — each marked productive / sterile / untried-with-reason. This file is a load-bearing artifact, not a footnote. The retrospective cross-references it. Without it, "what didn't I try" is hand-wavable; with it, the gap is visible to the next operator.
+
+**Defer retrospective drafting** until the source-family inventory is exhausted. Drafting wrap-up text mid-session is a tell that the agent has mentally checked out — redirect to the next yield lever instead. Phase 10 instructions below apply only to genuinely-finished runs; partial-retro shape is a separate (shorter) thing triggered by a hit cost cap.
+
+The IL downstate session (May 2026) is the canonical example of this failure mode and what to do differently — see `state_scrapers/il/notes/retrospective-downstate.md` "What didn't work" + "Lessons for the playbook" for a worked postmortem.
+
+---
+
 ## Doc Status: What This Supersedes
 
 - **`docs/small-state-end-to-end-ingestion-plan.md`** — original 10-phase pipeline; absorbed and extended here with Phase 0, Phase 10, tier differentiation, and multi-state batching. Kept for historical reference.
@@ -715,11 +735,16 @@ Write before the state is considered done.
 
 **Path:** `state_scrapers/{state}/notes/retrospective.md`
 
+**Pre-retrospective gate — source-family inventory.** Before drafting the retro, complete `state_scrapers/{state}/notes/source-inventory.md` listing every plausible source family considered for this state, each marked productive / sterile / untried-with-reason. The retro must cross-reference this file. See "Intent And Success Framing" at the top of this doc — this is a load-bearing artifact, not a footnote. If you find yourself drafting the retro without the inventory complete, stop and complete the inventory first; "I'll fill this in later" never happens.
+
 **Required fields:**
 - Cost estimate per HOA scraped, broken down by: Serper + OpenRouter + DocAI. State assumptions when exact metering is unavailable.
+- **Budget-envelope utilization.** Percent of each cost cap consumed (DocAI / Serper / OpenRouter). If any line is < 70% utilized, include a one-sentence diminishing-returns justification per under-utilized line — "the next $X of {service} would have yielded < $X because [specific source-family observation]". "We came in well under cap" without that justification is a failure mode and should be flagged in the retro, not celebrated.
+- **Universe-anchored coverage.** `live_count / CAI_estimate` as a percent. Compare to peer-state runs at the same tier. Below ~10% means the session is partial — call it out explicitly and list the next source families to try.
+- **What didn't I try and why.** Cross-referenced against `source-inventory.md`. Every source family marked `untried` in the inventory must appear here with a written reason (cost / paywall / robots / out-of-scope / time / etc.).
 - Main false-positive classes and the cleanup steps needed.
 - Final counts: raw bank / prepared / live / docs / chunks / map coverage / out-of-bounds.
-- Source families attempted vs productive.
+- Source families attempted vs productive (deterministic-mode promotion candidates).
 - Lessons learned to fold back into this playbook.
 
 **Standard ledger files.** Write the following into `state_scrapers/{state}/results/{run_id}/` so retrospective fields can be backed by ledgers, not memory:

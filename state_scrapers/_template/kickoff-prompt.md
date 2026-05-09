@@ -29,6 +29,7 @@ below before pasting the **Prompt Body** block into a fresh session.
 | `{DISCOVERY_PRIMARY}` | Primary discovery source from Appendix D, with brief amplification | `keyword-Serper-per-county` |
 | `{DISCOVERY_FALLBACK_NOTE}` | Brief fallback note | `with aggregator/open-portal supplement only when Appendix D documents one for this state` |
 | `{PARALLEL_STATES}` | Comma-separated list of other parallel runs, or `[none]` | `NH, ME, WY` |
+| `{PEER_BENCHMARK}` | One-sentence reference to a comparable peer-state run and its yield — anchors the agent to "this is reachable" rather than to prior in-state baselines | `IN (Tier 2, ~5,200 CAI) produced ~245 live HOAs in one session; KS (Tier 1, <2,000 CAI) produced ~150 live` |
 | `{COUNTY_GUIDANCE}` | One paragraph: county list + density hints (Appendix D notes) | `Vermont's 14 counties (Addison, Bennington, ...). Highest HOA density: Chittenden (Burlington), Rutland, Washington (Montpelier/Stowe), Bennington, Lamoille (resort condos).` |
 | `{NAME_PATTERN_NOTES}` | State-specific HOA name patterns, or empty string | `` (empty) or `Many WY HOAs are organized as "ranch" or "club" associations rather than condominium associations; do not exclude those name patterns.` |
 | `{GENERIC_REJECT_TOKENS}` | Generic tokens to reject, slash-separated | `condominium / association / Vermont` |
@@ -62,6 +63,18 @@ attribution and cross-batch performance comparison.
 You are in /Users/ngoshaliclarke/Documents/GitHub/hoaproxy. Read CLAUDE.md (or AGENTS.md for Codex), then docs/multi-state-ingestion-playbook.md, docs/agent-ingestion.md, and at least one prior handoff. state_scrapers/ks/notes/discovery-handoff.md is the most detailed Tier 1 keyword-Serper exemplar; state_scrapers/tn/notes/retrospective.md and state_scrapers/ga/notes/retrospective.md cover Tier 2/3. Do not let any single state's specific choices constrain you.
 
 Other state runs ({PARALLEL_STATES}) are active in parallel right now. Coexist gracefully on rate limits. Do not edit shared files actively touched by another run unless you have a specific reason. git pull --rebase before every git push so concurrent sessions don't collide.
+
+### Intent and success framing
+
+**Goal: find every plausible HOA in {state-name}'s public surface area, up to but not over the budget envelope below.** This is a source-exhaustion task, not a target-attainment task. Success is measured by what's left untried at session end, not by hitting a numeric floor.
+
+Anchor your effort to the universe size, not to prior in-state runs. {state-name}'s CAI estimate is {CAI_BOUND}. Peer benchmark: {PEER_BENCHMARK}. A live count under ~10% of CAI at session end is incomplete — sweep again, try the next source family, or document why each remaining source isn't reachable. Do not anchor on "first-pass produced N" — first-pass is a floor to clear, not a number to nudge.
+
+Treat the budget caps as an **envelope, not a ceiling**. Plan to use 70–90% of each line. Under-spending more than that requires a one-sentence diminishing-returns justification per unused budget line — "the next $X of {Serper|DocAI|OpenRouter} would have yielded < $X because [specific source-family observation]." "I came in well under cap" without that justification is a failure mode, not a virtue.
+
+Stop conditions are source-stop, not target-stop: stop when **all plausible source families** have been swept ≥2 times per the playbook's two-sweep stop rule, promoted to deterministic mode where productive, or formally declined with a written reason. Floor metrics (noise rate, map coverage, live count) are quality gates that must be cleared, not completion gates — a session that satisfies every numeric threshold but tried only one source family per county is incomplete.
+
+Before writing the retrospective, produce a **source-family inventory** at `state_scrapers/{state-lower}/notes/source-inventory.md` listing every plausible source family considered (per-county recorder of deeds, CAI chapter directories, regulator licensee lists, mgmt-company portfolios, statewide aggregators, owned-domain whitelisted preflights, host-family deterministic crawls, second-sweep query-file widening, …). Mark each as productive / sterile / untried-with-reason. The retro must reference this file; "what didn't I try" is a load-bearing artifact, not a footnote. Do not draft the retrospective until the inventory is exhausted — drafting wrap-up text mid-session is a tell that you've mentally checked out; redirect to the next yield lever.
 
 ### Task
 
@@ -110,13 +123,16 @@ Delegate to cheaper subagents (Explorer / Runner / Curator / Verifier roles as d
 
 ### Stop rules
 
-See Phase 2 "Per-branch stop thresholds" and "Per-state two-sweep stop rule." Stop when source families are genuinely exhausted, any cost cap above is hit, or the user explicitly asks for status.
+Source-stop, not target-stop. See Phase 2 "Per-branch stop thresholds" and "Per-state two-sweep stop rule." Each county runs **at least two sweeps** unless the first one tripped the stop thresholds (<3 net new manifests, <10 net new PDFs, >80% rejects). A productive first sweep means run a second one with widened anchors (city-name variants, host-family expansion, recorded-document phrase searches). Do not interpret "first sweep didn't fail" as "this county is done."
+
+Genuine completion looks like: every county has had ≥2 sweeps OR tripped the stop rule; every productive host family has been promoted to deterministic mining; every aggregator/registry/directory in the source-family inventory has been swept or formally declined; and the budget envelope is 70–90% spent. Stop earlier only when (a) a cost cap is genuinely hit (write a partial retrospective + commit), or (b) the user explicitly asks for status.
 
 ### Required artifacts on completion
 
-- state_scrapers/{state-lower}/results/{run_id}/final_state_report.json
-- state_scrapers/{state-lower}/notes/retrospective.md (see Phase 10 requirements; mandatory)
-- A commit and push of the retrospective + final_state_report
+- `state_scrapers/{state-lower}/notes/source-inventory.md` — every source family considered for {state-name}, marked productive / sterile / untried-with-reason. Written incrementally during the run; complete before the retrospective.
+- `state_scrapers/{state-lower}/results/{run_id}/final_state_report.json`
+- `state_scrapers/{state-lower}/notes/retrospective.md` (see Phase 10 requirements; mandatory). The retro must include a "What I didn't try and why" section, cross-referenced against `source-inventory.md`. If the budget envelope is < 70% spent, the retro must include per-budget-line diminishing-returns justification.
+- A commit and push of the source-inventory + retrospective + final_state_report.
 
 Begin now.
 ```
@@ -140,6 +156,7 @@ Substitution table:
 | `{DISCOVERY_PRIMARY}` | `keyword-Serper-per-county` |
 | `{DISCOVERY_FALLBACK_NOTE}` | `with aggregator/open-portal supplement only when Appendix D documents one for this state` |
 | `{PARALLEL_STATES}` | `NH, ME, WY` |
+| `{PEER_BENCHMARK}` | `peer Tier 0 keyword-Serper runs (DE Sussex open-portal, NH after fallback) produced 80–150 live HOAs in a single session; aim for that range and beyond, not for the prior in-state baseline` |
 | `{COUNTY_GUIDANCE}` | `Vermont's 14 counties (Addison, Bennington, Caledonia, Chittenden, Essex, Franklin, Grand Isle, Lamoille, Orange, Orleans, Rutland, Washington, Windham, Windsor). Highest HOA density: Chittenden (Burlington), Rutland, Washington (Montpelier/Stowe), Bennington, Lamoille (resort condos).` |
 | `{NAME_PATTERN_NOTES}` | (empty) |
 | `{GENERIC_REJECT_TOKENS}` | `condominium / association / Vermont` |

@@ -10,6 +10,24 @@ other; pick one per state based on the suitability matrix in §1.
 
 ---
 
+## Intent and success framing
+
+**The job is to find every plausible HOA in the state's public surface area, up to but not over the budget envelope.** This is a source-exhaustion task, not a target-attainment task — success is measured by what's left untried, not by hitting a numeric floor. Three rules that follow:
+
+1. **Anchor to the registry size, not to prior session baselines.** The registry is your universe — `live_count / bank_entity_count` is the source-stop-aligned success metric (target ≥10% per §5e). If the registry has 3,289 entities and the run lives 200, the session is incomplete; document discovery has more sources to try (broader Serper templates, mgmt-company harvesting, a second pass with relaxed filename heuristics, etc.).
+
+2. **Budgets are envelopes, not ceilings.** Plan to use 70–90% of each cost cap. Under-spending more than that without a written diminishing-returns justification is a failure mode, not a virtue. Concretely: if you used $5 of a $25 DocAI cap, the retrospective must answer "the next $X of DocAI would have yielded < $X because [specific reason]" — not "we came in well under cap."
+
+3. **Source-stop, not target-stop.** Stop conditions are about *sources*: stop when (a) every entity in the registry has been swept ≥2 times with widened query templates, **and** (b) management-company harvesting / aggregator harvest / page-1-OCR-verification (per §3b) have been run or formally declined, **and** (c) the budget envelope is 70–90% spent. A run that satisfies the `live / bank_entity_count ≥ 10%` floor but stopped after one Serper template per entity is a partial run.
+
+**Required structural counterweight: source-family inventory.** Produce `state_scrapers/{state}/notes/source-inventory.md` listing every document-discovery source considered (3 default Serper templates per entity, jurisdiction-specific governing-doc vocabulary variants, mgmt-co portfolios, recorded-doc registry direct probes, page-1 OCR cross-validation, second-pass discovery with relaxed filters, …) — each marked productive / sterile / untried-with-reason. The Phase 10 retrospective cross-references it. Without it, "what didn't I try" is hand-wavable; with it, the gap is visible.
+
+**Defer retrospective drafting** until the source-family inventory is exhausted. Drafting wrap-up text mid-session is a tell that the agent has mentally checked out; redirect to the next yield lever.
+
+The IL downstate session (May 2026, keyword-Serper sister playbook) is the canonical example of this failure mode and what to do differently — see `state_scrapers/il/notes/retrospective-downstate.md` "What didn't work" + "Lessons for the playbook" for a worked postmortem. The same failure shape applies here.
+
+---
+
 ## 0. When to use this playbook (vs. the keyword-Serper one)
 
 The keyword-Serper playbook works when:
@@ -516,11 +534,27 @@ file generation. Copy and adapt for new states.
    --state-name {Full Name} --apply`. Wall time ~10–15s/entity at N=1,
    ~3s/entity at N=4.
 5. Standard Phases 7–10 (prepare, import, enrich, Phase 10).
-6. Verify `live / bank_entity_count` ≥ 10%; investigate if not.
-7. Write `state_scrapers/{state}/notes/retrospective.md` covering:
+6. Verify `live / bank_entity_count` ≥ 10%; investigate if not. **If below
+   10%, do not declare done — try a second discovery pass with widened
+   query templates (statute-vocabulary variants, relaxed filename
+   heuristic), mgmt-company harvest as a supplement, and/or page-1 OCR
+   verification on the unmatched subset.** A run sitting at 5% with
+   budget unused is a partial run, not a finished one.
+7. **Pre-retro: complete `state_scrapers/{state}/notes/source-inventory.md`**
+   listing every document-discovery source considered (Serper templates,
+   mgmt-co portfolios, jurisdictional governing-doc vocabulary variants,
+   second-pass with relaxed filters, page-1 OCR verification, …) —
+   productive / sterile / untried-with-reason. The retrospective
+   cross-references this file.
+8. Write `state_scrapers/{state}/notes/retrospective.md` covering:
    - Registry source, "as-of" date, total entities pulled.
    - PDF discovery hit rate (entities with ≥1 banked PDF / total entities).
    - Phase 10 hard-delete rate (target < 10%).
+   - **Budget-envelope utilization** per cost line (DocAI / Serper /
+     OpenRouter). Any line < 70% utilized requires a one-sentence
+     diminishing-returns justification.
+   - **What didn't I try and why** — cross-referenced against
+     `source-inventory.md`.
    - Final `live_entity_count`, map coverage, total cost.
    - What broke during the registry pull and how you fixed it.
 
