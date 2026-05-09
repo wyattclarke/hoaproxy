@@ -1,0 +1,16 @@
+"Arkansas" "Independence County" "homeowners association" declaration filetype:pdf
+"Arkansas" "Independence County" "condominium association" bylaws filetype:pdf
+"Arkansas" "Independence County" "owners association" covenants filetype:pdf
+"Batesville" "Arkansas" "homeowners association" "declaration" filetype:pdf
+"Batesville" "Arkansas" "condominium association" bylaws filetype:pdf
+"Batesville" "Arkansas" "covenants" "subdivision" filetype:pdf
+"Batesville" "Arkansas" "CC&Rs" filetype:pdf
+"Batesville" "Arkansas" "townhouse" "declaration" filetype:pdf
+"Batesville" "Arkansas" "master association" filetype:pdf
+"Batesville" "Arkansas" "estates" "covenants" filetype:pdf
+"Batesville" "Arkansas" "planned community" declaration filetype:pdf
+"Southside" "Arkansas" "homeowners association" filetype:pdf
+"Arkansas" "Independence County" "amended and restated declaration" filetype:pdf
+"Arkansas" "Independence County" "articles of incorporation" "homeowners" filetype:pdf
+"Batesville" "Arkansas" "Recorder" "Declaration" filetype:pdf
+"Arkansas" "Independence County" "Circuit Clerk" filetype:pdf

@@ -90,6 +90,14 @@ COUNTY_RUNS: list[tuple[str, str | None]] = [
     ("sd_pennington_serper_queries.txt", "Pennington"),
     ("sd_lincoln_serper_queries.txt", "Lincoln"),
     ("sd_brown_serper_queries.txt", "Brown"),
+    ("sd_codington_serper_queries.txt", "Codington"),
+    ("sd_brookings_serper_queries.txt", "Brookings"),
+    ("sd_yankton_serper_queries.txt", "Yankton"),
+    ("sd_meade_serper_queries.txt", "Meade"),
+    ("sd_lawrence_serper_queries.txt", "Lawrence"),
+    ("sd_davison_serper_queries.txt", "Davison"),
+    ("sd_beadle_serper_queries.txt", "Beadle"),
+    ("sd_hughes_serper_queries.txt", "Hughes"),
 ]
 
 

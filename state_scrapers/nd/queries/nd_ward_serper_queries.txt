@@ -1,0 +1,16 @@
+"North Dakota" "Ward County" "homeowners association" declaration filetype:pdf
+"North Dakota" "Ward County" "condominium association" bylaws filetype:pdf
+"North Dakota" "Ward County" "owners association" covenants filetype:pdf
+"Minot" "North Dakota" "homeowners association" "declaration" filetype:pdf
+"Minot" "North Dakota" "condominium association" bylaws filetype:pdf
+"Minot" "North Dakota" "covenants" "subdivision" filetype:pdf
+"Minot" "North Dakota" "CC&Rs" filetype:pdf
+"Minot" "North Dakota" "townhouse" "declaration" filetype:pdf
+"Minot" "North Dakota" "townhome" "association" filetype:pdf
+"Minot" "North Dakota" "master association" filetype:pdf
+"Minot" "North Dakota" "estates" "covenants" filetype:pdf
+"Minot" "North Dakota" "planned community" declaration filetype:pdf
+"North Dakota" "Ward County" "amended and restated declaration" filetype:pdf
+"North Dakota" "Ward County" "articles of incorporation" "homeowners" filetype:pdf
+"Minot" "North Dakota" "Recorder" "Declaration" filetype:pdf
+"North Dakota" "Ward County" "Recorder" filetype:pdf

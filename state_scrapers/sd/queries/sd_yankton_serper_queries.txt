@@ -1,0 +1,16 @@
+"South Dakota" "Yankton County" "homeowners association" declaration filetype:pdf
+"South Dakota" "Yankton County" "condominium association" bylaws filetype:pdf
+"South Dakota" "Yankton County" "owners association" covenants filetype:pdf
+"Yankton" "South Dakota" "homeowners association" "declaration" filetype:pdf
+"Yankton" "South Dakota" "condominium association" bylaws filetype:pdf
+"Yankton" "South Dakota" "covenants" "subdivision" filetype:pdf
+"Yankton" "South Dakota" "CC&Rs" filetype:pdf
+"Yankton" "South Dakota" "townhouse" "declaration" filetype:pdf
+"Yankton" "South Dakota" "master association" filetype:pdf
+"Yankton" "South Dakota" "estates" "covenants" filetype:pdf
+"Yankton" "South Dakota" "planned community" declaration filetype:pdf
+"Lewis and Clark Lake" "South Dakota" "condominium" "association" filetype:pdf
+"South Dakota" "Yankton County" "amended and restated declaration" filetype:pdf
+"South Dakota" "Yankton County" "articles of incorporation" "homeowners" filetype:pdf
+"Yankton" "South Dakota" "Register of Deeds" "Declaration" filetype:pdf
+"South Dakota" "Yankton County" "Register of Deeds" filetype:pdf
