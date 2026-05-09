@@ -370,6 +370,7 @@ def bank_hoa(
     state_verified_via: str | None = None,
     bucket_name: str = DEFAULT_BUCKET,
     client: gcs.Client | None = None,
+    pinned_name: bool = False,
 ) -> str:
     """Write or merge an HOA record into the bank. Returns the manifest GCS URI.
 
@@ -396,9 +397,12 @@ def bank_hoa(
 
     # Name-quality guard: detect and attempt to recover dirty names before
     # they occupy a canonical state/county slot in the bank.
+    # ``pinned_name=True`` bypasses this check — used by name-list-first
+    # discovery where the name comes from an authoritative registry (e.g.
+    # DC CONDO REGIME, HI DCCA AOUO) and is curated by definition.
     from hoaware.name_utils import derive_clean_slug, is_dirty  # noqa: PLC0415
 
-    dirty, dirty_reason = is_dirty(name)
+    dirty, dirty_reason = (False, "") if pinned_name else is_dirty(name)
     county_override: str | None = None
     if dirty:
         source_url = metadata_source.get("source_url")

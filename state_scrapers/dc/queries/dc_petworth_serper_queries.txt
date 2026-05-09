@@ -1,0 +1,18 @@
+filetype:pdf "Petworth" "District of Columbia" "Declaration of Covenants" "Homeowners Association"
+filetype:pdf "Petworth, District of Columbia" "Declaration of Restrictions" "Homes Association"
+filetype:pdf "Petworth" "District of Columbia" "Declaration of Condominium" "Association"
+filetype:pdf "Register of Deeds" "Petworth, District of Columbia" "Homeowners Association"
+filetype:pdf "Articles of Incorporation" "Petworth, District of Columbia" "Homeowners Association"
+filetype:pdf "Amendment to Declaration" "Petworth, District of Columbia" "Homeowners Association"
+filetype:pdf "Restated Bylaws" "District of Columbia" "Petworth" "Homeowners Association"
+filetype:pdf "Supplemental Declaration" "District of Columbia" "Petworth"
+filetype:pdf "Petworth" "District of Columbia" "Property Owners Association" "Covenants"
+filetype:pdf "Petworth" "District of Columbia" "Master Deed" "Condominium"
+"Petworth" "District of Columbia" "HOA documents" "bylaws"
+"Petworth" "District of Columbia" "homes association" documents
+"Petworth" "District of Columbia" "governing documents" "homeowners association"
+"Petworth" "District of Columbia" "condominium association" "declaration"
+site:.gov/DocumentCenter/View "District of Columbia" "Petworth" "Homeowners Association" "Declaration"
+site:.gov/AgendaCenter/ViewFile "District of Columbia" "Petworth" "Homeowners Association"
+inurl:/wp-content/uploads/ "District of Columbia" "Petworth" "homeowners association" bylaws
+inurl:/wp-content/uploads/ "District of Columbia" "Petworth" "condominium association" declaration

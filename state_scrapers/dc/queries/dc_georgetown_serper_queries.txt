@@ -1,0 +1,18 @@
+filetype:pdf "Georgetown" "District of Columbia" "Declaration of Covenants" "Homeowners Association"
+filetype:pdf "Georgetown, District of Columbia" "Declaration of Restrictions" "Homes Association"
+filetype:pdf "Georgetown" "District of Columbia" "Declaration of Condominium" "Association"
+filetype:pdf "Register of Deeds" "Georgetown, District of Columbia" "Homeowners Association"
+filetype:pdf "Articles of Incorporation" "Georgetown, District of Columbia" "Homeowners Association"
+filetype:pdf "Amendment to Declaration" "Georgetown, District of Columbia" "Homeowners Association"
+filetype:pdf "Restated Bylaws" "District of Columbia" "Georgetown" "Homeowners Association"
+filetype:pdf "Supplemental Declaration" "District of Columbia" "Georgetown"
+filetype:pdf "Georgetown" "District of Columbia" "Property Owners Association" "Covenants"
+filetype:pdf "Georgetown" "District of Columbia" "Master Deed" "Condominium"
+"Georgetown" "District of Columbia" "HOA documents" "bylaws"
+"Georgetown" "District of Columbia" "homes association" documents
+"Georgetown" "District of Columbia" "governing documents" "homeowners association"
+"Georgetown" "District of Columbia" "condominium association" "declaration"
+site:.gov/DocumentCenter/View "District of Columbia" "Georgetown" "Homeowners Association" "Declaration"
+site:.gov/AgendaCenter/ViewFile "District of Columbia" "Georgetown" "Homeowners Association"
+inurl:/wp-content/uploads/ "District of Columbia" "Georgetown" "homeowners association" bylaws
+inurl:/wp-content/uploads/ "District of Columbia" "Georgetown" "condominium association" declaration
