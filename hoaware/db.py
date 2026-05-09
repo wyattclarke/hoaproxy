@@ -365,6 +365,45 @@ def _ensure_table_column(
     conn.commit()
 
 
+def _relax_users_password_hash_nullable(conn: sqlite3.Connection) -> None:
+    # Older prod DBs were created with users.password_hash NOT NULL. Current
+    # schema makes it nullable so Google-SSO accounts (no password) can exist.
+    # SQLite can't drop NOT NULL via ALTER, so rebuild the table when needed.
+    # Caller must run this AFTER the google_id column has been added.
+    cols = conn.execute("PRAGMA table_info(users)").fetchall()
+    pw = next((c for c in cols if c["name"] == "password_hash"), None)
+    if pw is None or int(pw["notnull"]) == 0:
+        return
+    conn.execute("PRAGMA foreign_keys=OFF")
+    try:
+        conn.executescript(
+            """
+            BEGIN;
+            CREATE TABLE users_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                email TEXT NOT NULL UNIQUE,
+                password_hash TEXT,
+                display_name TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                verified_at TIMESTAMP,
+                google_id TEXT UNIQUE
+            );
+            INSERT INTO users_new (id, email, password_hash, display_name, created_at, verified_at, google_id)
+                SELECT id, email, password_hash, display_name, created_at, verified_at, google_id
+                FROM users;
+            DROP TABLE users;
+            ALTER TABLE users_new RENAME TO users;
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id);
+            COMMIT;
+            """
+        )
+        bad = conn.execute("PRAGMA foreign_key_check").fetchall()
+        if bad:
+            raise RuntimeError(f"users-table rebuild left dangling FKs: {bad}")
+    finally:
+        conn.execute("PRAGMA foreign_keys=ON")
+
+
 _VEC_DIM = 1536  # text-embedding-3-small
 _vec_load_failed = False
 
@@ -523,6 +562,8 @@ def get_connection(db_path: Path) -> sqlite3.Connection:
     _ensure_table_column(conn, "users", "google_id", "TEXT")
     # Add unique index for google_id (safe if column was created with UNIQUE in schema)
     conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id)")
+    # Drop legacy NOT NULL on users.password_hash (Google SSO needs it nullable)
+    _relax_users_password_hash_nullable(conn)
     # Embedding column for inline vector search (replaces Qdrant)
     _ensure_table_column(conn, "chunks", "embedding", "BLOB")
     # Per-document agent metadata (Phase 1)

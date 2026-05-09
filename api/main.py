@@ -4551,41 +4551,47 @@ def admin_extract_doc_zips(request: Request, state: str | None = None, limit: in
     return {"hoas": out, "total": len(out)}
 
 
-@app.post("/admin/backup")
-def admin_backup(request: Request):
-    """Snapshot the SQLite DB and uploaded PDFs to GCS, with retention."""
-    _require_admin(request)
-    import tarfile
+def _run_admin_backup(db_path: str, docs_root) -> None:
+    # Synchronous backup worker. Logs progress so server logs are the
+    # source of truth for whether a scheduled backup actually finished.
+    import sqlite3 as _sqlite3
     import tempfile
     from datetime import datetime, timezone
     from google.cloud import storage as gcs
 
-    settings = load_settings()
     bucket_name = os.environ.get("BACKUP_GCS_BUCKET", "hoaproxy-backups")
     max_backups = int(os.environ.get("BACKUP_MAX_COPIES", "7"))
-
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    started = time.monotonic()
+    log = logging.getLogger("admin.backup")
+    log.info("backup start stamp=%s", stamp)
+
     client = gcs.Client()
     gcs_bucket = client.bucket(bucket_name)
-    uploaded_blobs: list[str] = []
+    uploaded: list[str] = []
     errors: list[str] = []
 
-    # --- 1. SQLite DB snapshot (incremental backup, low memory) ---
-    # Copies 50 pages at a time with 50ms sleep between batches,
-    # avoiding the memory spike of VACUUM INTO.
+    # --- 1. SQLite DB snapshot ---
+    # pages=5000 (~20 MB per batch) with 5 ms sleep keeps the live DB
+    # responsive while finishing a 50+ GB snapshot in minutes, not hours.
     tmp_dir = tempfile.mkdtemp()
     tmp_db = os.path.join(tmp_dir, "backup.db")
     try:
-        import sqlite3 as _sqlite3
-        src = _sqlite3.connect(settings.db_path)
+        t0 = time.monotonic()
+        src = _sqlite3.connect(db_path)
         dst = _sqlite3.connect(tmp_db)
-        src.backup(dst, pages=50, sleep=0.05)
+        src.backup(dst, pages=5000, sleep=0.005)
         dst.close()
         src.close()
-        db_blob_name = f"db/hoa_index-{stamp}.db"
-        gcs_bucket.blob(db_blob_name).upload_from_filename(tmp_db)
-        uploaded_blobs.append(db_blob_name)
+        log.info("backup snapshot done in %.1fs (%d bytes)",
+                 time.monotonic() - t0, os.path.getsize(tmp_db))
+        t1 = time.monotonic()
+        blob_name = f"db/hoa_index-{stamp}.db"
+        gcs_bucket.blob(blob_name).upload_from_filename(tmp_db)
+        uploaded.append(blob_name)
+        log.info("backup upload done in %.1fs blob=%s", time.monotonic() - t1, blob_name)
     except Exception as exc:
+        log.exception("backup db step failed")
         errors.append(f"db: {exc}")
     finally:
         if os.path.exists(tmp_db):
@@ -4594,50 +4600,58 @@ def admin_backup(request: Request):
             os.rmdir(tmp_dir)
 
     # --- 2. PDF docs (upsert: only upload new/changed files) ---
-    docs_root = settings.docs_root
     if docs_root.exists() and any(docs_root.iterdir()):
         try:
-            # Build index of existing remote docs by relative path → size
+            t2 = time.monotonic()
             remote_docs: dict[str, int] = {}
             for b in gcs_bucket.list_blobs(prefix="docs/files/"):
                 remote_docs[b.name.removeprefix("docs/files/")] = b.size or 0
-
             upserted = 0
             for doc_path in sorted(docs_root.rglob("*")):
                 if not doc_path.is_file():
                     continue
                 rel = str(doc_path.relative_to(docs_root))
-                local_size = doc_path.stat().st_size
-                if rel in remote_docs and remote_docs[rel] == local_size:
-                    continue  # unchanged
-                gcs_bucket.blob(f"docs/files/{rel}").upload_from_filename(
-                    str(doc_path)
-                )
+                if rel in remote_docs and remote_docs[rel] == doc_path.stat().st_size:
+                    continue
+                gcs_bucket.blob(f"docs/files/{rel}").upload_from_filename(str(doc_path))
                 upserted += 1
             if upserted:
-                uploaded_blobs.append(f"docs/files/ ({upserted} upserted)")
+                uploaded.append(f"docs/files/ ({upserted} upserted)")
+            log.info("backup docs done in %.1fs upserted=%d", time.monotonic() - t2, upserted)
         except Exception as exc:
+            log.exception("backup docs step failed")
             errors.append(f"docs: {exc}")
 
     # --- 3. Retention: keep only the most recent DB snapshots ---
-    # (Docs use upsert into docs/files/ — no rotation needed)
     try:
         db_blobs = list(gcs_bucket.list_blobs(prefix="db/"))
         db_blobs.sort(key=lambda b: b.name, reverse=True)
         for old_blob in db_blobs[max_backups:]:
             old_blob.delete()
     except Exception as exc:
+        log.exception("backup retention step failed")
         errors.append(f"retention(db): {exc}")
 
-    if errors and not uploaded_blobs:
-        raise HTTPException(status_code=500, detail="; ".join(errors))
+    log.info("backup finish elapsed=%.1fs uploaded=%d errors=%d",
+             time.monotonic() - started, len(uploaded), len(errors))
 
-    return {
-        "status": "ok" if not errors else "partial",
-        "uploaded": uploaded_blobs,
-        "errors": errors or None,
-        "retention": f"keeping last {max_backups}",
-    }
+
+@app.post("/admin/backup")
+def admin_backup(request: Request, background_tasks: BackgroundTasks):
+    """Trigger a backup of the SQLite DB and uploaded PDFs to GCS.
+
+    Returns 202 immediately and runs the work in a background task — a
+    snapshot of the multi-GB DB takes minutes, well past Render's edge
+    timeout. Watch server logs (logger=admin.backup) for completion.
+    """
+    _require_admin(request)
+    settings = load_settings()
+    background_tasks.add_task(_run_admin_backup, settings.db_path, settings.docs_root)
+    return Response(
+        status_code=202,
+        content=json.dumps({"status": "started", "message": "backup running in background"}),
+        media_type="application/json",
+    )
 
 
 # ---------------------------------------------------------------------------
