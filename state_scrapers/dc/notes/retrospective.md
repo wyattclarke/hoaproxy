@@ -1,23 +1,48 @@
 # DC HOA Scrape Retrospective
 
-Two-pass run history. Pass 1 (overnight 9-state orchestrator, 2026-05-08)
-ran neighborhood-anchored Serper sweeps and produced 1 live HOA after
-Phase 10 deletion of mostly .gov/court noise. Pass 2 (DC CAMA + name-list
-namelist_discover, 2026-05-08 → 2026-05-09) migrated DC to the
-[name-list-first playbook](../../../docs/name-list-first-ingestion-playbook.md)
-using the DC GIS CONDO REGIME table.
+Three-pass run history.
+- **Pass 1** (overnight 9-state orchestrator, 2026-05-08): neighborhood-
+  anchored Serper sweeps → 1 live HOA after Phase 10.
+- **Pass 2** (DC CAMA + namelist_discover, 2026-05-08 → 2026-05-09):
+  registry-driven name-anchored Serper → 21 live HOAs *with* governing
+  documents.
+- **Pass 3** (DC stub experiment, 2026-05-09): bulk-create from the
+  CONDO REGIME registry **without docs**, polygons from DC GIS Layer 40,
+  via the new `/admin/create-stub-hoas` endpoint → **3,218 live HOAs**.
 
 ## TL;DR
 
-- **Final state:** 21 live HOAs, 16 mapped (76%), 0 out-of-bbox.
-- **Coverage of estimated universe:** ~0.6% of the 3,289-condo registry.
-  Most DC condos do not publish governing docs to the public web — they're
-  paywalled at DC Recorder of Deeds or login-walled at CINC/AppFolio.
-- **Discovery pattern adopted:** name-list-first per
-  `docs/name-list-first-ingestion-playbook.md` (registry → name-anchored
-  Serper → bank with `pinned_name=True`).
+- **Final state (post-stub experiment):** **3,218 live HOAs, ~95% mapped
+  (polygon centroid + boundary), 0 out-of-bbox.** 21 of these have
+  governing documents from the Serper discovery pass; the remaining
+  3,016 carry only registry name + polygon, and ~181 are city-only
+  (no Layer 40 match for the regime).
+- **Coverage of estimated universe:** ~98% of the 3,289-condo CAMA
+  registry.
+- **What this proves:** for jurisdictions where governing docs are
+  paywalled or login-walled (DC Recorder of Deeds, CINC/AppFolio
+  portals), an authoritative registry + DC GIS polygon source can
+  surface the entity universe without docs. Ship the experiment and
+  observe whether docless entries are useful to users.
+- **Discovery patterns adopted:** name-list-first per
+  `docs/name-list-first-ingestion-playbook.md` (Pass 2) + new
+  `/admin/create-stub-hoas` for docless entities (Pass 3).
 
-## Pipeline numbers
+## Pipeline numbers (Pass 3 final)
+
+| Stage | Count |
+|---|---|
+| CAMA CONDO REGIME entities pulled | 3,289 |
+| With governing docs (Pass 2) | 21 |
+| Stub HOAs created from registry (Pass 3) | 3,197 |
+| Polygon-mapped (Layer 40 hit) | 3,016 (~92%) |
+| City-only (no Layer 40 match) | 181 (~6%) |
+| **Total live** | **3,218** |
+| Map coverage (in-bbox) | ~95% sampled, 0 OOB |
+| Wall time for Pass 3 | ~16 min (3,289 entities @ ~3.4/s, single-thread) |
+| Cost for Pass 3 | $0 (DC GIS is free, no Serper, no DocAI) |
+
+## Pipeline numbers (Pass 2 — docs-only)
 
 | Stage | Count |
 |---|---|
