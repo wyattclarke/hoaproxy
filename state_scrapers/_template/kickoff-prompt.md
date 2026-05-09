@@ -102,6 +102,8 @@ Delegate to cheaper subagents (Explorer / Runner / Curator / Verifier roles as d
 
 5. Per-county Serper sweeps: for each county in {COUNTY_GUIDANCE}, run targeted queries combining county/town anchors with HOA-shape tokens (e.g. `"<County> County, {state-name}" "Declaration of Covenants" filetype:pdf`, plus the host-family patterns from Appendix E of the playbook). Score candidates on specific (non-generic) name-token overlap. Reject hits whose only overlap is generic ({GENERIC_REJECT_TOKENS}). Promote any host family to deterministic-mode scraping after two productive sweeps — see Phase 2 source-family promotion rule.
 
+   **Use OCR-first slug + geo extraction at bank time.** Search snippets and PDF filenames are weak signals for the HOA name; the recorded name + property address live on page 1 of the document. Run a single-page DocAI OCR (~$0.0015/manifest) before committing the bank slug, then ask DeepSeek to extract the canonical name + city/county/ZIP/subdivision in one call. The bank manifest then lands at `{STATE}/{county}/{slug}/` correctly the first time, populates `address.*` directly, and skips most `_unresolved-name/` traffic + Phase 10 LLM rename work. See "OCR-first slug + geo extraction" in Phase 2 of the playbook.
+
    {STATE_SPECIFIC_NOTES}
 
 6. Maintain state_scrapers/{state-lower}/notes/discovery-handoff.md with running bank counts, source families attempted, query files used, false-positive patterns to block, model spend, and next branches. Commit as you go.

@@ -239,6 +239,44 @@ for keyword-Serper-discovered states (see Phase 10 below). Patching the regex
 helps, but the LLM is the only reliable arbiter when the source HTML/snippet
 is genuinely ambiguous.
 
+**OCR-first slug + geo extraction (preferred for keyword-Serper).** The
+search-snippet name and PDF filename are weak signals. The strongest
+signal lives inside the document itself — the recorded HOA name and
+property address are almost always on page 1 of a Declaration / CC&Rs /
+Bylaws PDF. Run a single-page DocAI OCR (~$0.0015) on each candidate PDF
+*before* committing the bank slug, then:
+
+1. Pass the OCR text + Serper snippet through one DeepSeek call to extract
+   the canonical HOA name (same prompt shape as
+   `clean_dirty_hoa_names.py::_ask_llm`). Use the LLM's name to build the
+   slug; fall back to `_unresolved-name/` only if the LLM declines.
+2. Pull `address.city`, `address.county`, `address.postal_code`, and
+   `subdivision` directly from the OCR text using the same call (or a
+   short follow-up regex extractor over the page-1 text). These populate
+   the bank manifest's `address` block before the slug is committed and
+   feed Phase 6 geocoding deterministically.
+
+Doing this at bank time (Phase 2) instead of after import (Phase 10)
+collapses three downstream steps:
+
+- The bank routes manifests to the correct `{STATE}/{county}/{slug}/`
+  prefix the first time, eliminating most `_unresolved-name/` traffic.
+- Phase 6 geocoding starts with a real address, not a polygon-only guess
+  from the HOA name; ZIP-centroid + Serper-Places fallbacks become
+  exception paths, not the primary.
+- Phase 10 LLM rename passes shrink to a sanity check rather than the
+  load-bearing cleanup step (the May 2026 batch had 50–70% bank-stage
+  noise rate; OCR-first slug closes that gap before live import).
+
+Per-page DocAI cost is the same whether OCR happens at Phase 2 or Phase 5
+(~$0.0015/page). The cap (`MAX_PAGES_FOR_OCR_SCANNED = 25`,
+`MAX_PAGES_FOR_OCR = 200`) still applies — a Phase 2 OCR-first pass uses
+exactly 1 page per candidate, so a 200-manifest sweep costs $0.30 for
+the slug+geo extraction. Reference implementation:
+`hoaware/discovery/_clean_direct_pdf_leads.py::detect_state_county()` is
+the existing pattern — generalize it to also extract the canonical name
+and the full address block, not just `state` + `county`.
+
 **Per-branch pivot order:**
 1. County sweeps dry → host-family expansion.
 2. Source family stops → legal-phrase searches over recorded documents (`Register of Deeds`, `{state} not-for-profit corporation`, `Articles of Incorporation`, `Amendment to Declaration`, `Restated Bylaws`, `Supplemental Declaration`).
@@ -379,8 +417,10 @@ prepared-ingest ledger so retrospectives can quantify the leak rate.
 
 Run after Phase 5, before prepared bundles. OCR text from declarations, plats, recorder stamps, minutes, budgets, and insurance certificates contributes city/county/ZIP/subdivision clues.
 
+**If Phase 2 used OCR-first slug + geo extraction** (recommended for keyword-Serper — see Phase 2 callout): the bank manifest already carries `address.city`, `address.county`, `address.postal_code`, and `subdivision` extracted from page-1 OCR. Phase 6 then primarily handles polygon enrichment (OSM/Nominatim) and ZIP-centroid backfill where the address is incomplete; the `place_centroid` and `city_only` fallbacks become exception paths rather than the main flow.
+
 **Best-effort resolution order:**
-1. Manifest public street address or subdivision community address.
+1. Manifest public street address or subdivision community address (populated either from scrape metadata in Phase 3, or from page-1 OCR if Phase 2 ran OCR-first slug+geo).
 2. OSM/Nominatim polygon — only if the public instance is responding (see warning).
 3. Serper Places result with strict state + name checks.
 4. ZIP centroid: `https://api.zippopotam.us/us/{zip}` (small scale) or Census ZCTA (larger).
