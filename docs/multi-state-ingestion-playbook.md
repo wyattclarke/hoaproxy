@@ -2,6 +2,8 @@
 
 This is the single canonical reference for autonomous LLM-driven HOA discovery, banking, and live ingestion across all 51 US jurisdictions. It supersedes four overlapping docs (listed in "Doc Status" below) and covers every phase from context priming through mandatory retrospective. For the `/upload` API contract, see `docs/agent-ingestion.md` (unchanged).
 
+> **When NOT to use this playbook.** This playbook assumes keyword-Serper-per-county is the right discovery pattern. For dense urban condo/coop jurisdictions where governing docs are paywalled (DC Recorder of Deeds, HI Bureau of Conveyances, NYC ACRIS) or login-walled (CINC/AppFolio/FrontSteps portals), use the companion playbook [`docs/name-list-first-ingestion-playbook.md`](./name-list-first-ingestion-playbook.md) instead. That pattern bypasses Serper for entity discovery (pulls a public registry first) and uses Serper only for documents, anchored on registry names. DC was migrated from this playbook to the name-list-first pattern after the keyword-Serper run on DC neighborhoods produced only 5 live HOAs from 165 bank manifests (the Serper sweep matched .gov noise; the LLM Phase 10 pass correctly rejected most as non-HOAs).
+
 ---
 
 ## TL;DR by Tier
@@ -65,14 +67,14 @@ Source: `docs/cai_state_hoa_counts.txt`. Status as of 2026-05-07.
 | NH | <2,500 | 1 | done | Keyword-Serper after SoS-first failed (Akamai-walled QuickStart) |
 | NV | 3,800 | 1 | not-started | — |
 | UT | 3,700 | 1 | not-started | — |
-| HI | 1,600 | 1 | not-started | Condo-registry (HI Bureau of Conveyances); condo-heavy |
+| HI | 1,600 | 1 | name-list-first | Migrated to name-list-first playbook 2026-05-08 (DCCA AOUO Contact List PDF, ~1,445 entities). |
 | AL | >3,000 | 1 | not-started | — |
 | ID | <3,000 | 1 | not-started | — |
 | IA | <3,000 | 1 | not-started | — |
 | RI | <1,250 | 1 | done | Done (historical SoS-first run; not the recommended pattern — see retrospective) |
 | NE | <1,200 | 0 | not-started | — |
 | DE | <1,500 | 0 | done | Open-portal (PaxHOA) + Serper supplement |
-| DC | <1,500 | 0 | not-started | Open-portal (DC Recorder of Deeds; unified municipal) |
+| DC | <1,500 | 0 | name-list-first | Migrated to name-list-first playbook 2026-05-08 (CONDO REGIME table from DC GIS, 3,289 entities). |
 | VT | <1,500 | 0 | not-started | Keyword-Serper recommended |
 | NM | <1,500 | 0 | not-started | — |
 | AK | <1,000 | 0 | not-started | — |
