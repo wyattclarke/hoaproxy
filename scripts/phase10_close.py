@@ -453,7 +453,12 @@ def doc_filename_audit(state: str, base_url: str, run_started_at: str) -> dict[s
         foreign_state_hits = 0
         junk_host_hits = 0
         for d in docs:
-            fname = (d.get("filename") or d.get("path") or "").upper()
+            # Live /hoas/{name}/documents returns relative_path; older callers
+            # used `filename` / `path`. Accept any of them.
+            rp = d.get("relative_path") or d.get("filename") or d.get("path") or ""
+            # Drop the HOA-name prefix from relative_path so it doesn't dominate
+            # the foreign-state regex match
+            fname = (rp.split("/", 1)[-1] if "/" in rp else rp).upper()
             url = d.get("source_url") or ""
             if foreign_state_re.search(fname):
                 foreign_state_hits += 1
