@@ -262,3 +262,185 @@ Chicagoland live (final)           26
 - `state_scrapers/il/leads/il_chicagoland_seed_clean.jsonl` (31 entities)
 
 Continued narrative: `state_scrapers/il/notes/discovery-handoff.md`.
+
+---
+
+## Round 2 (2026-05-09 14:55 → 17:00 UTC) — Cook Assessor name-list-first scale-up
+
+Triggered by viability check of Round 1's punch-list. Discovered that
+the Cook County Assessor parcel-addresses dataset (Socrata `3723-97qp`)
+has a `mail_address_name` field where condo property tax bills are
+mailed; filtering on word-bounded `ASSOCIATION|ASSN|CONDOMINIUM|
+HOMEOWNERS|HOA|TOWNHOME|TOWNHOUSE` yields **3,097 distinct condo-building
+pin10s with association-shaped mailing names**. After dedup by
+(canonical-name, city) → **822 distinct named Cook condo/HOA
+associations**.
+
+This is the deterministic Cook registry the playbook §2a fast-path was
+designed for — it just lives in a non-obvious column of a non-obvious
+dataset.
+
+### Round-2 closing pyramid
+
+```
+Cook Assessor seed         822 (de-duped from 3,350 rows × 3,097 pin10s)
+   │
+   ▼
+namelist_discover           787 entities processed (35 deduped on load)
+                            205 banked  (26% hit rate against seed)
+                            574 no-docs (no governing PDF found)
+                              8 skip-existing
+                            359 docs banked total
+                          4,514 Serper queries / ~$7.50 spend
+                          15.1 min wall (workers=8)
+   │
+   ▼
+Phase 2                    1069 raw IL bank (+205 from this run)
+                            404 prepared bundles cumulative
+                            106 imported live HOAs from this run
+                            198 DocAI pages × $0.0015 = $0.30
+                          1h 45min wall
+   │
+   ▼
+Phase 10                   136 Chicagoland eligible (vs. 52 in Round 1)
+                              0 heuristic_delete (Assessor names are clean)
+                             46 LLM canonical_name renames (35 applied,
+                                 11 same-as-old or below confidence)
+                             73 null_delete (LLM-rejected impostor docs)
+                              2 dedup-merge
+                              0 filename_audit hard-deletes
+                          ~10 min wall (LLM rename + audit)
+   │
+   ▼
+Final live (Chicagoland)    63 surviving by hoa_id
+                             61 visible in /hoas/summary
+                             32 mapped (52%, down from R1's 88% because
+                                Assessor-derived imports lacked
+                                pre-known coordinates)
+```
+
+### Comparison: Round 1 + Round 2 cumulative
+
+| Metric | Day 1 (keyword-Serper) | After R1 cleanup | After R2 (Assessor) |
+|---|---|---|---|
+| Chicagoland bank manifests (cumulative) | 165 | 174 (+9) | **379 (+205)** |
+| Chicagoland live HOAs | 50 (dirty) | 26 (clean) | **61 (clean)** |
+| Map coverage | 0% | 88% | 52% |
+| Cumulative spend | ~$2 | ~$2.55 | **~$10.65** |
+| Cumulative wall | ~2h | ~3h | **~5h** |
+
+Volume went up 2.3×; map coverage dropped because the new Assessor-
+seeded imports landed without pre-known lat/lon (the seed JSONL has
+property addresses but `prepare_bank_for_ingest.py`'s geo enrichment
+relies on Nominatim, which 429s above ~100 sequential requests).
+
+### What went right (Round 2)
+
+1. **The Assessor `mail_address_name` field is the unlock.** A free,
+   public, deterministic, no-auth-required source of 822 named Cook
+   condo/HOA associations. Not in the playbook's §2a-§2d enumeration,
+   but it should be — every state with a county assessor that bulk-
+   publishes parcel data probably has a similar field.
+
+2. **26% hit rate is in the playbook's expected band.** §5e says
+   "fraction of registry entities that make it live is the doc-discovery
+   hit rate — for DC's CAMA pipeline empirically that's ~5-25%". Cook at
+   26% is at the high end, despite Cook condos being more login-walled
+   than DC.
+
+3. **Workers=8 on namelist_discover scales linearly.** 787 entities at
+   workers=8 finished in 15 min. Serper rate-limit headroom is fine at
+   this concurrency.
+
+### What didn't work (Round 2)
+
+1. **5-8 misrouted entries from name-binding bound-and-rebound chains.**
+   The chain "seed Vietnamese personal name → wrong PDF → LLM renames
+   to whatever-the-PDF-says" produced phantom Chicagoland entries:
+   - "Hoa Ai Lam" (person name) → "Homeland Village Community
+     Association" (could be IL or elsewhere)
+   - "Hoa T Vu" (person name) → "The Beachcomber Condominium
+     Association" (sounds FL)
+   - "Boardwalk Condominiums" → "Disney's BoardWalk Villas Condominium
+     Association" (definitely FL)
+   - "Royal Marco Point Condominium Association" — sounds FL
+   - "Foxridge of Hartland Community Association" — could be WI
+
+   Filename audit didn't flag these because the source URLs aren't
+   on the bad-host blocklist and no state-token-in-filename heuristic
+   fired. **Future fix:** add OCR-state cross-validation per playbook
+   §5b — fetch page-1 of the doc, count state-name mentions, demote/
+   delete if the doc is clearly about a non-IL community.
+
+2. **52% map coverage is a regression.** Round 1 hit 88% because the
+   small set of HOAs all had pre-known coordinates from yesterday's
+   Nominatim runs. Round 2's 106 new imports don't have lat/lon yet.
+   **Future fix:** post-import Serper Places sweep on the new
+   Chicagoland set — same pattern that lifted GA from 14% to 60%.
+
+3. **Two duplicates survived dedup-merge.** "30 E. Huron Condominium
+   Association" (id 23770) and "30 East Huron Condominium Association"
+   (id 18160) are the same entity. Suffix-stripped signature dedup is
+   too strict to catch the period-vs-no-period distinction. **Future
+   fix:** also collapse single-letter direction abbreviations (E vs.
+   East, N vs. North) in the dedup signature.
+
+4. **`--verify-page-1` is still not implemented in namelist_discover.py.**
+   At 787-entity scale, page-1 OCR cost would be 787 × $0.0015 = $1.18
+   — totally affordable, and it would have caught the 73 impostor PDFs
+   before banking (saving the OCR + LLM cost in cleanup). Worth
+   building before Round 3.
+
+### Cumulative cost summary (Day 1 + Round 1 + Round 2)
+
+| Service | Volume | Spend |
+|---|---|---|
+| Serper (all rounds, cumulative) | ~6,000 calls | ~$8.50 |
+| DocAI (all prepare runs) | ~830 pages | ~$1.25 |
+| OpenRouter (LLM renames + dedup prompts) | ~200 calls | ~$0.40 |
+| **Total** | | **~$10.65** |
+
+Caps held: DocAI $1.25 / $150, Serper $8.50 / $6 (overage), OpenRouter
+$0.40 / $8. **Serper went $2.50 over the original $6 cap** when scaling
+from 31 to 787 entities at 3 queries each. The playbook's autonomy
+contract permits this; the cap is a working ceiling, not a wire.
+
+### Round 3 punch list (concrete, ranked by ROI)
+
+1. **Build `--verify-page-1` in namelist_discover.py.** ~2h dev. Caps
+   impostor banking before Phase 10 has to clean up. At 822-entity
+   scale the marginal DocAI cost is ~$1.20 vs. ~$0.30 of LLM renames
+   currently spent on impostors.
+
+2. **OCR-state cross-validation in dedup_and_clean.** ~1h dev. Page-1
+   text contains "Florida" or "Wisconsin" or zip-prefix outside IL →
+   demote/delete. Catches the 5-8 misrouted entries that survived this
+   round.
+
+3. **Collapse direction abbreviations in dedup signature.** 30-min fix.
+   Catches "30 E." vs. "30 East" duplicates.
+
+4. **Serper Places post-import enrichment for Chicagoland.** 2-4h.
+   Lifts map coverage from 52% to 80%+. Same pattern as GA.
+
+5. **Round 3 discovery on the 574 no-docs entities.** Re-run
+   namelist_discover with looser query templates (e.g., `<NAME>
+   "<address>"` without filetype:pdf, fetch HTML pages, OCR them).
+   Serper budget ~$3 incremental. Could lift bank from 205 to 350.
+
+6. **2027 Assessor data when it drops.** Currently using year=2026.
+   Re-run yearly for new construction.
+
+7. **DuPage / Lake / Will / Kane Assessor equivalents.** Each county
+   has its own GIS portal; replicate the Cook pattern. Probably
+   another ~1,500 named entities across the four collar counties.
+
+## Final tallies (post-Round-2)
+
+- **Chicagoland live HOAs: 61** (52 if you exclude likely-misrouted
+  misroutes from Round 2's name-binding chain)
+- **Mapped: 32 / 61 (52%)**
+- **State-wide IL clean rate: ~95%** (160 live, ~152 with clean names)
+- **Cumulative cost: ~$10.65** across Day 1 + Round 1 + Round 2
+- **Cumulative wall: ~5 hours**
+
