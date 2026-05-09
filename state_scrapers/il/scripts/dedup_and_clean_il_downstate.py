@@ -97,8 +97,33 @@ CROSS_STATE_LEAK_PREFIXES = {
 # These match patterns the bank_hoa() recovery logic produced for IL.
 _HEURISTIC_DELETE_PATTERNS = [
     # Statute / law titles
-    r"^Illinois\s+(Common\s+Interest|Compiled\s+Statutes|Condominium\s+Property|General\s+Not\s+for\s+Profit)",
+    r"^Illinois\s+(Common\s+Interest|Compiled\s+Statutes|Condominium\s+Property|General\s+Not\s+for\s+Profit|General\s+Assembly)",
     r"^Illinois\s+HOA$",
+    r"^SENATE\s+JOURNAL",
+    r"^HIGHLIGHTS\s+OF\s+THIS\s+ISSUE",
+    # Code / ordinance / resolution numbers (gov boilerplate)
+    r"^Chapter\s+\d+[:.]\s",
+    r"^Chapter\s+\d+\b.*\bHOA$",
+    r"^Ordinance\s+(No\.?|Number)\s+\d",
+    r"^Resolution\s+(Number|No\.?|Index)",
+    r"^RESOLUTION\s+INDEX",
+    r"^Letter\s+Reso\b",
+    r"^Public\s+Review\s+Draft",
+    r"^R\s+Authorizing\s+Purchase\b",
+    # Code books / county/village governance (always junk)
+    r"^Village\s+of\s+[A-Z]\w+\s+HOA$",
+    r"^Town\s+of\s+[A-Z]\w+\s+HOA$",
+    r"^City\s+of\s+[A-Z]\w+\s+HOA$",
+    r"^[A-Z]\w+\s+County\s+Code\s+Chapter\b",
+    r"^Urbana\s+Zoning\s+Ordinance\b",
+    # Court / case / agency
+    r"^Case\s+\d{2}-\d{4,}",
+    r"^Housing\s+Authority\b",
+    r"^Board\s+of\s+Trustees\s+Supplement",
+    r"^Development\s+Services\s+Department",
+    r"^Region\s+\d+\s+Planning\s+Council",
+    r"^STATE\s+OF\s+[A-Z]+\s+COUNTY\s+REC\s+FEE",
+    r"^Of\s+the\s+\w+\s+County\s+Board\s+of\s+Review",
     # Article / blog fragments
     r"^Breaking\s+Down\b",
     r"^BUYING\s+A\s+CONDOMINIUM",
@@ -107,9 +132,12 @@ _HEURISTIC_DELETE_PATTERNS = [
     r"^Revisions\s+in\s+These\s+Turbulent\b",
     r"^Real\s+Estate\s+Condos\s+and\s+Community\s+Assoc",
     r"^Stacey\s+Alcorn\b",
+    r"^How\s+to\s+Prepare\s+Your\b",
+    r"^Resume\s+of\s+\w+",
     # Bankruptcy / docket / case prefixes
     r"^\d{2}-\d{4,}-",
     # Form / boilerplate fragments
+    r"^ALTA[®]?\s+Commitment\b",
     r"^Association\s+Complaint\s+Form",
     r"^Sample\s+Association\s+Complaint",
     r"^Resolving\s+Complaints?\s*HOA?$",
@@ -119,9 +147,19 @@ _HEURISTIC_DELETE_PATTERNS = [
     r"^Developer\s+Turnover",
     r"^Condominiums?:\s+Deconversion",
     r"^Condos\s+and\s+Common\s+Interest",
-    # OCR / very-short junk
+    r"^EPA\s+Designations\s+Rule",
+    r"^HANDBOOK\s+OF\s+(?:&|and)\s+HOA$",
+    r"^Quad\s+Cities\s+Section\s+CONSTITUTION",
+    # OCR / very-short / single-token junk
     r"^Assoc\s*$",
     r"^State\s*$",
+    r"^History\s*$",
+    r"^Review\s*$",
+    r"^Newsletters?\s*$",
+    r"^Resrictions\s*$",
+    r"^Rockton\s*$",
+    r"^Untitled\s+HOA\s*$",
+    r"^Filings\s*$",
     r"^Bloomington\s+HOA$",
     r"^Foundation\s+Ala\s+April$",
     r"^Iaha\s+Revised\s+Fi$",
@@ -129,8 +167,20 @@ _HEURISTIC_DELETE_PATTERNS = [
     r"^Board\s+Review\s+Approved",
     r"^0001\s+HOA",
     r"^Pa\{atine",  # OCR garbage
+    r"^Sa\.,~",  # OCR garbage
+    r"^Llha\s+Protective",
+    r"^Oped\s+Home",
+    r"^Eric\s+Schachter",  # person name
+    r"^Matthew\s+R\.\s+Henderson",  # person name
+    r"^Roscoe\s+C\.\s+Stelford",  # person name
+    r"^Mark\s+Monge\s+Homeowners\b",  # person name appended HOA
     # Single-statute references
     r"^Section\s+\d+",
+    # Out-of-state .gov leak
+    r"^Wichita\.gov\b",
+    r"^Filings\s+401\s+North\s+Wabash",  # Cook (Wabash Ave Chicago) leaked into other county
+    # "filed <X> county" courthouse stamps
+    r"^filed\s+\w+\s+county\b",
     # "And for X" / "For X" prefixes are fragments but the LLM can sometimes
     # salvage when the doc names the HOA — leave to stage 2.
 ]
@@ -281,16 +331,17 @@ def _fetch_documents(base_url: str, hoa: str) -> list[dict]:
     return []
 
 
-def _name_to_prefix_map(import_report_path: Path) -> dict[str, str]:
-    """Map HOA name -> bank prefix from the first-pass live import report."""
+def _name_to_prefix_map(import_report_paths: list[Path]) -> dict[str, str]:
+    """Map HOA name -> bank prefix, merged across one or more import reports."""
     out: dict[str, str] = {}
-    if not import_report_path.exists():
-        return out
-    report = json.loads(import_report_path.read_text())
-    for resp in report.get("responses") or []:
-        for r in (resp.get("body") or {}).get("results") or []:
-            if r.get("hoa") and r.get("prefix"):
-                out[r["hoa"]] = r["prefix"]
+    for p in import_report_paths:
+        if not p.exists():
+            continue
+        report = json.loads(p.read_text())
+        for resp in report.get("responses") or []:
+            for r in (resp.get("body") or {}).get("results") or []:
+                if r.get("hoa") and r.get("prefix"):
+                    out[r["hoa"]] = r["prefix"]  # later report overrides earlier
     return out
 
 
@@ -367,8 +418,9 @@ def main() -> int:
     p.add_argument("--out-dir",
                    default="state_scrapers/il/results/cleanup_downstate")
     p.add_argument("--name-to-prefix",
-                   default="state_scrapers/il/results/il_20260508_114942_claude_phase2/live_import_report.json",
-                   help="Path to first-pass live_import_report.json (used to derive bank prefix per HOA name).")
+                   action="append",
+                   default=None,
+                   help="Path to a live_import_report.json (used to derive bank prefix per HOA name). May be passed multiple times; later files override earlier on collision.")
     p.add_argument("--model", default=DEFAULT_MODEL)
     p.add_argument("--fallback-model", default=FALLBACK_MODEL)
     p.add_argument("--max-text-chars", type=int, default=3500)
@@ -389,8 +441,11 @@ def main() -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
     decisions_path = out_dir / "cleanup_decisions.jsonl"
 
-    name_to_prefix = _name_to_prefix_map(Path(args.name_to_prefix))
-    print(f"name->prefix entries: {len(name_to_prefix)}", file=sys.stderr)
+    paths = [Path(p) for p in (args.name_to_prefix or [
+        "state_scrapers/il/results/il_20260508_114942_claude_phase2/live_import_report.json",
+    ])]
+    name_to_prefix = _name_to_prefix_map(paths)
+    print(f"name->prefix entries: {len(name_to_prefix)} from {len(paths)} report(s)", file=sys.stderr)
 
     summaries = _fetch_summaries(args.base_url, STATE)
     print(f"IL live total: {len(summaries)}", file=sys.stderr)
