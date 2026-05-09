@@ -183,6 +183,33 @@ _HEURISTIC_DELETE_PATTERNS = [
     r"^filed\s+\w+\s+county\b",
     # "And for X" / "For X" prefixes are fragments but the LLM can sometimes
     # salvage when the doc names the HOA — leave to stage 2.
+    # Chicagoland-specific patterns (round-2 from 2026-05-09 dry-run)
+    r"^Document\s+View\s*$",
+    r"^Index\s*$",
+    r"^Resolution\s*$",
+    r"^Title\s+[IVX]+:\s",  # "Title I: General Provisions Chapter 10..."
+    r"^Subdivision,?\s+Site\s+Development",  # "Subdivision, Site Development and Floodplain HOA"
+    r"^Multi-Board\s+Residential",  # form template
+    r"^Municipal\s+Code\s+of\s+\w+\s+HOA$",  # "Municipal Code of Chicago HOA"
+    r"^OF\s*,",  # "OF , CONDITIONS, EASEMENTS HOA"
+    r"^Of\s+John\s+J\.",  # case caption
+    r"^Of\s+\w+\s+v\.\s",
+    r"^\d+\s+VILLAGE\s+OF\s",  # ordinance approval boilerplate ("31 VILLAGE OF CAMPTON HILLS...")
+    r"^The\s+Condo\s+Unit\s+Owner",  # "The Condo Unit Owner's Rights and Responsibilities Handbook HOA"
+    r"^Representing\s+Purchasers\s+Condominiums",  # CLE notes
+    r"^Normandy\s+\d+\s+\d+",  # "Normandy 4 02"
+    r"^S\s+Ysybgldphx",  # OCR garbage
+    r"^Studiger\s+v\.",  # case law caption
+    r"^WPOA\s+HOA\s*$",  # bare acronym
+    r"^[~`]+\w+",  # OCR garbage starting with ~ or backtick
+    r"^AND\s+\d{2}-\d{2}-\d{3,}",  # "AND 06-17-200-008 ..." (PIN fragment)
+    r"^San\s+Tropai\s+Ca\s+Recording\s+Leasing",  # condo lease, not the HOA
+    r"^Of\s+,\s+,\s+",  # "Of , , Easements, Charges, ..."
+    r"^Of\s+and\s+\.\.\.",  # "Of and ... the ... HOA"
+    # "Now Known as ..." and "Untitled - ..." are NOT in heuristic_delete:
+    # they have salvageable HOA names after the prefix (e.g. "Now Known as
+    # Austin Courts Condominium Association" → "Austin Courts Condominium
+    # Association"). Let stage-2 _try_strip_prefix recover them.
 ]
 _HEURISTIC_DELETE_RE = [re.compile(p, re.I) for p in _HEURISTIC_DELETE_PATTERNS]
 
