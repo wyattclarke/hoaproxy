@@ -64,9 +64,8 @@ services:
 
   - type: cron
     name: hoaproxy-db-backup
-    runtime: image
-    image:
-      url: docker.io/curlimages/curl:8.10.1
+    runtime: docker
+    dockerfilePath: ./Dockerfile
     schedule: "0 10,22 * * *"
     envVars:
       - key: JWT_SECRET
@@ -74,4 +73,4 @@ services:
           type: web
           name: hoaproxy-app
           envVarKey: JWT_SECRET
-    startCommand: 'curl -fsS --max-time 600 -X POST https://hoaproxy.org/admin/backup -H "Authorization: Bearer $JWT_SECRET"'
+    dockerCommand: python scripts/trigger_backup.py
