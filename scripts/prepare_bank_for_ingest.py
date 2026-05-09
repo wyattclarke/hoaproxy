@@ -469,10 +469,13 @@ def _write_prepared_bundle(
     pdfs_by_sha: dict[str, bytes],
     sidecars_by_sha: dict[str, dict[str, Any]],
     overwrite: bool,
-) -> None:
+) -> bool:
+    """Write a prepared bundle. Returns True on write, False if skipped
+    because the bundle already exists and overwrite=False.
+    """
     status_blob = prepared_bucket.blob(status_blob_name(prefix))
     if status_blob.exists() and not overwrite:
-        raise RuntimeError(f"prepared bundle already exists: gs://{prepared_bucket.name}/{prefix}")
+        return False
 
     for sha, pdf_bytes in pdfs_by_sha.items():
         prepared_bucket.blob(docs_blob_name(prefix, sha)).upload_from_string(
@@ -502,6 +505,7 @@ def _write_prepared_bundle(
         content_type="application/json",
         **kwargs,
     )
+    return True
 
 
 def prepare(args: argparse.Namespace) -> int:
@@ -790,7 +794,7 @@ def prepare(args: argparse.Namespace) -> int:
             print(_json_dump({"dry_run": True, "prepared_prefix": prefix, "bundle": bundle_payload}))
         else:
             try:
-                _write_prepared_bundle(
+                wrote = _write_prepared_bundle(
                     prepared_bucket=prepared_bucket,
                     prefix=prefix,
                     bundle_payload=bundle_payload,
@@ -798,8 +802,11 @@ def prepare(args: argparse.Namespace) -> int:
                     sidecars_by_sha=sidecars_by_sha,
                     overwrite=args.overwrite,
                 )
-                written += 1
-                print(f"wrote gs://{args.prepared_bucket}/{prefix}")
+                if wrote:
+                    written += 1
+                    print(f"wrote gs://{args.prepared_bucket}/{prefix}")
+                else:
+                    print(f"skipped existing gs://{args.prepared_bucket}/{prefix}", file=sys.stderr)
             except gcs_exceptions.PreconditionFailed:
                 print(f"skipped existing gs://{args.prepared_bucket}/{prefix}", file=sys.stderr)
 

@@ -104,6 +104,12 @@ COUNTY_RUNS: list[tuple[str, str | None]] = [
     ("il_rock-island_serper_queries.txt", "Rock Island"),
     ("il_tazewell_serper_queries.txt", "Tazewell"),
     ("il_kankakee_serper_queries.txt", "Kankakee"),
+    # Wave C — long-tail counties (kill rule: <3 productive leads => stop)
+    ("il_dekalb_serper_queries.txt", "DeKalb"),
+    ("il_lasalle_serper_queries.txt", "LaSalle"),
+    ("il_macon_serper_queries.txt", "Macon"),
+    ("il_williamson_serper_queries.txt", "Williamson"),
+    ("il_adams_serper_queries.txt", "Adams"),
     ("il_host_family_serper_queries.txt", None),
     ("il_directories_serper_queries.txt", None),
 ]

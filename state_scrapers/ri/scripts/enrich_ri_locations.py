@@ -134,11 +134,15 @@ def fetch_extract_doc_zips(state: str, base_url: str, token: str) -> list[dict[s
             print(f"extract-doc-zips returned {r.status_code}: {r.text[:200]}", file=sys.stderr)
             return []
         body = r.json()
-        # Accept either a list of records or {"results": [...]}
+        # Accept a list of records, {"results": [...]}, or {"hoas": [...]}.
+        # The live endpoint currently returns {"hoas": [...], "total": N}.
         if isinstance(body, list):
             return body
-        if isinstance(body, dict) and isinstance(body.get("results"), list):
-            return body["results"]
+        if isinstance(body, dict):
+            if isinstance(body.get("hoas"), list):
+                return body["hoas"]
+            if isinstance(body.get("results"), list):
+                return body["results"]
         return []
     except Exception as exc:
         print(f"extract-doc-zips failed: {type(exc).__name__}: {exc}", file=sys.stderr)
