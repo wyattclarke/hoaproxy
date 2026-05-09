@@ -541,6 +541,15 @@ def get_connection(db_path: Path) -> sqlite3.Connection:
             conn.executescript(SCHEMA)
         else:
             raise
+    # Load sqlite-vec FIRST. The chunks_vec_insert trigger (created later by
+    # _setup_vec_index, persisted in sqlite_master) fires on any INSERT to
+    # chunks. Migrations below can implicitly checkpoint the WAL and replay
+    # pending chunk INSERTs; if vec0 isn't loaded yet, those would fail with
+    # "no such module: vec0" and abort the migration.
+    vec_loaded = _load_sqlite_vec(conn)
+    if vec_loaded:
+        _setup_vec_index(conn)
+
     _ensure_table_column(conn, "hoa_locations", "metadata_type", "TEXT")
     _ensure_table_column(conn, "hoa_locations", "website_url", "TEXT")
     _ensure_table_column(conn, "hoa_locations", "boundary_geojson", "TEXT")
@@ -572,9 +581,6 @@ def get_connection(db_path: Path) -> sqlite3.Connection:
     _ensure_table_column(conn, "documents", "source_url", "TEXT")
     _ensure_table_column(conn, "documents", "hidden_reason", "TEXT")
     conn.commit()
-    # sqlite-vec index for fast ANN search (replaces brute-force NumPy path)
-    if _load_sqlite_vec(conn):
-        _setup_vec_index(conn)
     return conn
 
 
