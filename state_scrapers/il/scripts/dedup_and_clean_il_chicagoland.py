@@ -74,6 +74,11 @@ STATE = "IL"
 
 CHICAGOLAND_COUNTIES = {
     "cook", "dupage", "lake", "will", "kane", "mchenry", "kendall",
+    # Name-list-first runs without county info bank under v1/IL/il/.
+    # These are Chicagoland-scoped because that's the only seed source
+    # currently using the il/ slug. Downstate's keyword-Serper-per-county
+    # mode never lands under il/ since each query has --default-county.
+    "il",
 }
 DOWNSTATE_COUNTIES = {
     "winnebago", "sangamon", "champaign", "peoria", "mclean",
