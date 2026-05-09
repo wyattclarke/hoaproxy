@@ -8,14 +8,19 @@ using the public AOUO Contact List.
 
 ## TL;DR
 
-- **Final state:** 206 live HOAs, 188 mapped (91%), 0 out-of-bbox.
-- **Coverage of estimated universe:** ~12% of the 1,668-condo AOUO
-  registry; ~14% of the 1,445 entities we successfully parsed from the
-  PDF.
+- **Final state:** 614 live HOAs, ~577 mapped (94%, sampled), 0
+  out-of-bbox. Up from 12 live before this run.
+- **Coverage of estimated universe:** ~37% of the 1,668-condo AOUO
+  registry; ~42% of the 1,445 entities we parsed from the PDF.
 - **Why so much better than DC's pass 2:** Hawaiiana Management and a
   handful of other Hawaii management companies publish association
   bylaws/declarations to public-web URLs; LLM acceptance rate at Phase
-  10 was 79% (vs. DC's ~10%).
+  10 was 79–84% (vs. DC's ~10%).
+- **Two-stage Phase 10 + drain:** the finalizer's first import run
+  landed 249 bundles → 206 live (Phase 10 v1). A drain pass against
+  the remaining 700+ prepared bundles brought the count to 729; a
+  second Phase 10 run (`hi_phase10_v2`) cleaned junk to land at 614
+  final live with 9,335 indexed chunks.
 
 ## Pipeline numbers
 
@@ -25,12 +30,12 @@ using the public AOUO Contact List.
 | Entities with at least one PDF banked | 858 (59%) |
 | Total docs banked | 1,204 |
 | Bundles prepared (post DocAI) | 953 |
-| Bundles imported | 249 (limited by import-loop wall time; see future work) |
-| Live HOAs after import | 267 |
-| LLM rename `is_hoa: true` accepted | 211 (79%) |
-| LLM rename `is_hoa: false` rejected | 56 |
-| Live HOAs after Phase 10 hard-delete | 206 |
-| Mapped (zip_centroid) | 188 (91%) |
+| Bundles imported (finalizer + drain) | 772 |
+| Live HOAs after final Phase 10 (v2) | **614** |
+| Total docs on live | 609 |
+| Total chunks indexed | 9,335 |
+| LLM rename accept rate (v1 + v2) | 79–84% |
+| Mapped (zip_centroid, sampled) | ~94% |
 | Out-of-bbox map points | 0 |
 
 ## Source
