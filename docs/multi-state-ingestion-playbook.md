@@ -155,6 +155,45 @@ Bank everything plausible. False positives are cheaper than false negatives here
 | Open-portal scrape | Public recorder exposes recorded instruments without payment for one or more counties | DE Sussex (PaxHOA Landmark) |
 | Aggregator harvest | Strong third-party directory exists with names + linked HOA websites | NC (Closing Carolina, CASNC) |
 
+**County coverage minimum: 10 counties, ~80% state population.** This is
+the single biggest yield lever and was the main miss of the May 2026 batch.
+The earlier "concentrate on the 3–5 highest-density counties" guidance
+under-specified scope: SD and ND ran with 4 counties each and produced 7
+and 12 genuine HOAs respectively, while AR–MT (8–12 counties each) averaged
+80 genuine HOAs/state. Use these as canonical defaults:
+
+- **Minimum 10 counties** for any keyword-Serper Tier 0/1 run, regardless of
+  state population. Tier 0 states with <10 distinct municipalities are the
+  only exception.
+- **Cover ~80% of state population.** Add counties beyond the top metro
+  until cumulative population hits 80%. For fragmented states (SD, ND, MT)
+  this means 12–15 counties; for concentrated states (NV, HI) it can mean
+  2–4. Tier 2/3 states usually need 15–25 counties.
+- **Always include the state's primary resort county explicitly** even if
+  population is low — Hot Springs Village (AR/Garland), Glade Springs Village
+  (WV/Raleigh + Pocahontas/Snowshoe), Big Sky (MT/Madison + Gallatin),
+  Bitterroot ranches (MT/Ravalli), Park City (UT/Summit), Lake Tahoe-side
+  (NV/Douglas), Maui (HI/Maui), Outer Banks (NC/Dare), Hilton Head (SC/Beaufort).
+  These are disproportionately HOA-dense for their population.
+- **The runner template's `--counties-only` flag enables idempotent
+  supplemental sweeps.** If the original run undersized coverage, add the
+  missing counties to `COUNTY_RUNS`, write the new query files, and run
+  `run_state_ingestion.py --run-id {state}_supplemental_... --counties-only "Foo,Bar"`.
+  The bank merges by `(state, county, slug)` so re-runs of the same county
+  are no-ops; only new counties incur cost. AK's supplemental pass for
+  Juneau/Kodiak/Sitka/Ketchikan (May 2026) ran in <1 hour at <$1.
+
+**Never cap leads-per-county.** `--max-leads-per-county` defaults to `0`
+(unlimited) in the template runner; the underlying
+`scrape_state_serper_docpages.py --max-leads 0` means "keep every ranked
+candidate." A historical default of 80 was discarding real HOAs from
+high-density counties (MT Gallatin, AR Garland, NE Sarpy, OK Tulsa
+each easily produce 100+ ranked candidates per sweep) for no benefit:
+Serper's already paid by the time the cap fires (it sorts ranked then
+truncates), and the bank merges by `(state, county, slug)` so duplicates
+from later re-runs are no-ops. Setting any positive cap is almost always
+wrong.
+
 **SoS-business-registry-first discovery is not used.** Past attempts (NH QuickStart Akamai-walled; IN INBiz reCAPTCHA-walled with a $9,500 paywall; multiple registries that returned 0 HOA-shaped entities) burned operator time without producing usable universes. RI is the one historical exception — see its retrospective for context, but do not use it as a model for new state runs. Treat any open SoS document drive as one possible Serper hit source within the keyword-Serper flow, not as a universe-building strategy.
 
 **Probe driver note (for custom flows that carry pre-discovered PDFs).** Stock `probe-batch` CLI ignores extra keys in the lead JSONL — including `pre_discovered_pdf_urls` — because `Lead(**d)` strips unknown fields. Discovery flows that hand probe a curated list of PDF URLs (from an aggregator, an open portal, or a host-family direct-PDF sweep) need a custom probe driver that calls `probe(lead, pre_discovered_pdf_urls=[...])` directly. Reference implementation: `state_scrapers/ri/scripts/probe_enriched_leads.py`.
@@ -205,6 +244,40 @@ Dirty-name patterns currently in production cleanup (`clean_dirty_hoa_names.py::
 - `long_dashed_phrase` — `" - "` present and `len > 50`
 - `county_prefix` — starts with `\w+ County of `
 - `starts_lowercase`, `longdigit_prefix`
+
+**State-specific bank-stage leak patterns** (May 2026 batch — promote to
+the canonical regex set when the next code change to `name_utils.py`
+lands):
+
+- **Recording stamps** (every state): `^\d+r-?\d`, `^Doc[#]`,
+  `\bRecording Dist`, `\bRecorded HOA$`, `\.pdf HOA$`
+- **Plat-page extracts** (OK, AR): `\bCurve Table\b`, `\bBLOCKS \d+-\d+\b`,
+  `\bCertificate of Dedication\b`, `\bDEED OF DEDICATION AND RESTRICTIVE\b`
+- **Public-lands records** (MT, WY, NM): `\bWilderness Area\b`,
+  `\bForest Service\b`, `\bConservation Easement\b`,
+  `\bIrrigation District\b`, `\bGrazing\b`, `\bFishing Access\b`,
+  `\bAcequia\b` (NM water rights)
+- **Government boilerplate** (every state): `\b(City|Town|Municipality) of\b`,
+  `\bCounty of [A-Z]`, `\bCode of Ordinances\b`,
+  `\bPlanning (Department|Commission|Board) of\b`, `\bAo No\.`,
+  `\bComprehensive Plan\b`, `\bUnified Development\b`,
+  `\bSubdivision Regulations?\b`, `\bSubmittal Guidelines\b`
+- **Utility / news / legal-scholarship**: `\bENERGY (INC|CORP)\b`,
+  `\bWater (Association|Authority|District)\b`, `\bBar Rag\b`,
+  `\bColumns Featured\b`, `\bThree secrets\b` (newsletter), `\bLAW UPDATE\b`,
+  `\bSection Law\b`, `\bForeclosure Statement\b`
+- **REIT / financial filings**: `\bProperty Trust, Inc\b`,
+  `\bForm 10[-]?[KQ]\b`, `\bSEC Filing\b`, `\bMERS\b`
+- **Title insurance / closing forms**: `\bTitle Insurance\b`,
+  `\bTitle Company\b`, `\bAbstract Company\b`, `\bClosing Company\b`,
+  `\bHOMEOWNER'S POLICY\b`
+- **NM-specific** "Of " fragment: `^Of\s+` (truncated
+  "**Declaration Of** Protective Covenants and Restrictions" doc-title)
+- **OCR garbage** (every state): `\bilil\b`, `\billil\b`, `\bH OA$`
+- **Generic fragments**: `^[A-Z][a-z]+$` (single capitalized word),
+  `^\w+\s+HOA$` (single-word + HOA, with safelist for known real names
+  like ALASKAN BAY OWNERS ASSOCIATION), `^Restrictive\b`, `^Protective\b`,
+  `^Subdivision\b`, `^Untitled\b`
 
 **`is_dirty()` is necessary but not sufficient.** WY's keyword-Serper run
 (May 2026) produced 133 live HOAs of which only 28 (21%) tripped any
@@ -738,14 +811,31 @@ import sqlite3, requests
 # Build a delete list; POST to /admin/delete-hoa.
 ```
 
-**Watch for duplicate-merge candidates.** The LLM rename pass can map
-multiple bank-side bad names to the same canonical name. The `/admin/rename-hoa`
-endpoint already supports merge-on-collision (renaming to an existing name
-moves docs/chunks/locations to the target and deletes the source). After the
-unconditional pass, scan for near-duplicates (e.g., "199 E. Pearl Condominium
-Association" + "199 East Pearl Condominium", "The Burton Flats Condominiums"
-+ "The Burton Flats Condominium Association") and force a merge by renaming
-the lower-quality one to match the higher-quality one verbatim.
+**Phase 10 takes 2–3 iterative delete passes — plan for it.** Single-pass
+cleanup undersells the work for keyword-Serper states. The May 2026 batch
+required: AR 4 passes (58 deletions); MS 2 passes (43 deletions); WV/OK/MT
+1 pass each (10–28 deletions). The pattern is: LLM rename → 1st regex+null
+delete → inspect remaining live → 2nd narrower regex pass → final long-tail
+manual list → optional 3rd. The first pass catches gov / utility / legal-
+scholarship; later passes catch state-specific OCR fragments and dedupe
+candidates. Budget ~$0.20–$0.50 OpenRouter per state for the rename pass
+and 2–4 delete-pass iterations of ~5 minutes each.
+
+**Dedupe-merge is a canonical Phase 10 step, not optional.** The LLM rename
+pass can map multiple bank-side bad names to the same canonical name; it
+also leaves dedupe pairs that share a community but differ in suffix or
+casing. Examples observed in the May 2026 batch: AK had `Hillcrest
+Condominium` + `Hillcrest Condominium Association` (3 such pairs); MT had
+11 (`XYZ Estates HOA` vs `XYZ Estates Homeowners Association, Inc.`); MS
+had Lake Serene Property Owners Association in two near-identical forms;
+WV had `Glade Springs Village POA` + `Glade Springs Village Property Owners
+Association, Inc.` `/admin/rename-hoa` supports merge-on-collision: rename
+the shorter/all-caps/abbreviated form to the longer/proper-case verbatim
+form and the endpoint will move docs/chunks/locations to the target and
+delete the source. After the LLM rename, scan keepers for substring
+containment + Levenshtein < 5 and merge the duplicates. The earlier "199
+E. Pearl Condominium Association" + "199 East Pearl Condominium" example
+is the same shape.
 
 **Sqlite write-lock retries.** `/admin/rename-hoa` returns HTTP 500 with
 `sqlite3.OperationalError: database is locked` when the live SQLite WAL is
@@ -765,21 +855,22 @@ guarantee idempotency on partial-batch failure — single-rename calls with
 
 Batch 3–5 in parallel autonomous LLM sessions. Each session writes under its own `state_scrapers/{state}/results/{run_id}/`.
 
-- Keyword-Serper per county. Concentrate budget on the 3-5 highest-density counties; rural / sparse-population counties are usually a waste of queries.
+- Keyword-Serper per county. **Min 10 counties, ~80% state population coverage** (see Phase 2 "County coverage minimum" callout). Always include the state's primary resort county. Even sparse-population states need 10+ counties to catch all the metros + secondary cities; under-specifying is the biggest yield miss.
 - Census ZCTA centroid is the map fallback (zippopotam.us free at this scale).
-- Per-state OCR budget: $10–15. Stop conditions before completion are rare since the universe is small.
-- 1-day end-to-end per batch.
+- Per-state OCR budget: $10–15. Actual observed (May 2026 batch): $0.40–$3.25. Stop conditions before completion are rare since the universe is small.
+- Wall time observed: 30–90 minutes per state, dominated by Serper rate limits and Render import-endpoint serialization (NOT OCR).
 - Coordination: per-batch cost ceiling tracked via `/admin/costs`; sessions are independent.
 
 ### Tier 1 — Small (1,500–4,000)
 
-**Remaining states (13):** AL, HI, ID, IA, KY, LA, ME, MT, NE, NH, NV, OK, UT
+**Remaining states (status as of May 2026 batch — verify against bank before launching):** AL, HI, ID, IA, KY, LA, ME, NV, UT (the May 2026 batch completed NE, OK, MT; bank shows partial coverage on AL, DC, HI, IA, ID, KY, LA, NV, UT from concurrent sessions, so check `gsutil ls 'gs://hoaproxy-bank/v1/{STATE}/'` before assuming "not started").
 
 Solo autonomous run per state. 1–2 days.
 
-- Per-county keyword Serper. Aggregator harvest as supplement when one exists.
+- Per-county keyword Serper. **Min 10 counties, ~80% state population coverage** (Phase 2 callout). Aggregator harvest as supplement when one exists.
 - KS is the canonical Tier 1 keyword-Serper-per-county run; TN is the canonical Tier 2.
-- Per-state OCR budget: $20–30.
+- Per-state OCR budget: $20–30. Actual observed for OK/MT (May 2026): $3.76–$4.11.
+- Wall time observed: 1–3 hours per state; well under the "1–2 days" original estimate when the per-county Serper sweeps run cleanly.
 
 ### Tier 2 — Medium (4,000–10,000)
 
@@ -901,6 +992,10 @@ Applied before every model call or bank write:
 - **Deployment of new `location_quality` values must precede importing records that use them.**
 - **`HOA_DISCOVERY_MODEL_BLOCKLIST`:** Gemini is blocked (too expensive per yield, per May 2026 KS activity export). Qwen Flash variants are blocked (runaway hidden reasoning-token usage).
 - **Turn boundary is not a blocker.** A final response stops the execution turn; it is not a valid reason to stop autonomous scraping. Only stop when there is a real blocker, the budget is exhausted, or the user asks for status.
+- **Render is fragile under concurrent load.** When two scraper pipelines run in parallel and both call `/admin/ingest-ready-gcs` while operator queries hit `/hoas/{name}/documents`, Render returns 502s for the operator queries. The import endpoint serializes via GCS generation precondition and is fine, but ad-hoc verification queries should wait for an idle window. Cap safe parallelism at 2 concurrent state pipelines, not 4–5.
+- **Background-watcher pattern beats polling for long subprocesses.** Run the long pipeline detached, then run a separate `until ! kill -0 $PID; do sleep 30; done; echo done` command with `run_in_background=true` — the harness fires a notification on exit. Critical for Claude Code-driven runs to keep context lean across hour-long discovery sweeps; sleep-poll loops burn cache and conversation budget. Pattern used throughout the May 2026 batch.
+- **Bank slug `_unresolved-name/` collapses to `unresolved-name/` on disk.** `bank_hoa()`'s slug normalization strips leading underscores. Cross-state retrospectives should treat both as the same prefix; not worth fixing unless a downstream tool depends on the underscore.
+- **Per-state cost is dominated by manifest count, not tier.** Tier 0 cap is $10 / Tier 1 cap is $25; observed actual spend $0.40–$4.11 across the May 2026 batch. The cap exists to backstop bulk-archive surprise (multi-HOA records dumps that bypass the 25-page scanned cap), not as a target. Per-genuine-HOA cost converges around $0.025–$0.075 regardless of tier; yield ratio (genuine/manifest) determines that more than absolute size.
 
 ---
 
