@@ -512,16 +512,18 @@ prepared-ingest ledger so retrospectives can quantify the leak rate.
 
 Run after Phase 5, before prepared bundles. OCR text from declarations, plats, recorder stamps, minutes, budgets, and insurance certificates contributes city/county/ZIP/subdivision clues.
 
-**If Phase 2 used OCR-first slug + geo extraction** (recommended for keyword-Serper — see Phase 2 callout): the bank manifest already carries `address.city`, `address.county`, `address.postal_code`, and `subdivision` extracted from page-1 OCR. Phase 6 then primarily handles polygon enrichment (OSM/Nominatim) and ZIP-centroid backfill where the address is incomplete; the `place_centroid` and `city_only` fallbacks become exception paths rather than the main flow.
+**If Phase 2 used OCR-first slug + geo extraction** (recommended for keyword-Serper — see Phase 2 callout): the bank manifest already carries `address.city`, `address.county`, `address.postal_code`, and `subdivision` extracted from page-1 OCR. Phase 6 then primarily handles full-address geocoding via HERE and ZIP-centroid backfill where the address is incomplete; the `place_centroid` and `city_only` fallbacks become exception paths rather than the main flow.
 
 **Best-effort resolution order:**
 1. Manifest public street address or subdivision community address (populated either from scrape metadata in Phase 3, or from page-1 OCR if Phase 2 ran OCR-first slug+geo).
-2. OSM/Nominatim polygon — only if the public instance is responding (see warning).
-3. Serper Places result with strict state + name checks.
-4. ZIP centroid: `https://api.zippopotam.us/us/{zip}` (small scale) or Census ZCTA (larger).
+2. **HERE Geocoding & Search API** (`https://geocode.search.hereapi.com/v1/geocode` for forward, `https://revgeocode.search.hereapi.com/v1/revgeocode` for reverse). Free tier 250k transactions/mo — well above any state's geocoding budget. Set `HERE_API_KEY` in `settings.env`. Returns full street + ZIP+4 + lat/lon with a `queryScore` (0–1); reject below 0.6. **HERE is the primary production geocoder.**
+3. ZIP centroid: `https://api.zippopotam.us/us/{zip}` for entries where HERE doesn't resolve a full address but the OCR-extracted ZIP is reliable. Free, no rate limit.
+4. Serper Places result with strict state + name checks. (Optional, fallback for non-address-style names.)
 5. City-only fallback for profile context; hidden from map.
 
-**Public Nominatim warning:** rate-limits hard above ~100 sequential requests; `Retry-After: 0` persists 15+ minutes even at 1.2s+ inter-request delay. Budget for ZIP centroid as the primary production fallback; treat Nominatim polygons as a bonus. RI achieved 99.5% map coverage with `zip_centroid` alone. When `geo_enrichment_error` rows mention `nominatim.openstreetmap.org` 429s, run post-import backfill via `POST /admin/backfill-locations` rather than retrying.
+**Why HERE replaced public Nominatim** (May 2026): the public OSM Nominatim instance rate-limits hard above ~100 sequential requests; `Retry-After: 0` persists 15+ minutes even at 1.2s+ inter-request delay. RI's 99.5% map coverage came from `zip_centroid` alone after Nominatim 429'd out. HERE has no equivalent rate-limit issue at our scale, returns higher US-address quality (legacy Navteq data), and the free tier is roomy. State-scraper Phase 6 was migrated to HERE on 2026-05-09 during the DC stub experiment, where HERE recovered ~93% of polygon-centroid points to street-level address quality in ~5 min wall time vs. Nominatim's ~95 min. Public Nominatim remains an acceptable zero-setup fallback when `HERE_API_KEY` is unavailable; expect 1.2s/request + occasional 429 backoff.
+
+**HERE result-quality guard:** validate `item.scoring.queryScore >= 0.6` (HERE returns 0–1). Below 0.6 typically indicates the geocoder fell back to a city-or-county-level match. Reject and try the next strategy in the resolution order.
 
 **Location quality enum:** `polygon` (credible boundary) | `address` (street-level) | `place_centroid` (subdivision/neighborhood/place result without street address) | `zip_centroid` (repeated ZIP evidence) | `city_only` (profile only, hidden from map) | `unknown`. Map shows the first four; `city_only` and `unknown` are hidden.
 
@@ -725,7 +727,7 @@ Expected final state report:
 If map rate is below target:
 1. OCR clue extraction for city/county/ZIP/subdivision names.
 2. Serper Places cleanup with strict state + name + category filters.
-3. OSM/Nominatim polygon retry from aliases and city/county.
+3. HERE forward-geocode retry with name aliases + city/county string.
 4. ZIP centroid fallback from repeated OCR ZIPs.
 5. Demote suspicious or out-of-state records.
 
@@ -1009,7 +1011,7 @@ Applied before every model call or bank write:
 ## State-Specific Guardrails (Lessons Learned)
 
 - **Always anchor queries on a county/town name.** Bare statewide Serper drowns in noise — Bristol, Newport, Washington, Springfield appear in many states. The per-county anchor is the precision gate; never run a Serper sweep without one.
-- **Public Nominatim is not a production dependency.** Rate-limits hard once tripped; treat polygons as a bonus and budget for ZIP centroid (zippopotam.us or Census ZCTA) as the primary fallback.
+- **HERE Geocoding is the primary geocoder; public Nominatim is a fallback.** Sign up at https://platform.here.com/sign-up, set `HERE_API_KEY` in `settings.env`. Free tier 250k/mo. HERE replaced Nominatim on 2026-05-09 after the DC stub experiment showed ~5 min wall vs. Nominatim's ~95 min for 3,217 entities, plus better US-address-quality on named buildings. The Nominatim path stays in `state_scrapers/_orchestrator/dc_stub_addresses.py` as a zero-setup fallback when no HERE key is configured.
 - **Postal village names are not municipalities.** Bake a village→municipality lookup into the state-local scraper. RI: `Chepachet → Glocester`, `Rumford → East Providence`, `Greenville → Smithfield`, `Wakefield → South Kingstown`.
 - **`probe-batch` drops unknown lead keys** including `pre_discovered_pdf_urls`. Flows that carry curated PDF URLs (from aggregators, open portals, host-family direct-PDF sweeps) need `state_scrapers/ri/scripts/probe_enriched_leads.py`.
 - **Live `JWT_SECRET` drifts from local `settings.env`.** Read it at runtime via the Render API for all admin endpoint calls.
@@ -1036,7 +1038,7 @@ Findings that generalized across three retrospectives and should be treated as i
 
 4. **Pre-import stale-geometry audit is mandatory.** Same-name HOAs from prior state imports retain their old coordinates. TN had this bug — TN HOAs showed map points in TX, CA, WA. The fix is the cross-state-clear feature in `db.upsert_hoa_location` (`clear_coordinates` / `clear_boundary_geojson` kwargs); always pass them when a later state's import has no trustworthy spatial evidence.
 
-5. **ZIP centroid backfill belongs in the pipeline, not a cleanup afterthought.** Every state needed it. Public Nominatim is unreliable above ~100 sequential requests; do not put it on the critical path.
+5. **HERE Geocoding is the production primary; ZIP centroid backfill is the no-key fallback.** Every state benefits from full-address geocoding via HERE. When `HERE_API_KEY` is set, run HERE first and skip the ZIP-centroid pass entirely (HERE returns ZIP+4 directly). When no key is configured, fall back to ZIP centroid via zippopotam.us. Public Nominatim is the zero-setup last resort and is unreliable above ~100 sequential requests; do not put it on the critical path.
 
 6. **Management-company crawling yields zero in NE-regional states.** FirstService, Associa, Brigs, Barkan all use AppFolio/CINC/ManageBuilding portals that block public access. Run `state_scrapers/ri/scripts/find_mgmt_companies.py` to confirm fast, then move on.
 
@@ -1091,7 +1093,9 @@ Findings that generalized across three retrospectives and should be treated as i
 | Mgmt-co harvesting | `state_scrapers/ri/scripts/find_mgmt_companies.py` | Discover management companies for a state. |
 | Mgmt-co bulk harvest | `state_scrapers/ri/scripts/harvest_mgmt_companies.py` | Batch harvest mgmt-co HOA lists. |
 | Site-restricted Serper | `state_scrapers/ri/scripts/site_restricted_serper.py` | Per-state site-restricted search patterns. |
-| ZIP centroid enrichment | `state_scrapers/ri/scripts/enrich_ri_locations.py` | Production-grade map fallback; uses zippopotam.us + city-centroid table; posts to `/admin/backfill-locations`. |
+| HERE Geocoding (primary) | `state_scrapers/_orchestrator/dc_stub_addresses_here.py` | Forward + reverse via HERE API; full ZIP+4. Requires `HERE_API_KEY`. Free tier 250k/mo. |
+| Nominatim fallback | `state_scrapers/_orchestrator/dc_stub_addresses.py` | Public Nominatim parse-and-forward + reverse; ~1 req/s rate limit. Use only when no HERE key. |
+| ZIP centroid enrichment | `state_scrapers/ri/scripts/enrich_ri_locations.py` | Last-resort fallback; uses zippopotam.us + city-centroid table; posts to `/admin/backfill-locations`. Runs only when neither HERE nor full address resolution succeeded. |
 | OCR ZIP cleanup | `state_scrapers/ks/scripts/enrich_live_locations_from_ocr.py` | Copy/adapt per state. |
 | Serper Places cleanup | `state_scrapers/ks/scripts/enrich_live_locations_from_serper_places.py` | Subdivision/place centroid repair; adapt state guardrails. |
 | County query generation | `benchmark/openrouter_ks_planner.py county-queries` | Despite filename, state-agnostic. |

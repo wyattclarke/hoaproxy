@@ -78,10 +78,19 @@ States to consider for name-list-first when their queues come up:
 ## 1. Required prerequisites
 
 Identical to the keyword-Serper playbook (GCS, DocAI, Serper, Render admin
-auth) plus one extra:
+auth) plus two extras:
 
 - **A registry endpoint or downloadable file** that yields canonical entity
   names. See §2 for how to find this.
+- **A HERE Geocoding API key** (`HERE_API_KEY` in `settings.env`) for the
+  Phase 9 / address-enrichment pass. Free tier 250k transactions/mo —
+  comfortably covers any single-state run. Sign up at
+  https://platform.here.com/sign-up. HERE replaced public OSM Nominatim as
+  the production geocoder on 2026-05-09 after the DC stub experiment showed
+  HERE recovered ~93% of polygon centroids to street-level address quality
+  in ~5 min wall-time vs. Nominatim's ~95 min. The Nominatim path remains in
+  `state_scrapers/_orchestrator/dc_stub_addresses.py` as a zero-setup
+  fallback for runs without HERE access.
 
 This pattern uses the same `prepare_bank_for_ingest.py` → `/admin/ingest-ready-gcs`
 → `phase10_close.py` chain as the keyword-Serper playbook. Phases 5–10 are
@@ -393,11 +402,12 @@ both keyword-discovered and name-list-discovered manifests indiscriminately.
 curl -sS -X POST "https://hoaproxy.org/admin/ingest-ready-gcs?state=DC&limit=50" \
   -H "Authorization: Bearer $LIVE_JWT_SECRET"
 
-# Phase 9 — location enrichment (extract-doc-zips → ZIP centroid)
-.venv/bin/python state_scrapers/ri/scripts/enrich_ri_locations.py \
-  --state DC --apply --skip-nominatim \
-  --zip-cache state_scrapers/dc/results/{run_id}/zip_cache.json \
-  --output state_scrapers/dc/results/{run_id}/location_enrichment.jsonl
+# Phase 9 — location enrichment (HERE primary, ZIP-centroid fallback)
+# Requires HERE_API_KEY in settings.env. Free tier 250k/mo.
+.venv/bin/python state_scrapers/_orchestrator/dc_stub_addresses_here.py \
+  --apply  # state-agnostic; same pattern works for any state
+# Fallback when no HERE key configured — slower (~1 req/s) but free:
+# .venv/bin/python state_scrapers/_orchestrator/dc_stub_addresses.py --apply
 
 # Phase 10 — close (rename + delete + audit + retrospective)
 .venv/bin/python scripts/phase10_close.py \
