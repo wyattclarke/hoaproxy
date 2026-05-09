@@ -410,7 +410,7 @@ def main() -> int:
     )
     parser.add_argument("--max-queries-per-county", type=int, default=30)
     parser.add_argument("--results-per-query", type=int, default=10)
-    parser.add_argument("--max-leads-per-county", type=int, default=80)
+    parser.add_argument("--max-leads-per-county", type=int, default=0)
     parser.add_argument("--skip-discovery", action="store_true")
     parser.add_argument("--skip-prepare", action="store_true")
     parser.add_argument("--skip-import", action="store_true")

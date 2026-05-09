@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run __STATE_NAME__ HOA ingestion end-to-end.
+"""Run District of Columbia HOA ingestion end-to-end.
 
 Pipeline (per ``docs/multi-state-ingestion-playbook.md``):
 
@@ -8,17 +8,17 @@ Pipeline (per ``docs/multi-state-ingestion-playbook.md``):
                        (KS/TN/GA/IN-style pattern for states where county
                        recorders publish public PDFs).
        sos-first       Skip Serper discovery; expects a curated lead file at
-                       leads/__STATE___sos_leads.jsonl (RI/CT/NH/ME/VT pattern
+                       leads/DC_sos_leads.jsonl (RI/CT/NH/ME/VT pattern
                        for small states where county/town names overlap other
                        states).
        manual-leads    Skip discovery entirely; expects
-                       leads/__STATE___curated_leads.jsonl. Use when leads
+                       leads/DC_curated_leads.jsonl. Use when leads
                        are pre-collected from an open portal or aggregator.
 
-  2. prepare_bank_for_ingest.py with --max-docai-cost-usd __MAX_DOCAI_USD__
-     → prepared bundles in gs://hoaproxy-ingest-ready/v1/__STATE__/.
+  2. prepare_bank_for_ingest.py with --max-docai-cost-usd 10
+     → prepared bundles in gs://hoaproxy-ingest-ready/v1/DC/.
 
-  3. POST /admin/ingest-ready-gcs?state=__STATE__ in a loop until empty
+  3. POST /admin/ingest-ready-gcs?state=DC in a loop until empty
      (capped at 50 per call per the playbook).
 
   4. State-local location enrichment → ZIP-centroid backfill via zippopotam.us
@@ -29,12 +29,12 @@ Pipeline (per ``docs/multi-state-ingestion-playbook.md``):
 
 ## Placeholders to replace before use
 
-  __STATE__             Two-letter state code, e.g. "MT"
-  __STATE_NAME__        Full state name, e.g. "Montana"
-  __STATE_BBOX__        Dict with min_lat/max_lat/min_lon/max_lon for OOB check
-  __TIER__              Tier from playbook (0-4)
-  __MAX_DOCAI_USD__     Default OCR budget in USD (see Appendix D cost defaults)
-  __DISCOVERY_SOURCE__  Short label for your primary discovery, e.g. "sos-first"
+  DC             Two-letter state code, e.g. "MT"
+  District of Columbia        Full state name, e.g. "Montana"
+  {"max_lat": 39.0, "max_lon": -76.91, "min_lat": 38.79, "min_lon": -77.12}        Dict with min_lat/max_lat/min_lon/max_lon for OOB check
+  0              Tier from playbook (0-4)
+  10     Default OCR budget in USD (see Appendix D cost defaults)
+  keyword-serper  Short label for your primary discovery, e.g. "sos-first"
 
 Edit COUNTY_RUNS below to add per-county query file mappings (keyword-serper
 mode) or leave empty for sos-first / manual-leads modes.
@@ -61,11 +61,11 @@ sys.path.insert(0, str(ROOT))
 # ---------------------------------------------------------------------------
 # REPLACE THESE for the new state
 # ---------------------------------------------------------------------------
-STATE = "__STATE__"           # e.g. "MT"
-STATE_NAME = "__STATE_NAME__" # e.g. "Montana"
+STATE = "DC"           # e.g. "MT"
+STATE_NAME = "District of Columbia" # e.g. "Montana"
 # Bounding box for out-of-state coordinate check in verify_live().
 # Example: {"min_lat": 44.35, "max_lat": 49.00, "min_lon": -116.05, "max_lon": -104.04}
-STATE_BBOX: dict[str, float] = __STATE_BBOX__
+STATE_BBOX: dict[str, float] = {"max_lat": 39.0, "max_lon": -76.91, "min_lat": 38.79, "min_lon": -77.12}
 # ---------------------------------------------------------------------------
 
 BANK_BUCKET = os.environ.get("HOA_BANK_GCS_BUCKET", "hoaproxy-bank")
@@ -86,7 +86,17 @@ SCRIPTS_DIR = ROOT / f"state_scrapers/{STATE.lower()}/scripts"
 #   ("mt_cascade_serper_queries.txt", "Cascade"),
 #   ("mt_yellowstone_serper_queries.txt", "Yellowstone"),
 # ---------------------------------------------------------------------------
-COUNTY_RUNS: list[tuple[str, str | None]] = []
+COUNTY_RUNS: list[tuple[str, str | None]] = [
+    ("dc_capitol-hill_serper_queries.txt", "DC"),
+    ("dc_georgetown_serper_queries.txt", "DC"),
+    ("dc_foggy-bottom_serper_queries.txt", "DC"),
+    ("dc_dupont-circle_serper_queries.txt", "DC"),
+    ("dc_adams-morgan_serper_queries.txt", "DC"),
+    ("dc_logan-circle_serper_queries.txt", "DC"),
+    ("dc_navy-yard_serper_queries.txt", "DC"),
+    ("dc_petworth_serper_queries.txt", "DC"),
+    ("dc_host_family_serper_queries.txt", None),
+]
 
 
 def now_id() -> str:
@@ -341,7 +351,7 @@ def preflight(args: argparse.Namespace) -> dict[str, Any]:
     storage.Client()  # raises if credentials are missing
     return {
         "state": STATE,
-        "tier": "__TIER__",
+        "tier": "0",
         "discovery_mode": args.discovery_mode,
         "gcs_bank_ok": True,
         "prepared_bucket_ok": True,
@@ -380,7 +390,7 @@ def main() -> int:
             "manual-leads: probe leads/<state>_curated_leads.jsonl"
         ),
     )
-    parser.add_argument("--max-docai-cost-usd", type=float, default=__MAX_DOCAI_USD__,
+    parser.add_argument("--max-docai-cost-usd", type=float, default=10,
                         help="Hard cap on Google Document AI spend for this run")
     parser.add_argument("--bank-bucket", default=BANK_BUCKET)
     parser.add_argument("--prepared-bucket", default=PREPARED_BUCKET)
@@ -390,10 +400,7 @@ def main() -> int:
     )
     parser.add_argument("--max-queries-per-county", type=int, default=30)
     parser.add_argument("--results-per-query", type=int, default=10)
-    parser.add_argument("--max-leads-per-county", type=int, default=0,
-                        help="0 = unlimited (default). Capping leads per county discards real HOAs "
-                             "from high-density metros for no benefit — Serper is already paid, "
-                             "the bank merges by (state, county, slug) so duplicates are no-ops.")
+    parser.add_argument("--max-leads-per-county", type=int, default=0)
     parser.add_argument("--skip-discovery", action="store_true")
     parser.add_argument("--skip-prepare", action="store_true")
     parser.add_argument("--skip-import", action="store_true")

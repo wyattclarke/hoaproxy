@@ -316,7 +316,7 @@ def discover(args: argparse.Namespace, run_dir: Path) -> list[tuple[Lead, list[s
     leads: list[tuple[Lead, list[str]]] = []
     seen_lead_keys: set[tuple[str, str]] = set()
     for row in ranked:
-        if len(leads) >= args.max_leads:
+        if args.max_leads > 0 and len(leads) >= args.max_leads:
             break
         score = result_score(row, state_re)
         if score < args.min_score:
@@ -426,7 +426,12 @@ def main() -> int:
     parser.add_argument("--max-queries", type=int, default=20)
     parser.add_argument("--results-per-query", type=int, default=10)
     parser.add_argument("--pages-per-query", type=int, default=1)
-    parser.add_argument("--max-leads", type=int, default=50)
+    parser.add_argument("--max-leads", type=int, default=0,
+                        help="Hard cap on leads kept per discover() call. 0 = unlimited (default). "
+                             "Setting any positive cap is almost always wrong: Serper's already paid, "
+                             "the bank merges by (state, county, slug) so duplicates are no-ops, and "
+                             "high-yield counties (Hot Springs Village family in AR, Big Sky in MT) "
+                             "easily produce >100 banked HOAs from a single sweep.")
     parser.add_argument("--min-score", type=int, default=7)
     parser.add_argument("--search-delay", type=float, default=0.3)
     parser.add_argument("--probe-delay", type=float, default=1.0)
