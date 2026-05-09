@@ -164,13 +164,29 @@ def _fetch_summaries(base_url: str, state: str) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     offset = 0
     while True:
-        r = requests.get(
-            f"{base_url}/hoas/summary",
-            params={"state": state, "limit": 500, "offset": offset},
-            timeout=120,
-        )
-        r.raise_for_status()
-        payload = r.json()
+        # Retry on transient 5xx / connection errors. Render occasionally
+        # 502s under load; without retries the rename pass crashes mid-run
+        # and Phase 10 reports all-"no_candidates" which would silently
+        # skip cleanup of newly imported entries.
+        last_err = None
+        payload = None
+        for attempt in range(6):
+            try:
+                r = requests.get(
+                    f"{base_url}/hoas/summary",
+                    params={"state": state, "limit": 500, "offset": offset},
+                    timeout=120,
+                )
+                if r.status_code == 200:
+                    payload = r.json()
+                    last_err = None
+                    break
+                last_err = f"http {r.status_code}: {r.text[:160]}"
+            except Exception as exc:
+                last_err = f"{type(exc).__name__}: {exc}"
+            time.sleep(min(15 + 10 * attempt, 60))
+        if last_err:
+            raise RuntimeError(f"_fetch_summaries failed after retries: {last_err}")
         batch = payload.get("results") or []
         rows.extend(batch)
         if len(rows) >= int(payload.get("total") or 0) or not batch:
@@ -179,11 +195,24 @@ def _fetch_summaries(base_url: str, state: str) -> list[dict[str, Any]]:
 
 
 def _fetch_doc_text(base_url: str, hoa: str, max_chars: int = 3500) -> str:
-    docs = requests.get(
-        f"{base_url}/hoas/{requests.utils.quote(hoa, safe='')}/documents",
-        timeout=60,
-    )
-    if not docs.ok:
+    quoted = requests.utils.quote(hoa, safe="")
+    # Retry transient 5xx on the docs-list call. Empty result here means
+    # phase10_close.py treats the entry as `skip_delete=True` and
+    # preserves it — we'd rather pay 2 retries than lose a real HOA on a
+    # 502 spike.
+    docs = None
+    for attempt in range(3):
+        try:
+            r = requests.get(f"{base_url}/hoas/{quoted}/documents", timeout=60)
+            if r.status_code == 200:
+                docs = r
+                break
+            if r.status_code in (404, 410):
+                return ""  # genuinely no docs / renamed away
+        except Exception:
+            pass
+        time.sleep(5 + 5 * attempt)
+    if docs is None:
         return ""
     paths = [
         d.get("relative_path") or d.get("path")
@@ -192,12 +221,22 @@ def _fetch_doc_text(base_url: str, hoa: str, max_chars: int = 3500) -> str:
     ]
     if not paths:
         return ""
-    rendered = requests.get(
-        f"{base_url}/hoas/{requests.utils.quote(hoa, safe='')}/documents/searchable",
-        params={"path": paths[0]},
-        timeout=120,
-    )
-    if not rendered.ok:
+    rendered = None
+    for attempt in range(3):
+        try:
+            r = requests.get(
+                f"{base_url}/hoas/{quoted}/documents/searchable",
+                params={"path": paths[0]}, timeout=120,
+            )
+            if r.status_code == 200:
+                rendered = r
+                break
+            if r.status_code in (404, 410):
+                return ""
+        except Exception:
+            pass
+        time.sleep(5 + 5 * attempt)
+    if rendered is None:
         return ""
     pre = re.findall(r"<pre>(.*?)</pre>", rendered.text, flags=re.S | re.I)
     text = "\n".join(html.unescape(re.sub(r"<[^>]+>", " ", part)) for part in pre)
@@ -222,15 +261,46 @@ def _llm_client() -> OpenAI:
 
 
 SYSTEM = (
-    "You normalize HOA / condominium / property-owners-association names. "
-    "Given a possibly-garbled current name plus the first chunk of the HOA's "
-    "governing-document OCR text, return the canonical legal name of the "
-    "association. Prefer the exact phrase that appears in the document body "
-    "(e.g. 'Buckhead Homeowners Association', 'Cumberland Harbour "
-    "Association, Inc.'). If the document does not clearly state an HOA name, "
-    "return null. Do not invent a name from a street address or a city. Strip "
-    "OCR fragments, page headers, all-caps shouting, and document titles like "
-    "'BY-LAWS OF', 'DECLARATION OF', 'ARTICLES OF INCORPORATION OF'."
+    "You normalize HOA / condominium / property-owners-association names "
+    "AND validate that each entry is actually a homeowner / community "
+    "association. Given a possibly-garbled current name plus the first "
+    "chunk of the document's OCR text, return strict JSON.\n\n"
+    "Rules:\n"
+    "  is_hoa: true only when the document is a governing document "
+    "(declaration, CC&Rs, bylaws, articles of incorporation, amendment, "
+    "master deed, supplemental declaration, condominium declaration, "
+    "cooperative bylaws, restrictive covenants) of a community that "
+    "governs real property by recorded covenants — i.e. an HOA, condo "
+    "association, cooperative, townhome association, property-owners "
+    "association, master association, or homeowners-association equivalent. "
+    "Set is_hoa=FALSE for: medical / professional / trade societies (e.g. "
+    "'Dermatological Association'), water utilities / irrigation districts, "
+    "municipal or state agencies (parks-and-recreation associations, "
+    "redevelopment authorities), court filings / lawsuits / opinions, "
+    "news / press / blog / marketing / real-estate listings, "
+    "recording-stamp text fragments (e.g. 'Recorder of … County'), "
+    "plat-page extracts, generic legal-text fragments, OCR garbage. "
+    "An entity name containing the word 'Association' is NOT enough — "
+    "the doc text must show the entity governs a residential community.\n\n"
+    "  canonical_name: the canonical legal name of the association as it "
+    "appears in the document body (e.g. 'Buckhead Homeowners Association', "
+    "'Cumberland Harbour Association, Inc.'). Strip OCR fragments, page "
+    "headers, all-caps shouting, and doc titles like 'BY-LAWS OF', "
+    "'DECLARATION OF', 'ARTICLES OF INCORPORATION OF'. Do not invent a "
+    "name from a street address or a city. Return null when the document "
+    "does not clearly state an HOA name OR when is_hoa=false.\n\n"
+    "  city: the city / town where the community is located, as stated "
+    "in the document. Null if not present.\n\n"
+    "  state: the two-letter US state code where the community is "
+    "located, as stated in the document (e.g. 'GA', 'NV', 'AR'). Null if "
+    "not present. IMPORTANT: this may differ from the state the entry is "
+    "currently filed under — return what the document actually says. "
+    "Cross-state mis-attribution (banked HOA whose docs are from another "
+    "state) is one of the things this validation pass detects.\n\n"
+    "  county: the county or parish where the community is located, as "
+    "stated in the document. Null if not present.\n\n"
+    "  confidence: 0–1 score of overall judgment.\n\n"
+    "  reason: short string explaining the decision."
 )
 
 
@@ -238,8 +308,13 @@ def _prompt(name: str, text: str) -> str:
     return (
         f"current_name: {name!r}\n\n"
         f"document_excerpt:\n{text or '(none)'}\n\n"
-        "Return strict JSON: {\"canonical_name\": <string or null>, "
-        "\"confidence\": <0-1>, \"reason\": <short string>}. "
+        "Return strict JSON: {\"is_hoa\": <bool>, "
+        "\"canonical_name\": <string or null>, "
+        "\"city\": <string or null>, "
+        "\"state\": <2-letter string or null>, "
+        "\"county\": <string or null>, "
+        "\"confidence\": <0-1>, "
+        "\"reason\": <short string>}. "
         "Do not include any text outside the JSON object."
     )
 
@@ -418,7 +493,11 @@ def main() -> int:
                 "hoa_id": row.get("hoa_id"),
                 "old_name": old,
                 "dirty_reason": why,
+                "is_hoa": True,
                 "canonical_name": stripped,
+                "city": None,
+                "state": None,
+                "county": None,
                 "confidence": 0.95,
                 "llm_reason": "deterministic_prefix_strip",
                 "doc_count": row.get("doc_count"),
@@ -433,25 +512,95 @@ def main() -> int:
                 out_path.write_text("\n".join(json.dumps(d, sort_keys=True) for d in decisions))
             continue
         text = _fetch_doc_text(args.base_url, old, max_chars=args.max_text_chars)
+        # If we couldn't fetch enough text to validate, skip the LLM entirely
+        # and emit a decision that preserves the current entry. The OCR
+        # validation pass should never delete an entry when we have no text
+        # to base the decision on.
+        if len(text or "") < 500:
+            decision = {
+                "hoa_id": row.get("hoa_id"),
+                "old_name": old,
+                "dirty_reason": why,
+                "is_hoa": True,
+                "canonical_name": None,
+                "city": None, "state": None, "county": None,
+                "confidence": 0.0,
+                "llm_reason": "skipped:empty_doc_text",
+                "doc_count": row.get("doc_count"),
+                "chunk_count": row.get("chunk_count"),
+                "skip_delete": True,  # phase10_close honors this guard
+            }
+            decisions.append(decision)
+            skipped.append(decision)
+            if i % 10 == 0:
+                print(f"  processed {i}/{len(dirty)}", file=sys.stderr)
+                out_path.write_text("\n".join(json.dumps(d, sort_keys=True) for d in decisions))
+            time.sleep(args.sleep_s)
+            continue
         ans = _ask_llm(client, args.model, old, text)
         if ans is None or ans.get("_error"):
             ans = _ask_llm(client, args.fallback_model, old, text) or {}
         canonical = (ans or {}).get("canonical_name")
         confidence = float((ans or {}).get("confidence") or 0)
         reason = (ans or {}).get("reason") or (ans or {}).get("_error") or ""
+        # is_hoa: default to True for safety when the LLM doesn't explicitly
+        # set it (older prompt schema or response missing the field). Only
+        # treat as False when the LLM explicitly returns False.
+        is_hoa_raw = (ans or {}).get("is_hoa")
+        is_hoa = False if is_hoa_raw is False else True
+        # Override is_hoa back to True when the LLM's reason indicates it
+        # was uncertain due to missing/insufficient text (rather than a
+        # confident "this is not an HOA"). DeepSeek-flash + Kimi sometimes
+        # return is_hoa=false with a "no document excerpt" canned response
+        # even when the doc text was supplied — defensive guard prevents
+        # mass deletions from those false negatives.
+        if not is_hoa:
+            uncertainty = re.search(
+                r"\b(no\s+document|no\s+excerpt|cannot\s+verify|unable\s+to|"
+                r"insufficient|not\s+enough\s+(?:text|info|context|content)|"
+                r"text\s+(?:is|was)\s+(?:empty|missing|not\s+provided))\b",
+                reason or "", re.I,
+            )
+            if uncertainty:
+                is_hoa = True
+        # Normalize state to upper 2-letter, drop empty / non-2-letter.
+        llm_state_raw = (ans or {}).get("state")
+        if isinstance(llm_state_raw, str):
+            s = llm_state_raw.strip().upper()
+            llm_state = s if len(s) == 2 and s.isalpha() else None
+        else:
+            llm_state = None
+        llm_city = (ans or {}).get("city")
+        if isinstance(llm_city, str):
+            llm_city = llm_city.strip() or None
+        else:
+            llm_city = None
+        llm_county = (ans or {}).get("county")
+        if isinstance(llm_county, str):
+            llm_county = llm_county.strip() or None
+        else:
+            llm_county = None
         decision = {
             "hoa_id": row.get("hoa_id"),
             "old_name": old,
             "dirty_reason": why,
+            "is_hoa": is_hoa,
             "canonical_name": canonical,
+            "city": llm_city,
+            "state": llm_state,
+            "county": llm_county,
             "confidence": confidence,
             "llm_reason": reason,
             "doc_count": row.get("doc_count"),
             "chunk_count": row.get("chunk_count"),
         }
         decisions.append(decision)
+        # Only propose a rename for entries the LLM confirmed as HOAs.
+        # is_hoa=False entries get hard-deleted by phase10_close.py via
+        # parse_not_hoa_ids; renaming them would just hide the problem.
         if (
-            _looks_canonical(canonical)
+            is_hoa
+            and _looks_canonical(canonical)
             and confidence >= args.min_confidence
             and _normalize_for_compare(canonical) != _normalize_for_compare(old)
         ):
@@ -490,14 +639,28 @@ def main() -> int:
         errs_total = 0
         for start in range(0, len(propose_renames), 100):
             chunk = propose_renames[start : start + 100]
-            r = requests.post(
-                f"{args.base_url}/admin/rename-hoa",
-                headers={"Authorization": f"Bearer {token}"},
-                json={"renames": chunk},
-                timeout=180,
-            )
-            r.raise_for_status()
-            payload = r.json()
+            payload = None
+            last_err = None
+            for attempt in range(6):
+                try:
+                    r = requests.post(
+                        f"{args.base_url}/admin/rename-hoa",
+                        headers={"Authorization": f"Bearer {token}"},
+                        json={"renames": chunk},
+                        timeout=180,
+                    )
+                    if r.status_code == 200:
+                        payload = r.json()
+                        last_err = None
+                        break
+                    last_err = f"http {r.status_code}: {r.text[:160]}"
+                except Exception as exc:
+                    last_err = f"{type(exc).__name__}: {exc}"
+                time.sleep(20 + 10 * attempt)
+            if last_err:
+                print(f"rename chunk {start//100 + 1} failed after retries: {last_err}", file=sys.stderr)
+                errs_total += len(chunk)
+                continue
             applied_total += int(payload.get("renamed") or 0)
             merged_total += int(payload.get("merged") or 0)
             errs_total += int(payload.get("errors") or 0)

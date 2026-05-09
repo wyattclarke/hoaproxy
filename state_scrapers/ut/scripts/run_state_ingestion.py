@@ -97,6 +97,7 @@ COUNTY_RUNS: list[tuple[str, str | None]] = [
     ("ut_iron_serper_queries.txt", "Iron"),
     ("ut_box-elder_serper_queries.txt", "Box Elder"),
     ("ut_summit_serper_queries.txt", "Summit"),
+    ("ut_wasatch_serper_queries.txt", "Wasatch"),
     ("ut_host_family_serper_queries.txt", None),
 ]
 

@@ -133,12 +133,67 @@ NON_HOA_NAME_SAFELIST = {
 }
 
 
+# Override tier — checked BEFORE the structural-suffix safelist. These are
+# patterns confident enough to delete the entry even when it has an
+# HOA-shaped suffix (e.g. "Recorder of Madison County ... Condominium
+# Association"). Added in the May 2026 second-pass batch (NV/IA/ID/KY/UT/AL/LA)
+# after Phase 10's regex sweep was found to leak doc-title fragments,
+# filename-leak slugs, recording stamps, and non-HOA professional societies.
+NON_HOA_NAME_PATTERNS_OVERRIDE = [
+    # Web/CMS/scanner artifacts that should never appear in a real HOA name
+    r"\bSquarespace\b", r"\bDocuWare\b",
+    # OCR garbage / single-letter-chunk strings
+    r"^BOG!", r"^[A-Z]\s+[A-Z]\s+[A-Z][a-z]?\s*$",
+    # Doc-title leaks at start (overrides "...Association$" suffix safelist)
+    r"^Th\s+(?:Restrictions|Phase|Property|Owner|Member)\b",
+    r"^Sr\s+HOA\s*$",
+    r"^Of [A-Z][a-z]+ for\s+[A-Z]",      # "Of Condominium for Vivante HOA"
+    r"^OF [A-Z]+ FOR\s+[A-Z]",           # "OF PROTECTIVE FOR HERITAGE HOA"
+    r"^Of Condominium\s+\.{2,}",         # "Of Condominium ... of the Club..."
+    r"^conditions and\b",                 # "of , conditions and HOA"
+    r"^of\s*,\s+conditions\b",
+    r"^Beckley Springs Cc Rs\b",
+    # Filename-leak slugs (multiple hyphenated proper-noun fragments)
+    r"^Council-[A-Z][a-z]+-",            # "Council-Bluffs-Whispering-Oaks-..."
+    r"^The-[A-Z][a-z]+-[A-Z]",           # "The-Seven-at-Fox-Run-Landing-..."
+    r"^MeadowCreek-",
+    # Recording / notary leaks at start
+    r"^Recorder of [A-Z][a-z]+\s+County",
+    r"^Office of the Register of Deeds",
+    r"^Notary Public for State",
+    r"^Certificate of Amendment to",
+    # Legal-text fragments anywhere
+    r"\bCondominium Property Act\b",
+    r"\bPlaintiff cites\b",
+    r"\bHOAs by changing\b",
+    r"\bHomeowner Information and\b",
+    r"\bLifestyle Clubhouse\b",
+    r"\bSite Map Ownership Opportunities\b",
+    r"\bComplica\s+Tion\b",              # "Historic Complica Tion ..." (OCR-broken)
+    # Definitively non-HOA association classes
+    r"\bDermatological Association\b",
+    r"\bParks and Recreation Association\b",
+    # Filename + doc-fragment markers anywhere
+    r"\bCc Rs(?:\s+Redline)?\s*$",
+    r"^COLLECTIONS RESOLUTION\b",
+    r"\b\d{3,5}\s+TOWNHOMES\s+HOA\s*$",  # "2100 TOWNHOMES HOA"
+    r"\bConditions and Oak Harbor\b",
+    r"\bTerm\.\s+of\b",
+    r"\bRestrictive and for\b",
+]
+_NON_HOA_REGEXES_OVERRIDE = [re.compile(p, re.IGNORECASE) for p in NON_HOA_NAME_PATTERNS_OVERRIDE]
+
+
 def regex_match_non_hoa(name: str) -> str | None:
     """Return the first matching pattern (string), or None if name looks HOA-shaped."""
     if not name:
         return "empty_name"
     if name.upper() in NON_HOA_NAME_SAFELIST:
         return None
+    # Override tier: high-confidence junk that wins over the suffix safelist.
+    for r in _NON_HOA_REGEXES_OVERRIDE:
+        if r.search(name):
+            return r.pattern
     # Structural safelist: names ending in an unambiguous community-type
     # suffix are real entities — registry-derived names like "3025 Porter
     # Street Condo" or "Kewalo Tower Condominium" are otherwise tripped by
@@ -347,7 +402,11 @@ def run_rename_pass(state: str, out_path: Path, *, apply: bool, base_url: str) -
 
 
 def parse_null_canonical_ids(ledger: Path) -> list[int]:
-    """Step 2 helper: parse rename ledger for entries the LLM declined to rename."""
+    """Step 2 helper: parse rename ledger for entries the LLM declined to rename.
+
+    Honors the `skip_delete` guard: rows where doc text was unavailable
+    (and the LLM was therefore not consulted) leave canonical_name=null
+    but must be preserved, not deleted."""
     null_ids: list[int] = []
     if not ledger.exists():
         return null_ids
@@ -359,11 +418,187 @@ def parse_null_canonical_ids(ledger: Path) -> list[int]:
             row = json.loads(line)
         except Exception:
             continue
+        if row.get("skip_delete") is True:
+            continue
         canonical = row.get("canonical_name")
         hoa_id = row.get("hoa_id")
         if canonical in (None, "", "null") and isinstance(hoa_id, int):
             null_ids.append(hoa_id)
     return null_ids
+
+
+def parse_not_hoa_ids(ledger: Path, *, min_confidence: float = 0.85) -> list[int]:
+    """Parse rename ledger for entries the LLM identified as NOT an HOA
+    (medical society, water utility, court filing, plat extract, etc.).
+    Field added in May 2026 second-pass: clean_dirty_hoa_names.py emits
+    `is_hoa: false` when the doc text reveals the entity is not a community
+    association governing real property by recorded covenants.
+
+    Defensive guards:
+      - confidence >= 0.85 (high bar to avoid false-positive deletions)
+      - doc_count >= 1 (entity must actually have docs to validate against)
+      - skip_delete is not True (caller couldn't fetch doc text)
+      - reason does not contain uncertainty markers ("no document",
+        "cannot verify", etc.) — DeepSeek/Kimi sometimes return
+        is_hoa=false with such canned responses even when text was given.
+    """
+    ids: list[int] = []
+    if not ledger.exists():
+        return ids
+    uncertainty_re = re.compile(
+        r"\b(no\s+document|no\s+excerpt|cannot\s+verify|unable\s+to|"
+        r"insufficient|not\s+enough\s+(?:text|info|context|content)|"
+        r"text\s+(?:is|was)\s+(?:empty|missing|not\s+provided))\b",
+        re.I,
+    )
+    for line in ledger.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            row = json.loads(line)
+        except Exception:
+            continue
+        if row.get("is_hoa") is not False:
+            continue
+        if row.get("skip_delete") is True:
+            continue
+        try:
+            conf = float(row.get("confidence") or 0)
+        except (TypeError, ValueError):
+            conf = 0.0
+        if conf < min_confidence:
+            continue
+        try:
+            doc_count = int(row.get("doc_count") or 0)
+        except (TypeError, ValueError):
+            doc_count = 0
+        if doc_count < 1:
+            continue
+        reason = row.get("llm_reason") or ""
+        if uncertainty_re.search(reason):
+            continue
+        hoa_id = row.get("hoa_id")
+        if isinstance(hoa_id, int):
+            ids.append(hoa_id)
+    return ids
+
+
+def parse_foreign_state_ids(ledger: Path, run_state: str, *, min_confidence: float = 0.85) -> list[int]:
+    """Parse rename ledger for entries whose LLM-extracted state differs
+    from the run state (e.g. an Arkansas HOA mis-attributed to Nevada).
+    Only acts on confidently-identified HOAs (is_hoa != false) where the
+    document text plainly states a different two-letter state code."""
+    ids: list[int] = []
+    if not ledger.exists():
+        return ids
+    target = run_state.upper().strip()
+    for line in ledger.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            row = json.loads(line)
+        except Exception:
+            continue
+        if row.get("is_hoa") is False:
+            continue  # already handled by parse_not_hoa_ids
+        if row.get("skip_delete") is True:
+            continue
+        try:
+            doc_count = int(row.get("doc_count") or 0)
+        except (TypeError, ValueError):
+            doc_count = 0
+        if doc_count < 1:
+            continue
+        llm_state = (row.get("state") or "").upper().strip()
+        if not llm_state or len(llm_state) != 2 or llm_state == target:
+            continue
+        try:
+            conf = float(row.get("confidence") or 0)
+        except (TypeError, ValueError):
+            conf = 0.0
+        if conf < min_confidence:
+            continue
+        hoa_id = row.get("hoa_id")
+        if isinstance(hoa_id, int):
+            ids.append(hoa_id)
+    return ids
+
+
+def parse_location_backfills(ledger: Path, run_state: str, *, min_confidence: float = 0.6) -> list[dict[str, Any]]:
+    """Parse rename ledger for OCR-derived city values to backfill via
+    /admin/backfill-locations. Skips entries flagged as not-HOA or
+    foreign-state. Uses the canonical_name (post-rename) as the lookup key
+    when available, else the old_name."""
+    out: list[dict[str, Any]] = []
+    if not ledger.exists():
+        return out
+    target = run_state.upper().strip()
+    for line in ledger.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            row = json.loads(line)
+        except Exception:
+            continue
+        if row.get("is_hoa") is False:
+            continue
+        llm_state = (row.get("state") or "").upper().strip()
+        if llm_state and llm_state != target and len(llm_state) == 2:
+            continue  # foreign-state, will be deleted
+        try:
+            conf = float(row.get("confidence") or 0)
+        except (TypeError, ValueError):
+            conf = 0.0
+        if conf < min_confidence:
+            continue
+        city = (row.get("city") or "").strip()
+        if not city:
+            continue
+        canonical = (row.get("canonical_name") or "").strip()
+        old_name = (row.get("old_name") or "").strip()
+        # Prefer canonical (post-rename) as lookup key; fall back to old_name
+        # if the rename hasn't been applied yet or canonical is null.
+        lookup_name = canonical or old_name
+        if not lookup_name:
+            continue
+        out.append({
+            "hoa": lookup_name,
+            "city": city,
+            "state": target,
+            "location_quality": "city_only",
+            "source": "ocr_llm_validation",
+        })
+    return out
+
+
+def apply_location_backfills(records: list[dict[str, Any]], *, apply: bool, base_url: str) -> dict[str, Any]:
+    if not records:
+        return {"records": 0, "reason": "no_candidates"}
+    if not apply:
+        return {"would_apply": len(records), "samples": records[:5]}
+    token = live_admin_token()
+    if not token:
+        return {"skipped": True, "reason": "missing_admin_bearer"}
+    last_err = None
+    for attempt in range(4):
+        try:
+            r = requests.post(
+                f"{base_url}/admin/backfill-locations",
+                headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+                json={"records": records},
+                timeout=180,
+            )
+            if r.status_code == 200:
+                body = r.json()
+                return {"applied": len(records), "response": body}
+            last_err = f"http {r.status_code}: {r.text[:200]}"
+        except Exception as exc:
+            last_err = f"{type(exc).__name__}: {exc}"
+        time.sleep(15 + 5 * attempt)
+    return {"applied": 0, "error": last_err, "attempted": len(records)}
 
 
 def hard_delete(state: str, hoa_ids: list[int], *, apply: bool, base_url: str, label: str) -> dict[str, Any]:
@@ -599,14 +834,28 @@ def main() -> int:
     }
 
     # 1. LLM rename pass
+    ledger = run_dir / "name_cleanup_unconditional.jsonl"
     if not args.skip_rename:
-        ledger = run_dir / "name_cleanup_unconditional.jsonl"
         report["rename"] = run_rename_pass(state, ledger, apply=args.apply, base_url=args.base_url)
         # 2. Hard-delete null canonicals
         null_ids = parse_null_canonical_ids(ledger)
         report["delete_null"] = hard_delete(
             state, null_ids, apply=args.apply, base_url=args.base_url, label="null_canonical"
         )
+    # 2a. Hard-delete LLM-flagged non-HOA entities (is_hoa=false). Field
+    # emitted by clean_dirty_hoa_names.py when the doc text reveals the
+    # entity is a medical society, water utility, court filing, etc.
+    not_hoa_ids = parse_not_hoa_ids(ledger)
+    report["delete_not_hoa"] = hard_delete(
+        state, not_hoa_ids, apply=args.apply, base_url=args.base_url, label="not_hoa_llm"
+    )
+    # 2b. Hard-delete entries whose OCR text is plainly from a different
+    # state (cross-state mis-attribution, e.g. Hot Springs Village banked
+    # under NV when its docs say Arkansas).
+    foreign_state_ids = parse_foreign_state_ids(ledger, state)
+    report["delete_foreign_state"] = hard_delete(
+        state, foreign_state_ids, apply=args.apply, base_url=args.base_url, label="foreign_state_ocr"
+    )
 
     # 2b. Cumulative-regex non-HOA delete sweep (catches what the LLM null
     # decision missed: gov ordinances, plat extracts, OCR fragments,
@@ -643,6 +892,18 @@ def main() -> int:
         dedupe_pairs, apply=args.apply, base_url=args.base_url
     )
 
+    # 3c. Location backfill from OCR-LLM ledger (city + state, where present).
+    # Runs after rename/delete passes so post-rename canonical names resolve
+    # in /admin/backfill-locations' name lookup.
+    loc_records = parse_location_backfills(ledger, state)
+    (run_dir / "location_backfill_records.json").write_text(
+        json.dumps(loc_records, indent=2, sort_keys=True), encoding="utf-8"
+    )
+    report["location_backfill_count"] = len(loc_records)
+    report["location_backfill"] = apply_location_backfills(
+        loc_records, apply=args.apply, base_url=args.base_url
+    )
+
     # 4. Bbox audit
     bb = bbox_audit(state, args.base_url, bbox)
     (run_dir / "bbox_audit.json").write_text(json.dumps(bb, indent=2, sort_keys=True), encoding="utf-8")
@@ -672,7 +933,9 @@ def main() -> int:
     retro = write_retrospective(state, run_dir, report)
     summary_keys = (
         "audit_flag_count", "regex_flag_count", "dedupe_pair_count",
-        "bbox_audit", "delete_null", "delete_regex", "delete_audit", "dedupe_merge",
+        "bbox_audit", "delete_null", "delete_not_hoa", "delete_foreign_state",
+        "delete_regex", "delete_audit", "dedupe_merge",
+        "location_backfill_count", "location_backfill",
     )
     print(json.dumps({
         "state": state, "run_id": args.run_id, "retrospective": str(retro),
