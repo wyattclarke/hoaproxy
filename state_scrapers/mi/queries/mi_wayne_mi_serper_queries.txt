@@ -1,0 +1,16 @@
+"Michigan" "Wayne County" "homeowners association" declaration filetype:pdf
+"Michigan" "Wayne County" "condominium association" bylaws filetype:pdf
+"Michigan" "Wayne County" "owners association" covenants filetype:pdf
+"Michigan" "Wayne County" "amended and restated declaration" filetype:pdf
+"Michigan" "Wayne County" "articles of incorporation" "homeowners" filetype:pdf
+"Michigan" "Wayne County" "Recorder of Deeds" "Declaration" filetype:pdf
+"Michigan" "Wayne County" "Register of Deeds" filetype:pdf
+"Detroit" "Michigan" "homeowners association" "declaration" filetype:pdf
+"Detroit" "Michigan" "condominium association" bylaws filetype:pdf
+"Detroit" "Michigan" "covenants" "subdivision" filetype:pdf
+"Detroit" "Michigan" "CC&Rs" filetype:pdf
+"Detroit" "Michigan" "townhome" "association" filetype:pdf
+"Detroit" "Michigan" "master association" filetype:pdf
+"Detroit" "Michigan" "planned community" declaration filetype:pdf
+"Dearborn" "Michigan" "homeowners association" filetype:pdf
+"Livonia" "Michigan" "homeowners association" filetype:pdf

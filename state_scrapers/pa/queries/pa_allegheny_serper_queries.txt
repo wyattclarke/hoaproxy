@@ -1,0 +1,16 @@
+"Pennsylvania" "Allegheny County" "homeowners association" declaration filetype:pdf
+"Pennsylvania" "Allegheny County" "condominium association" bylaws filetype:pdf
+"Pennsylvania" "Allegheny County" "owners association" covenants filetype:pdf
+"Pennsylvania" "Allegheny County" "amended and restated declaration" filetype:pdf
+"Pennsylvania" "Allegheny County" "articles of incorporation" "homeowners" filetype:pdf
+"Pennsylvania" "Allegheny County" "Recorder of Deeds" "Declaration" filetype:pdf
+"Pennsylvania" "Allegheny County" "Register of Deeds" filetype:pdf
+"Pittsburgh" "Pennsylvania" "homeowners association" "declaration" filetype:pdf
+"Pittsburgh" "Pennsylvania" "condominium association" bylaws filetype:pdf
+"Pittsburgh" "Pennsylvania" "covenants" "subdivision" filetype:pdf
+"Pittsburgh" "Pennsylvania" "CC&Rs" filetype:pdf
+"Pittsburgh" "Pennsylvania" "townhome" "association" filetype:pdf
+"Pittsburgh" "Pennsylvania" "master association" filetype:pdf
+"Pittsburgh" "Pennsylvania" "planned community" declaration filetype:pdf
+"Monroeville" "Pennsylvania" "homeowners association" filetype:pdf
+"Bethel Park" "Pennsylvania" "homeowners association" filetype:pdf

@@ -1,0 +1,16 @@
+"Michigan" "Kent County" "homeowners association" declaration filetype:pdf
+"Michigan" "Kent County" "condominium association" bylaws filetype:pdf
+"Michigan" "Kent County" "owners association" covenants filetype:pdf
+"Michigan" "Kent County" "amended and restated declaration" filetype:pdf
+"Michigan" "Kent County" "articles of incorporation" "homeowners" filetype:pdf
+"Michigan" "Kent County" "Recorder of Deeds" "Declaration" filetype:pdf
+"Michigan" "Kent County" "Register of Deeds" filetype:pdf
+"Grand Rapids" "Michigan" "homeowners association" "declaration" filetype:pdf
+"Grand Rapids" "Michigan" "condominium association" bylaws filetype:pdf
+"Grand Rapids" "Michigan" "covenants" "subdivision" filetype:pdf
+"Grand Rapids" "Michigan" "CC&Rs" filetype:pdf
+"Grand Rapids" "Michigan" "townhome" "association" filetype:pdf
+"Grand Rapids" "Michigan" "master association" filetype:pdf
+"Grand Rapids" "Michigan" "planned community" declaration filetype:pdf
+"Kentwood" "Michigan" "homeowners association" filetype:pdf
+"Wyoming" "Michigan" "homeowners association" filetype:pdf

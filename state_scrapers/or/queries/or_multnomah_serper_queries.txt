@@ -1,0 +1,16 @@
+"Oregon" "Multnomah County" "homeowners association" declaration filetype:pdf
+"Oregon" "Multnomah County" "condominium association" bylaws filetype:pdf
+"Oregon" "Multnomah County" "owners association" covenants filetype:pdf
+"Oregon" "Multnomah County" "amended and restated declaration" filetype:pdf
+"Oregon" "Multnomah County" "articles of incorporation" "homeowners" filetype:pdf
+"Oregon" "Multnomah County" "Recorder of Deeds" "Declaration" filetype:pdf
+"Oregon" "Multnomah County" "Register of Deeds" filetype:pdf
+"Portland" "Oregon" "homeowners association" "declaration" filetype:pdf
+"Portland" "Oregon" "condominium association" bylaws filetype:pdf
+"Portland" "Oregon" "covenants" "subdivision" filetype:pdf
+"Portland" "Oregon" "CC&Rs" filetype:pdf
+"Portland" "Oregon" "townhome" "association" filetype:pdf
+"Portland" "Oregon" "master association" filetype:pdf
+"Portland" "Oregon" "planned community" declaration filetype:pdf
+"Gresham" "Oregon" "homeowners association" filetype:pdf
+"Troutdale" "Oregon" "homeowners association" filetype:pdf

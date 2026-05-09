@@ -1,0 +1,16 @@
+"Ohio" "Lucas County" "homeowners association" declaration filetype:pdf
+"Ohio" "Lucas County" "condominium association" bylaws filetype:pdf
+"Ohio" "Lucas County" "owners association" covenants filetype:pdf
+"Ohio" "Lucas County" "amended and restated declaration" filetype:pdf
+"Ohio" "Lucas County" "articles of incorporation" "homeowners" filetype:pdf
+"Ohio" "Lucas County" "Recorder of Deeds" "Declaration" filetype:pdf
+"Ohio" "Lucas County" "Register of Deeds" filetype:pdf
+"Toledo" "Ohio" "homeowners association" "declaration" filetype:pdf
+"Toledo" "Ohio" "condominium association" bylaws filetype:pdf
+"Toledo" "Ohio" "covenants" "subdivision" filetype:pdf
+"Toledo" "Ohio" "CC&Rs" filetype:pdf
+"Toledo" "Ohio" "townhome" "association" filetype:pdf
+"Toledo" "Ohio" "master association" filetype:pdf
+"Toledo" "Ohio" "planned community" declaration filetype:pdf
+"Sylvania" "Ohio" "homeowners association" filetype:pdf
+"Maumee" "Ohio" "homeowners association" filetype:pdf

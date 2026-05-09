@@ -1,0 +1,18 @@
+"Pennsylvania" "Monroe County" "homeowners association" declaration filetype:pdf
+"Pennsylvania" "Monroe County" "condominium association" bylaws filetype:pdf
+"Pennsylvania" "Monroe County" "owners association" covenants filetype:pdf
+"Pennsylvania" "Monroe County" "amended and restated declaration" filetype:pdf
+"Pennsylvania" "Monroe County" "articles of incorporation" "homeowners" filetype:pdf
+"Pennsylvania" "Monroe County" "Recorder of Deeds" "Declaration" filetype:pdf
+"Pennsylvania" "Monroe County" "Register of Deeds" filetype:pdf
+"Stroudsburg" "Pennsylvania" "homeowners association" "declaration" filetype:pdf
+"Stroudsburg" "Pennsylvania" "condominium association" bylaws filetype:pdf
+"Stroudsburg" "Pennsylvania" "covenants" "subdivision" filetype:pdf
+"Stroudsburg" "Pennsylvania" "CC&Rs" filetype:pdf
+"Stroudsburg" "Pennsylvania" "townhome" "association" filetype:pdf
+"Stroudsburg" "Pennsylvania" "master association" filetype:pdf
+"Stroudsburg" "Pennsylvania" "planned community" declaration filetype:pdf
+"Tannersville" "Pennsylvania" "homeowners association" filetype:pdf
+"Pocono" "Pennsylvania" "condominium association" filetype:pdf
+"Pocono Mountains" "Pennsylvania" "homeowners association" filetype:pdf
+"Pocono" "Pennsylvania" "ski" "resort" "association" filetype:pdf

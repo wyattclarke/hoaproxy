@@ -1,0 +1,16 @@
+"Minnesota" "Scott County" "homeowners association" declaration filetype:pdf
+"Minnesota" "Scott County" "condominium association" bylaws filetype:pdf
+"Minnesota" "Scott County" "owners association" covenants filetype:pdf
+"Minnesota" "Scott County" "amended and restated declaration" filetype:pdf
+"Minnesota" "Scott County" "articles of incorporation" "homeowners" filetype:pdf
+"Minnesota" "Scott County" "Recorder of Deeds" "Declaration" filetype:pdf
+"Minnesota" "Scott County" "Register of Deeds" filetype:pdf
+"Shakopee" "Minnesota" "homeowners association" "declaration" filetype:pdf
+"Shakopee" "Minnesota" "condominium association" bylaws filetype:pdf
+"Shakopee" "Minnesota" "covenants" "subdivision" filetype:pdf
+"Shakopee" "Minnesota" "CC&Rs" filetype:pdf
+"Shakopee" "Minnesota" "townhome" "association" filetype:pdf
+"Shakopee" "Minnesota" "master association" filetype:pdf
+"Shakopee" "Minnesota" "planned community" declaration filetype:pdf
+"Prior Lake" "Minnesota" "homeowners association" filetype:pdf
+"Savage" "Minnesota" "homeowners association" filetype:pdf

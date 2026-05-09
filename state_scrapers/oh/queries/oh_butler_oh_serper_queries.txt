@@ -1,0 +1,16 @@
+"Ohio" "Butler County" "homeowners association" declaration filetype:pdf
+"Ohio" "Butler County" "condominium association" bylaws filetype:pdf
+"Ohio" "Butler County" "owners association" covenants filetype:pdf
+"Ohio" "Butler County" "amended and restated declaration" filetype:pdf
+"Ohio" "Butler County" "articles of incorporation" "homeowners" filetype:pdf
+"Ohio" "Butler County" "Recorder of Deeds" "Declaration" filetype:pdf
+"Ohio" "Butler County" "Register of Deeds" filetype:pdf
+"Hamilton" "Ohio" "homeowners association" "declaration" filetype:pdf
+"Hamilton" "Ohio" "condominium association" bylaws filetype:pdf
+"Hamilton" "Ohio" "covenants" "subdivision" filetype:pdf
+"Hamilton" "Ohio" "CC&Rs" filetype:pdf
+"Hamilton" "Ohio" "townhome" "association" filetype:pdf
+"Hamilton" "Ohio" "master association" filetype:pdf
+"Hamilton" "Ohio" "planned community" declaration filetype:pdf
+"Middletown" "Ohio" "homeowners association" filetype:pdf
+"West Chester" "Ohio" "homeowners association" filetype:pdf

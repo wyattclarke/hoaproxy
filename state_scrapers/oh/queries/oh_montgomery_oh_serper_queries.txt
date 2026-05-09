@@ -1,0 +1,16 @@
+"Ohio" "Montgomery County" "homeowners association" declaration filetype:pdf
+"Ohio" "Montgomery County" "condominium association" bylaws filetype:pdf
+"Ohio" "Montgomery County" "owners association" covenants filetype:pdf
+"Ohio" "Montgomery County" "amended and restated declaration" filetype:pdf
+"Ohio" "Montgomery County" "articles of incorporation" "homeowners" filetype:pdf
+"Ohio" "Montgomery County" "Recorder of Deeds" "Declaration" filetype:pdf
+"Ohio" "Montgomery County" "Register of Deeds" filetype:pdf
+"Dayton" "Ohio" "homeowners association" "declaration" filetype:pdf
+"Dayton" "Ohio" "condominium association" bylaws filetype:pdf
+"Dayton" "Ohio" "covenants" "subdivision" filetype:pdf
+"Dayton" "Ohio" "CC&Rs" filetype:pdf
+"Dayton" "Ohio" "townhome" "association" filetype:pdf
+"Dayton" "Ohio" "master association" filetype:pdf
+"Dayton" "Ohio" "planned community" declaration filetype:pdf
+"Kettering" "Ohio" "homeowners association" filetype:pdf
+"Centerville" "Ohio" "homeowners association" filetype:pdf

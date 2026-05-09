@@ -1,0 +1,16 @@
+"Michigan" "Genesee County" "homeowners association" declaration filetype:pdf
+"Michigan" "Genesee County" "condominium association" bylaws filetype:pdf
+"Michigan" "Genesee County" "owners association" covenants filetype:pdf
+"Michigan" "Genesee County" "amended and restated declaration" filetype:pdf
+"Michigan" "Genesee County" "articles of incorporation" "homeowners" filetype:pdf
+"Michigan" "Genesee County" "Recorder of Deeds" "Declaration" filetype:pdf
+"Michigan" "Genesee County" "Register of Deeds" filetype:pdf
+"Flint" "Michigan" "homeowners association" "declaration" filetype:pdf
+"Flint" "Michigan" "condominium association" bylaws filetype:pdf
+"Flint" "Michigan" "covenants" "subdivision" filetype:pdf
+"Flint" "Michigan" "CC&Rs" filetype:pdf
+"Flint" "Michigan" "townhome" "association" filetype:pdf
+"Flint" "Michigan" "master association" filetype:pdf
+"Flint" "Michigan" "planned community" declaration filetype:pdf
+"Burton" "Michigan" "homeowners association" filetype:pdf
+"Grand Blanc" "Michigan" "homeowners association" filetype:pdf
