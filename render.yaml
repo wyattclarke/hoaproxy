@@ -60,4 +60,18 @@ services:
     disk:
       name: hoaproxy-data
       mountPath: /var/data
-      sizeGB: 100
+      sizeGB: 200
+
+  - type: cron
+    name: hoaproxy-db-backup
+    runtime: image
+    image:
+      url: docker.io/curlimages/curl:8.10.1
+    schedule: "0 10,22 * * *"
+    envVars:
+      - key: JWT_SECRET
+        fromService:
+          type: web
+          name: hoaproxy-app
+          envVarKey: JWT_SECRET
+    startCommand: 'curl -fsS --max-time 600 -X POST https://hoaproxy.org/admin/backup -H "Authorization: Bearer $JWT_SECRET"'
