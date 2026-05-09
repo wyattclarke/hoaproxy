@@ -37,6 +37,7 @@ scripts/gcp_billing_cap/
 # Generated scraping / benchmark output
 benchmark/results/
 state_scrapers/**/results/
+state_scrapers/**/cache/
 
 # Claude Code / Playwright working dirs
 .claude/
