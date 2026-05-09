@@ -4474,6 +4474,97 @@ def admin_delete_hoa(request: Request, body: dict):
     }
 
 
+@app.post("/admin/create-stub-hoas")
+def admin_create_stub_hoas(request: Request, body: dict):
+    """Bulk-create or upsert HOAs *without* requiring documents. Used for
+    registry-derived entities where governing docs aren't publicly available
+    (e.g. DC condominium projects whose docs sit behind paywalled DC Recorder
+    of Deeds, or HI condos behind Bureau of Conveyances).
+
+    Each entry creates an `hoas` row (if name is new) and inserts/updates the
+    matching `hoa_locations` row. No documents, chunks, or embeddings are
+    created — these stub HOAs will appear in /hoas/summary with doc_count=0
+    and chunk_count=0 until governing docs are uploaded later.
+
+    Body shape:
+      {
+        "records": [
+          {
+            "name": "218 Vista Condo",
+            "metadata_type": "condo",
+            "street": "218 Vista St NE",
+            "city": "Washington",
+            "state": "DC",
+            "postal_code": "20002",
+            "latitude": 38.91,
+            "longitude": -77.00,
+            "location_quality": "address",
+            "source": "dc-gis-cama-condo-regime",
+            "source_url": "https://maps2.dcgis.dc.gov/.../FeatureServer/72",
+            "website_url": null
+          },
+          ...
+        ]
+      }
+
+    Allowed location_quality values match /admin/backfill-locations.
+    Returns counts of created vs updated stubs.
+    """
+    _require_admin(request)
+    settings = load_settings()
+    records = body.get("records") or []
+    valid_quality = {"polygon", "address", "place_centroid", "zip_centroid", "city_only", "unknown"}
+    created = 0
+    updated = 0
+    skipped: list[dict] = []
+    by_quality: dict[str, int] = {}
+
+    with db.get_connection(settings.db_path) as conn:
+        for entry in records:
+            name = (entry.get("name") or "").strip()
+            if not name:
+                skipped.append({"reason": "empty_name", "entry": entry})
+                continue
+            quality = entry.get("location_quality")
+            if quality is not None:
+                quality = str(quality).strip()
+                if quality not in valid_quality:
+                    skipped.append({"reason": f"bad_quality:{quality}", "name": name})
+                    continue
+            existing = conn.execute(
+                "SELECT id FROM hoas WHERE name = ?", (name,)
+            ).fetchone()
+            is_new = existing is None
+            db.upsert_hoa_location(
+                conn,
+                hoa_name=name,
+                metadata_type=entry.get("metadata_type"),
+                website_url=entry.get("website_url"),
+                street=entry.get("street"),
+                city=entry.get("city"),
+                state=entry.get("state"),
+                postal_code=entry.get("postal_code"),
+                latitude=entry.get("latitude"),
+                longitude=entry.get("longitude"),
+                source=entry.get("source") or "registry-stub",
+                location_quality=quality,
+            )
+            if is_new:
+                created += 1
+            else:
+                updated += 1
+            by_quality[quality or "none"] = by_quality.get(quality or "none", 0) + 1
+
+    return {
+        "created": created,
+        "updated": updated,
+        "skipped": len(skipped),
+        "skipped_sample": skipped[:10],
+        "by_quality": by_quality,
+        "total_in_request": len(records),
+    }
+
+
 @app.post("/admin/extract-doc-zips")
 def admin_extract_doc_zips(request: Request, state: str | None = None, limit: int = 5000):
     """Scan each HOA's chunked text for postal-code mentions and return the
