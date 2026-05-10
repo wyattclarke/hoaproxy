@@ -79,6 +79,8 @@ JUNK = re.compile(
     re.I,
 )
 seen = set()
+import os as _os
+_out_abs = _os.path.abspath(out)
 for path in (
     glob.glob("benchmark/results/ga_*/validated_clean.jsonl") +
     glob.glob("benchmark/results/ga_*/cleaned_dedup.jsonl") +
@@ -87,6 +89,8 @@ for path in (
     glob.glob("benchmark/results/ca_*/validated_clean.jsonl") +
     glob.glob("benchmark/results/ca_*/cleaned_dedup.jsonl")
 ):
+    if _os.path.abspath(path) == _out_abs:
+        continue  # self-dedup guard: skip current run's own output
     try:
         with open(path) as f:
             for line in f:
@@ -132,6 +136,8 @@ python3 - "$CLEAN" "$RESULTS/cleaned_dedup.jsonl" "$DISPLAY" <<'PY'
 import json, sys, re, glob
 inp, out, county = sys.argv[1], sys.argv[2], sys.argv[3]
 seen = set()
+import os as _os
+_out_abs = _os.path.abspath(out)
 for path in (
     glob.glob("benchmark/results/ga_*/validated_clean.jsonl") +
     glob.glob("benchmark/results/ga_*/cleaned_dedup.jsonl") +
@@ -140,6 +146,8 @@ for path in (
     glob.glob("benchmark/results/ca_*/validated_clean.jsonl") +
     glob.glob("benchmark/results/ca_*/cleaned_dedup.jsonl")
 ):
+    if _os.path.abspath(path) == _out_abs:
+        continue  # self-dedup guard: skip current run's own output
     try:
         with open(path) as f:
             for line in f:
