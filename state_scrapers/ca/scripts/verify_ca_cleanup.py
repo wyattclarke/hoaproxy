@@ -56,7 +56,36 @@ def get_with_retry(url: str, retries: int = 5, timeout: int = 60) -> tuple[int, 
     return 0, None, last_err
 
 
+def build_id_map(state: str, base_url: str) -> dict[int, dict]:
+    """Page through /hoas/summary?state=XX, build {hoa_id: row} map.
+
+    /hoas/{name} returns 404 for docless entities (the rendered docs page
+    requires at least one document). The summary endpoint is the canonical
+    "does this entity exist?" check and includes latitude/longitude/
+    boundary_geojson per row.
+    """
+    out: dict[int, dict] = {}
+    offset = 0
+    page = 500
+    while True:
+        url = f"{base_url}/hoas/summary?state={state}&limit={page}&offset={offset}"
+        status, body, err = get_with_retry(url)
+        if not body or not body.get("results"):
+            break
+        for row in body["results"]:
+            hid = row.get("hoa_id")
+            if isinstance(hid, int):
+                out[hid] = row
+        if len(body["results"]) < page:
+            break
+        offset += page
+        if offset > 100000:
+            break
+    return out
+
+
 def fetch_summary(name: str, base_url: str) -> tuple[dict | None, str | None]:
+    """Legacy wrapper kept for backward compat — no longer used."""
     enc = quote(name, safe="")
     status, body, err = get_with_retry(f"{base_url}/hoas/{enc}")
     if status == 200 and isinstance(body, dict):
@@ -86,38 +115,38 @@ def main() -> int:
         targets = random.sample(junk, min(args.sample, len(junk)))
     print(f"[verify] sampling {len(targets)} entities to verify")
 
+    print(f"[verify] building CA hoa_id → row map via /hoas/summary…")
+    id_map = build_id_map("CA", args.base_url)
+    print(f"[verify] loaded {len(id_map)} CA entities")
+
     issues = {"not_found": [], "doc_count_nonzero": [], "missing_geometry": [], "errors": []}
     ok = 0
     for n, t in enumerate(targets, 1):
         name = t.get("hoa")
         hoa_id = t.get("hoa_id")
-        body, err = fetch_summary(name, args.base_url)
-        if body is None:
-            issues["not_found" if err == "not found" else "errors"].append({
-                "hoa_id": hoa_id, "hoa": name, "error": err,
-            })
-            print(f"  [{n}/{len(targets)}] id={hoa_id} {name[:40]:<40}  MISSING: {err}")
+        row = id_map.get(hoa_id)
+        if row is None:
+            issues["not_found"].append({"hoa_id": hoa_id, "hoa": name})
+            print(f"  [{n}/{len(targets)}] id={hoa_id} {name[:40]:<40}  MISSING (not in /hoas/summary)")
             continue
 
-        # /hoas/{name} typically returns { hoa, documents: [...], location: {...} }
-        # We're flexible — check both flat and nested shapes.
-        docs = body.get("documents") or []
-        doc_count = len(docs) if isinstance(docs, list) else body.get("doc_count", 0)
-        loc = body.get("location") or {}
-        lat = loc.get("latitude") or body.get("latitude")
-        lon = loc.get("longitude") or body.get("longitude")
-        boundary = loc.get("boundary_geojson") or body.get("boundary_geojson")
-        street = loc.get("street") or body.get("street")
-        postal = loc.get("postal_code") or body.get("postal_code")
+        doc_count = row.get("doc_count", 0)
+        lat = row.get("latitude")
+        lon = row.get("longitude")
+        boundary = row.get("boundary_geojson")
+        # /hoas/summary doesn't surface street/postal; check via id_map presence
+        geom_present = lat is not None and lon is not None
+        polygon = bool(boundary)
 
-        geom_present = any([lat, lon, boundary, street, postal])
         flag = "OK"
         if doc_count > 0:
             issues["doc_count_nonzero"].append({
                 "hoa_id": hoa_id, "hoa": name, "doc_count": doc_count,
             })
             flag = f"DOC_COUNT={doc_count}"
-        elif not geom_present:
+        elif not (geom_present or polygon):
+            # Not necessarily a regression — the entity may never have had
+            # geometry. We log but don't fail-hard on this.
             issues["missing_geometry"].append({
                 "hoa_id": hoa_id, "hoa": name,
             })
@@ -126,12 +155,10 @@ def main() -> int:
             ok += 1
 
         loc_summary = []
-        if lat is not None and lon is not None:
+        if geom_present:
             loc_summary.append(f"latlon={lat:.4f},{lon:.4f}")
-        if boundary:
+        if polygon:
             loc_summary.append("polygon")
-        if street:
-            loc_summary.append(f"street={(street or '')[:25]}")
         loc_str = " ".join(loc_summary) or "-"
         print(f"  [{n}/{len(targets)}] id={hoa_id} {name[:40]:<40}  doc_count={doc_count}  {loc_str}  [{flag}]")
 
