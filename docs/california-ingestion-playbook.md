@@ -302,12 +302,72 @@ Run order:
 **Don't run two enrichments that both write `geometry` in parallel.**
 E2/E3/E0/E1 all overwrite `geometry`; serialize them.
 
-### Phase 7 — Prepare bundles (polygon-quality gate)
+### Phase 5c — LLM content-grading gate (audit-mandated for CA)
 
-Same gate as giant-state §3h: **manifests with real polygons drain first**
-(`geometry.confidence in {"tract-polygon", "subdpoly-polygon",
-"place-polygon"}`). City-centroid-only manifests drain in a second batch
-or wait for an E0/E1 upgrade.
+**This phase did not exist in the giant-state playbook. CA mandates it.**
+
+The 2026-05-09 quality audit
+([`state_scrapers/_orchestrator/quality_audit_2026_05_09/FINAL_REPORT.md`](../state_scrapers/_orchestrator/quality_audit_2026_05_09/FINAL_REPORT.md))
+sampled 80 live CA HOAs and graded **46 (57.5%) as junk** — the highest
+junk rate of any state graded so far. CA junk is uniquely **diverse**, not
+concentrated in one pattern like HI's DCCA biennial filings. Verified CA
+junk categories from the audit:
+
+- Government docs: city zoning resolutions, EBMUD utility agendas, county
+  Board of Supervisors agendas, planning commission minutes
+- Tax forms: IRS Form 990 returns, county tax delinquency notices
+- Maps with no governing content (just polygon outlines + neighbor list)
+- Newsletters, candidate questionnaires, pool inspection lists
+- Court filings, hearings, lawsuits
+- Wrong-HOA documents (CC&Rs filed under similar-name HOA elsewhere)
+- Generic legal handbooks (statewide HOA law primer, not specific to the
+  named HOA)
+- Omnibus dumps (one CC&R + lots of unrelated fluff in the same PDF set)
+
+**Why CA is uniquely junky.** The legacy CA pipeline used Google-Scrape
+without strict name-anchoring; it banked any PDF whose body mentioned the
+HOA name. So when an HOA was *referenced* in an unrelated city zoning
+hearing or a county tax delinquency list, the legacy pipeline banked the
+hearing/list as if it were a governing document.
+
+**This pipeline avoids most of that** by name-anchoring queries
+(`"<NAME>" "California" filetype:pdf`) at Driver A, but content grading
+remains essential because:
+- Driver B's broad city-level queries can still surface unrelated docs
+- Mgmt-co host portals sometimes include omnibus PDFs
+
+**Phase 5c implementation**:
+1. After Phase 5 OCR completes, run an adapted version of
+   [`scripts/audit/grade_hoa_text_quality.py`](../scripts/audit/grade_hoa_text_quality.py)
+   against **bank manifests** (not live HOAs).
+2. Per-manifest, fetch the OCR sidecar text (already produced in Phase 5).
+3. DeepSeek-v4-flash grades verdict ∈ `{real, junk, no_docs, error}`.
+4. Set `manifest.audit.content_grade = {verdict, category, reason,
+   model, graded_at}`.
+5. Phase 7 prepare-time filter: skip any manifest where
+   `content_grade.verdict == "junk"`. These manifests stay in the bank
+   for review but never drain to live.
+
+Cost: ~$0.0002/HOA × ~25k bank entities = **~$5 OpenRouter spend**.
+Wall-time: ~2-3h with `GRADER_RPS=3.0`.
+
+**Critical**: this gate runs at **bank → drain** time, not at
+**discovery → bank** time. Banking junk is fine (it's stored, dedup-able,
+re-gradable later). Draining junk to live is what poisoned the legacy
+1,101-CA list.
+
+### Phase 7 — Prepare bundles (polygon + content-grade gates)
+
+Two gates apply, in order:
+
+1. **Content-grade gate** (Phase 5c): drop manifests with
+   `content_grade.verdict in {"junk"}`. Approve `real` and `no_docs`
+   (the latter become docless stubs per audit-restore pattern).
+2. **Polygon-quality gate** (giant-state §3h): manifests with real
+   polygons drain first
+   (`geometry.confidence in {"tract-polygon", "subdpoly-polygon",
+   "place-polygon"}`). City-centroid-only manifests drain in a second
+   batch or wait for an E0/E1 upgrade.
 
 ### Phase 8 — Drain bank → /upload (75s pacing)
 
@@ -338,6 +398,7 @@ write retrospective to `state_scrapers/ca/notes/retrospective.md`.
 | 2d — Driver D (DRE) | ~10h | $0 |
 | 3 — pre-OCR repair | 30min | $0 |
 | 5 — OCR + slug repair + reroute | 8h | $40–60 DocAI |
+| **5c — LLM content-grading gate** | ~2-3h | ~$5 OpenRouter |
 | 6 E4 — city/ZIP centroid | 1h | $0 |
 | 6 E3 — OSM Nominatim | ~24h | $0 |
 | 6 E2 — HERE | 30min | $0 (within free tier) |
@@ -387,7 +448,16 @@ Filter `status=1` (active) at Phase 1 but **don't** discard suspended
 entities — keep them in a separate `data/ca_registry_inactive.jsonl`
 for a tertiary sweep if Phase 2 coverage falls short.
 
-### 5h. /upload pacing as the hard wall
+### 5h. Junk-content-grading is mandatory pre-drain
+At 50%+ junk rate observed in the legacy live CA list (per audit
+2026-05-09), Phase 5c content-grading is non-negotiable. Skipping it
+means re-poisoning the live CA list immediately after the audit cleared
+it. CA-specific junk is *diverse* (10+ distinct categories: government
+docs, tax forms, zoning resolutions, maps, newsletters, court filings,
+wrong-HOA, omnibus dumps, etc.) — filename regex catches some patterns
+but only LLM content grading reliably catches all of them.
+
+### 5i. /upload pacing as the hard wall
 Memory says 75s/upload. **No faster.** Plan all timelines around this.
 A 5k-HOA Phase 8 = 4.3 days minimum.
 
