@@ -26,34 +26,44 @@ export GOOGLE_CLOUD_PROJECT=hoaware
 export HOA_DISCOVERY_RESPECT_ROBOTS=1
 export PYTHONUNBUFFERED=1
 
-# Build targeted per-HOA-name queries from the CA registry.
-python state_scrapers/ca/scripts/ca_build_corp_county_queries.py \
-  --county "$SLUG" \
-  --output "$QUERIES" \
-  --max-queries-per-county 1500
-
-# Run Serper scraper with HOA-name-targeted settings.
-python benchmark/scrape_state_serper_docpages.py \
-  --state CA --state-name California \
-  --county "$DISPLAY" \
-  --default-county "$DISPLAY" \
-  --run-id "$SERPER_RUN" \
-  --queries-file "$QUERIES" \
-  --max-queries 1500 --results-per-query 5 --pages-per-query 1 \
-  --max-leads 1500 --min-score 5 --search-delay 0.25 \
-  --include-direct-pdfs
-
 LEADS="$ROOT/benchmark/results/ca_serper_docpages_${SERPER_RUN}/leads.jsonl"
 AUDIT="$ROOT/benchmark/results/ca_serper_docpages_${SERPER_RUN}/audit.jsonl"
-
 VAL="$RESULTS/validated.jsonl"
 VAL_AUDIT="$RESULTS/validated_audit.json"
-OPENROUTER_TIMEOUT_SECONDS=80 python benchmark/openrouter_ks_planner.py validate-leads \
-  "$LEADS" --output "$VAL" --audit "$VAL_AUDIT" \
-  --state CA --county "$DISPLAY" \
-  --model deepseek/deepseek-v4-flash \
-  --fallback-model moonshotai/kimi-k2.6 \
-  --batch-size 20 || true
+
+# Stage 1: Serper discovery (idempotent — skip if leads.jsonl populated).
+if [ -s "$LEADS" ]; then
+  echo "[resume] $DISPLAY: leads.jsonl exists ($(wc -l < "$LEADS") leads); skip Serper" >&2
+else
+  # Build targeted per-HOA-name queries from the CA registry.
+  python state_scrapers/ca/scripts/ca_build_corp_county_queries.py \
+    --county "$SLUG" \
+    --output "$QUERIES" \
+    --max-queries-per-county 1500
+
+  # Run Serper scraper with HOA-name-targeted settings.
+  python benchmark/scrape_state_serper_docpages.py \
+    --state CA --state-name California \
+    --county "$DISPLAY" \
+    --default-county "$DISPLAY" \
+    --run-id "$SERPER_RUN" \
+    --queries-file "$QUERIES" \
+    --max-queries 1500 --results-per-query 5 --pages-per-query 1 \
+    --max-leads 1500 --min-score 5 --search-delay 0.25 \
+    --include-direct-pdfs
+fi
+
+# Stage 2: validate-leads (idempotent — skip if validated.jsonl populated).
+if [ -s "$VAL" ]; then
+  echo "[resume] $DISPLAY: validated.jsonl exists ($(wc -l < "$VAL") rows); skip validate" >&2
+else
+  OPENROUTER_TIMEOUT_SECONDS=80 python benchmark/openrouter_ks_planner.py validate-leads \
+    "$LEADS" --output "$VAL" --audit "$VAL_AUDIT" \
+    --state CA --county "$DISPLAY" \
+    --model deepseek/deepseek-v4-flash \
+    --fallback-model moonshotai/kimi-k2.6 \
+    --batch-size 20 || true
+fi
 
 # Dedup validated leads against all prior CA, FL, GA results.
 python3 - "$VAL" "$RESULTS/validated_clean.jsonl" "$DISPLAY" <<'PY'
@@ -160,7 +170,9 @@ PY
 COMBINED="$RESULTS/probe_input.jsonl"
 cat "$RESULTS/validated_clean.jsonl" "$RESULTS/cleaned_dedup.jsonl" 2>/dev/null > "$COMBINED" || true
 
-if [ -s "$COMBINED" ]; then
+if [ -s "$RESULTS/probe.jsonl" ]; then
+  echo "[resume] $DISPLAY: probe.jsonl exists ($(wc -l < "$RESULTS/probe.jsonl") rows); skip probe" >&2
+elif [ -s "$COMBINED" ]; then
   python benchmark/probe_leads_with_pre_discovered.py "$COMBINED" \
     --output "$RESULTS/probe.jsonl" \
     --timeout 180 --max-pdfs 12 --delay 1.0 || true

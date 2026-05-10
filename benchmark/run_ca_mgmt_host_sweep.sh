@@ -72,27 +72,35 @@ HOSTS=(
 QUERY_COUNT=$(grep -cv '^#' "$QUERIES" || true)
 echo "Generated $QUERY_COUNT queries across ${#HOSTS[@]} hosts" >&2
 
-python benchmark/scrape_state_serper_docpages.py \
-  --state CA --state-name California \
-  --county "Statewide" \
-  --default-county "Statewide" \
-  --run-id "$SERPER_RUN" \
-  --queries-file "$QUERIES" \
-  --max-queries 500 --results-per-query 10 --pages-per-query 1 \
-  --max-leads 5000 --min-score 5 --search-delay 0.25 \
-  --include-direct-pdfs
-
 LEADS="$ROOT/benchmark/results/ca_serper_docpages_${SERPER_RUN}/leads.jsonl"
 AUDIT="$ROOT/benchmark/results/ca_serper_docpages_${SERPER_RUN}/audit.jsonl"
-
 VAL="$RESULTS/validated.jsonl"
 VAL_AUDIT="$RESULTS/validated_audit.json"
-OPENROUTER_TIMEOUT_SECONDS=80 python benchmark/openrouter_ks_planner.py validate-leads \
-  "$LEADS" --output "$VAL" --audit "$VAL_AUDIT" \
-  --state CA --county "Statewide" \
-  --model deepseek/deepseek-v4-flash \
-  --fallback-model moonshotai/kimi-k2.6 \
-  --batch-size 20 || true
+
+if [ -s "$LEADS" ]; then
+  echo "[resume] mgmt-host: leads.jsonl exists ($(wc -l < "$LEADS") leads); skip Serper" >&2
+else
+  python benchmark/scrape_state_serper_docpages.py \
+    --state CA --state-name California \
+    --county "Statewide" \
+    --default-county "Statewide" \
+    --run-id "$SERPER_RUN" \
+    --queries-file "$QUERIES" \
+    --max-queries 500 --results-per-query 10 --pages-per-query 1 \
+    --max-leads 5000 --min-score 5 --search-delay 0.25 \
+    --include-direct-pdfs
+fi
+
+if [ -s "$VAL" ]; then
+  echo "[resume] mgmt-host: validated.jsonl exists ($(wc -l < "$VAL") rows); skip validate" >&2
+else
+  OPENROUTER_TIMEOUT_SECONDS=80 python benchmark/openrouter_ks_planner.py validate-leads \
+    "$LEADS" --output "$VAL" --audit "$VAL_AUDIT" \
+    --state CA --county "Statewide" \
+    --model deepseek/deepseek-v4-flash \
+    --fallback-model moonshotai/kimi-k2.6 \
+    --batch-size 20 || true
+fi
 
 # Cleanup + dedup against prior CA/FL/GA results.
 python3 - "$VAL" "$RESULTS/validated_clean.jsonl" "Statewide" <<'PY'
@@ -161,7 +169,9 @@ python benchmark/clean_direct_pdf_leads.py "$LEADS" \
 COMBINED="$RESULTS/probe_input.jsonl"
 cat "$RESULTS/validated_clean.jsonl" "$CLEAN" 2>/dev/null > "$COMBINED" || true
 
-if [ -s "$COMBINED" ]; then
+if [ -s "$RESULTS/probe.jsonl" ]; then
+  echo "[resume] mgmt-host: probe.jsonl exists ($(wc -l < "$RESULTS/probe.jsonl") rows); skip probe" >&2
+elif [ -s "$COMBINED" ]; then
   python benchmark/probe_leads_with_pre_discovered.py "$COMBINED" \
     --output "$RESULTS/probe.jsonl" \
     --timeout 180 --max-pdfs 12 --delay 1.0 || true

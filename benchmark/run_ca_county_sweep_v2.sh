@@ -119,27 +119,37 @@ for city in "${CITIES[@]}"; do
   CITY_ARGS+=( --city "$city" )
 done
 
-python benchmark/scrape_state_serper_docpages.py \
-  --state CA --state-name California \
-  --county "$COUNTY" "${CITY_ARGS[@]}" \
-  --default-county "$COUNTY" \
-  --run-id "$SERPER_RUN" \
-  --queries-file "$QUERIES" \
-  --max-queries 5000 --results-per-query 10 --pages-per-query 1 \
-  --max-leads 5000 --min-score 5 --search-delay 0.25 \
-  --include-direct-pdfs
-
 LEADS="$ROOT/benchmark/results/ca_serper_docpages_${SERPER_RUN}/leads.jsonl"
 AUDIT="$ROOT/benchmark/results/ca_serper_docpages_${SERPER_RUN}/audit.jsonl"
-
 VAL="$RESULTS/validated.jsonl"
 VAL_AUDIT="$RESULTS/validated_audit.json"
-OPENROUTER_TIMEOUT_SECONDS=80 python benchmark/openrouter_ks_planner.py validate-leads \
-  "$LEADS" --output "$VAL" --audit "$VAL_AUDIT" \
-  --state CA --county "$COUNTY" \
-  --model deepseek/deepseek-v4-flash \
-  --fallback-model moonshotai/kimi-k2.6 \
-  --batch-size 20 || true
+
+# Stage 1: Serper discovery (idempotent — skip if leads.jsonl populated).
+if [ -s "$LEADS" ]; then
+  echo "[resume] $COUNTY: leads.jsonl exists ($(wc -l < "$LEADS") leads); skip Serper" >&2
+else
+  python benchmark/scrape_state_serper_docpages.py \
+    --state CA --state-name California \
+    --county "$COUNTY" "${CITY_ARGS[@]}" \
+    --default-county "$COUNTY" \
+    --run-id "$SERPER_RUN" \
+    --queries-file "$QUERIES" \
+    --max-queries 5000 --results-per-query 10 --pages-per-query 1 \
+    --max-leads 5000 --min-score 5 --search-delay 0.25 \
+    --include-direct-pdfs
+fi
+
+# Stage 2: validate-leads (idempotent — skip if validated.jsonl populated).
+if [ -s "$VAL" ]; then
+  echo "[resume] $COUNTY: validated.jsonl exists ($(wc -l < "$VAL") rows); skip validate" >&2
+else
+  OPENROUTER_TIMEOUT_SECONDS=80 python benchmark/openrouter_ks_planner.py validate-leads \
+    "$LEADS" --output "$VAL" --audit "$VAL_AUDIT" \
+    --state CA --county "$COUNTY" \
+    --model deepseek/deepseek-v4-flash \
+    --fallback-model moonshotai/kimi-k2.6 \
+    --batch-size 20 || true
+fi
 
 python3 - "$VAL" "$RESULTS/validated_clean.jsonl" "$COUNTY" <<'PY'
 import json, sys, re, glob
@@ -245,7 +255,9 @@ PY
 COMBINED="$RESULTS/probe_input.jsonl"
 cat "$RESULTS/validated_clean.jsonl" "$RESULTS/cleaned_dedup.jsonl" 2>/dev/null > "$COMBINED" || true
 
-if [ -s "$COMBINED" ]; then
+if [ -s "$RESULTS/probe.jsonl" ]; then
+  echo "[resume] $COUNTY: probe.jsonl exists ($(wc -l < "$RESULTS/probe.jsonl") rows); skip probe" >&2
+elif [ -s "$COMBINED" ]; then
   python benchmark/probe_leads_with_pre_discovered.py "$COMBINED" \
     --output "$RESULTS/probe.jsonl" \
     --timeout 180 --max-pdfs 12 --delay 1.0 || true
