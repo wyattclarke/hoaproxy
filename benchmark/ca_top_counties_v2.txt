@@ -1,0 +1,31 @@
+# CA top counties for v2 deeper per-county sweep, with city lists ranked by HOA count.
+# Format: <CountyDisplay>|<City1>;<City2>;... (slugs in display titlecase)
+# Source: data/ca_registry_hoas.jsonl (Phase 1 output)
+# Generated: 2026-05-09
+
+Los Angeles|Los Angeles;Sherman Oaks;Torrance;Glendale;Santa Monica;Woodland Hills;Pasadena;Valencia;Claremont;Long Beach;Arcadia;Covina;Alhambra;Culver City;Monterey Park;South Pasadena;Canoga Park;El Monte;Signal Hill;Monrovia;Lake Balboa;Downey;Redondo Beach;Granada Hills;San Pedro;San Gabriel;Chatsworth;Lakewood;Beverly Hills;Temple City;Bellflower;Studio City;San Dimas;Agoura Hills;Tarzana
+Orange|Irvine;Newport Beach;Tustin;Santa Ana;Costa Mesa;Aliso Viejo;Orange;Laguna Hills;Anaheim;San Clemente;Mission Viejo;Foothill Ranch;Westminster;Lake Forest;Cypress;San Juan Capistrano;Laguna Niguel;Huntington Beach;Yorba Linda;Dana Point;Rancho Santa Margarita;Laguna Beach;Garden Grove;La Habra;Brea;Los Alamitos;Fullerton;Corona Del Mar;Fountain Valley;Buena Park;Placentia;Seal Beach;Stanton;Trabuco Canyon;Villa Park
+Ventura|Camarillo;Ventura;Simi Valley;Thousand Oaks;Newbury Park;Port Hueneme;Oxnard;Moorpark;Ojai;Santa Paula;Oak Park;Oak View;Fillmore;Somis;Bell Canyon
+Alameda|Pleasanton;Oakland;Fremont;Castro Valley;Livermore;San Leandro;Hayward;Berkeley;Alameda;Newark;Albany;Dublin;Union City;Emeryville;Piedmont
+Santa Clara|San Jose;Campbell;Burbank;Sunnyvale;Morgan Hill;Mountain View;Santa Clara;Gilroy;Los Gatos;Palo Alto;Los Altos;Cupertino;Saratoga;Milpitas;Los Altos Hills;Monte Sereno
+San Francisco|San Francisco
+Contra Costa|San Ramon;Danville;Walnut Creek;Concord;Hercules;Pleasant Hill;Moraga;Lafayette;Martinez;Richmond;Oakley;Alamo;Brentwood;Pinole;Orinda;San Pablo;El Sobrante;Discovery Bay;Pittsburg;Diablo;Clayton;Antioch;Bethel Island;Kensington;Rodeo;Crockett
+San Mateo|San Mateo;Redwood City;Burlingame;Menlo Park;San Carlos;South San Francisco;Millbrae;Pacifica;Foster City;Daly City;Half Moon Bay;Portola Valley;Belmont;East Palo Alto;San Bruno;Brisbane;Hillsborough;Atherton;Woodside;Loma Mar;Montara;El Granada;Emerald Hills
+San Diego|San Diego;Carlsbad;La Mesa;El Cajon;Encinitas;Oceanside;Escondido;National City;La Jolla;Coronado;Chula Vista;San Marcos;Vista;Santee;Bonita;Solana Beach;Bonsall;Poway;Fallbrook;Rancho Santa Fe;Imperial Beach;Ramona;Carmel Valley;Jamul;Valley Center;Cardiff;Spring Valley;Alpine;Lemon Grove;Julian;Borrego Springs;Leucadia;Cardiff by the Sea;Descanso;Del Mar
+Riverside|Palm Desert;Temecula;Riverside;Palm Springs;Corona;Rancho Mirage;Cathedral City;Murrieta;Canyon Lake;La Quinta;Hemet;Indio;Indian Wells;Banning;Norco;El Cerrito;Moreno Valley;Wildomar;Thermal;Lake Elsinore;Calimesa;Bermuda Dunes;Desert Hot Springs;Anza;Blythe;Idyllwild;Perris;Mountain Center;Jurupa Valley;Aguanga;San Jacinto;Menifee;Eastvale
+San Bernardino|Upland;Chino Hills;Rancho Cucamonga;Chino;Redlands;Ontario;Lake Arrowhead;Mentone;Victorville;San Bernardino;Rialto;Highland;Yucca Valley;Big Bear Lake;Yucaipa;Apple Valley;Fontana;Barstow;Phelan;Joshua Tree;Wrightwood;Loma Linda;Adelanto;Montclair;Hesperia
+Sacramento|Sacramento;Folsom;Fair Oaks;Citrus Heights;Carmichael;Orangevale;Rancho Cordova;Elk Grove;Walnut Grove;Herald;Rio Linda;North Highlands;Gold River;Mather
+Placer|Roseville;Auburn;Tahoe City;Granite Bay;Rocklin;Loomis;Colfax;Meadow Vista;Foresthill;Kings Beach;Lincoln;Dutch Flat
+San Luis Obispo|San Luis Obispo;Atascadero;Arroyo Grande;Paso Robles;Morro Bay;Templeton;Pismo Beach;Cayucos;Nipomo;Grover Beach;Los Osos;Cambria;Oceano
+Santa Barbara|Santa Barbara;Mission Hills;Santa Maria;Goleta;Lompoc;Carpinteria;Solvang;Buellton;Santa Ynez;Montecito;Los Alamos;Orcutt
+Monterey|Monterey;Salinas;Marina;Seaside;Pebble Beach;King City;Prunedale
+Fresno|Fresno;Clovis;Reedley;Kingsburg;Kerman;Selma;Sanger
+Kern|Bakersfield;Tehachapi;Ridgecrest;Taft;Mojave;Delano;California City
+San Joaquin|Stockton;Lodi;Tracy;Manteca;Ripon;Woodbridge;Acampo;Lathrop;Escalon
+Sonoma|Santa Rosa;Rohnert Park;Petaluma;Sonoma;Healdsburg;Windsor;Sebastopol;Cloverdale;Bodega Bay;Monte Rio;Jenner;Forestville;Guerneville
+Marin|San Rafael;Novato;Sausalito;Mill Valley;Tiburon;Woodacre;Corte Madera;Larkspur;San Anselmo;Fairfax;Belvedere;Kentfield;Strawberry;Ross
+Napa|Napa;Calistoga;Yountville;American Canyon;St Helena
+Solano|Vacaville;Fairfield;Vallejo;Dixon;Benicia;Suisun City
+Stanislaus|Modesto;Turlock;Hughson;Oakdale;Patterson;Salida;Newman
+Santa Cruz|Santa Cruz;Aptos;Capitola;Watsonville;Soquel;Scotts Valley;Boulder Creek;Ben Lomond;Freedom
+El Dorado|El Dorado Hills;South Lake Tahoe;Placerville;Shingle Springs;Cameron Park;Diamond Springs;Pollock Pines
