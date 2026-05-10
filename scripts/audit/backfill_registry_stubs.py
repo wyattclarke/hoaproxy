@@ -87,6 +87,59 @@ REGISTRIES = {
         "source": "az-tucson-hoa-gis",
         "state": "AZ",
     },
+    # 2026-05-10 second wave — county-GIS sources discovered after the
+    # statewide-SoS hunt was blocked for these states. Each seed file
+    # carries its own per-record `source` string; the dict-level `source`
+    # is just the fallback. Multi-file states list every file under
+    # `leads_glob`.
+    "MA": {
+        "leads": ROOT / "state_scrapers/ma/leads/ma_condo_trusts_statewide_seed.jsonl",
+        "source": "ma-massgis-l3-parcels-owner-name",
+        "state": "MA",
+    },
+    "MN": {
+        "leads": ROOT / "state_scrapers/mn/leads/mn_statewide_subdivisions_seed.jsonl",
+        "source": "mn-statewide-subdivisions-liveby",
+        "state": "MN",
+    },
+    "MO": {
+        "leads": ROOT / "state_scrapers/mo/leads/mo_springfield_subdivisions_seed.jsonl",
+        "source": "mo-springfield-subdivisions",
+        "state": "MO",
+    },
+    "WA": {
+        "leads": ROOT / "state_scrapers/wa/leads/wa_snohomish_subdivisions_seed.jsonl",
+        "source": "wa-snohomish-county-subdivisions",
+        "state": "WA",
+    },
+    "OH": {
+        "leads_glob": "state_scrapers/oh/leads/oh_*_seed.jsonl",
+        "source": "oh-county-gis",
+        "state": "OH",
+    },
+    "VA": {
+        "leads_glob": "state_scrapers/va/leads/va_*_seed.jsonl",
+        "source": "va-county-gis",
+        "state": "VA",
+    },
+    "MD": {
+        "leads_glob": "state_scrapers/md/leads/md_*_seed.jsonl",
+        "source": "md-county-gis",
+        "state": "MD",
+    },
+    "NC2": {
+        # NC already has a small live presence under sources we don't own.
+        # The new wave's NC seeds are county-GIS — give the dict key a
+        # different label so it doesn't shadow the (empty) prior NC entry.
+        "leads_glob": "state_scrapers/nc/leads/nc_*_seed.jsonl",
+        "source": "nc-county-gis",
+        "state": "NC",
+    },
+    "MI": {
+        "leads_glob": "state_scrapers/mi/leads/mi_*_seed.jsonl",
+        "source": "mi-county-gis",
+        "state": "MI",
+    },
 }
 
 
@@ -110,8 +163,13 @@ def live_admin_token() -> str | None:
     return os.environ.get("JWT_SECRET")
 
 
-def normalize_lead(lead: dict, state: str, source: str) -> dict | None:
+def normalize_lead(lead: dict, state: str, source: str | None = None) -> dict | None:
     """Normalize a registry lead into the /admin/create-stub-hoas record shape.
+
+    The per-state ``source`` argument is a fallback used only when the lead
+    record itself doesn't carry a ``source`` field. Multi-source seed files
+    (e.g. county-GIS pulls that mix several layers) carry their own per-record
+    ``source`` strings; we honour those over the registry-config default.
 
     Notable defaults (changed after the 2026-05-09 audit incident):
       - ``location_quality`` is OMITTED — never set to ``"city_only"``. The
@@ -128,7 +186,7 @@ def normalize_lead(lead: dict, state: str, source: str) -> dict | None:
         return None
     addr = lead.get("address") or {}
     city = addr.get("city") or lead.get("city")
-    postal = addr.get("postal_code") or lead.get("postal_code")
+    postal = addr.get("postal_code") or lead.get("postal_code") or addr.get("zip")
     metadata_type = lead.get("metadata_type")
     if not metadata_type:
         n = name.lower()
@@ -142,7 +200,10 @@ def normalize_lead(lead: dict, state: str, source: str) -> dict | None:
         "city": city,
         "state": state,
         "postal_code": postal,
-        "source": source,
+        # Per-record source wins over the per-state default so multi-file
+        # seeds (county-GIS, statewide L3 parcel mining, etc.) tag each row
+        # with its actual provenance string.
+        "source": (lead.get("source") or source),
         "source_url": lead.get("source_url"),
         # Intentionally omit location_quality; see docstring.
     }
@@ -189,32 +250,47 @@ def main() -> int:
     summary: dict = {}
     for st in targets:
         cfg = REGISTRIES[st]
-        leads_path = cfg["leads"]
-        if not leads_path.exists():
-            print(f"{st}: leads file missing at {leads_path}", file=sys.stderr)
+        # Resolve to one or more lead files. ``leads`` is a single path;
+        # ``leads_glob`` is a glob pattern relative to ROOT for multi-file
+        # county-GIS imports.
+        lead_paths: list[Path] = []
+        if cfg.get("leads_glob"):
+            lead_paths = sorted(ROOT.glob(cfg["leads_glob"]))
+            lead_paths = [p for p in lead_paths if "REGISTRY_NOTES" not in p.name]
+        elif cfg.get("leads"):
+            if cfg["leads"].exists():
+                lead_paths = [cfg["leads"]]
+        if not lead_paths:
+            print(f"{st}: no lead files found ({cfg.get('leads_glob') or cfg.get('leads')})",
+                  file=sys.stderr)
             continue
 
         records: list[dict] = []
         seen: set[str] = set()
-        with open(leads_path) as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    lead = json.loads(line)
-                except Exception:
-                    continue
-                rec = normalize_lead(lead, cfg["state"], cfg["source"])
-                if not rec:
-                    continue
-                key = rec["name"].lower()
-                if key in seen:
-                    continue
-                seen.add(key)
-                records.append(rec)
+        for leads_path in lead_paths:
+            file_records = 0
+            with open(leads_path) as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        lead = json.loads(line)
+                    except Exception:
+                        continue
+                    rec = normalize_lead(lead, cfg["state"], cfg["source"])
+                    if not rec:
+                        continue
+                    key = rec["name"].lower()
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    records.append(rec)
+                    file_records += 1
+            print(f"  [{st}] {leads_path.name}: +{file_records} records")
 
-        print(f"[{st}] {len(records)} unique entities prepared")
+        print(f"[{st}] {len(records)} unique entities prepared "
+              f"(from {len(lead_paths)} file{'s' if len(lead_paths) != 1 else ''})")
 
         if not args.apply:
             print(f"[{st}] DRY RUN — sample records:")
