@@ -444,3 +444,193 @@ contract permits this; the cap is a working ceiling, not a wire.
 - **Cumulative cost: ~$10.65** across Day 1 + Round 1 + Round 2
 - **Cumulative wall: ~5 hours**
 
+
+---
+
+## Round 3 (2026-05-09 19:35 → 02:00 UTC ~6h) — collar Assessor + Places mapping + Cook Recorder probe
+
+Triggered by user "be aggressive, give me ALL of them". Round 3 added the
+DuPage Assessor pivot, ran Cook+DuPage combined name-binding discovery,
+applied an expanded Phase 10 cleanup, ran Serper Places mapping
+enrichment, and probed two deferred sources (Cook Recorder via Playwright,
+Lake/Will/Kane GIS).
+
+### Round-3 closing pyramid
+
+```
+Combined seed              1,309 entities (Cook 822 + DuPage 487)
+   │
+   ▼
+Discovery                  1,270 processed (39 collapsed by slug-dedup at load)
+                              228 skip-existing (already banked from prior rounds)
+                              122 banked with ≥1 doc (12% hit rate against new entities)
+                              920 no-docs
+                              162 docs banked total
+                            5,608 Serper queries / ~$9.40 spend
+                              16.5 min wall (workers=8)
+   │
+   ▼
+Phase 2 prepare             404 prepared bundles cumulative
+                            1,026 DocAI pages × $0.0015 = $1.54
+                          1h 45min wall (timed out on import call)
+   │
+   ▼
+Phase 2 import (re-run)     176 imported live HOAs (re-triggered with batch=15
+                              after the original 50-batch /admin/ingest-ready-gcs
+                              call hit a 15-min Render timeout)
+   │
+   ▼
+Phase 10 cleanup (R3)       75 Chicagoland eligible
+                            (synthetic prefix-map fallback, since R3 phase2's
+                             live_import_report.json was never written due to
+                             the timeout)
+                              2 heuristic_delete
+                             18 LLM rename + 2 merges
+                             26 null_delete
+                              0 dedup groups
+                            (47 surviving after cleanup)
+   │
+   ▼
+Serper Places mapping       250 unmapped Chicagoland HOAs queried
+                              144 matched to IL-bbox lat/lon
+                               87 no-results / 19 no-IL-match
+                            $0.25 Serper spend
+                            +144 mapped via /admin/backfill-locations
+                              (place_centroid quality)
+   │
+   ▼
+Final live (Chicagoland)    Bank: 504 manifests in chicagoland prefixes
+                              cook 314, dupage 83, lake 27, will 20, kane 24,
+                              mchenry 15, kendall 12, il 9
+                            Live IL: 422 (state-wide)
+                            Live IL with city ∈ Chicagoland: 117
+                                   mapped: 100 (85%)
+```
+
+### Comparison through three rounds
+
+| Metric | R1 (mgmt-co harvest) | R2 (Cook Assessor) | R3 (collar + Places) |
+|---|---|---|---|
+| Chicagoland bank manifests | 174 | 379 | **504** |
+| Chicagoland live (best estimate) | 26 | 61 | **117** |
+| Map coverage on chicagoland | 88% (small set) | 52% | **85%** |
+| Cumulative Serper | $0.40 | $8 | $17.40 |
+| Cumulative DocAI | $0.07 | $0.37 | $1.91 |
+| Cumulative wall | 70 min | 5 hours | ~12 hours |
+| Cumulative cost | $0.55 | $10.65 | **$22.20** |
+
+Chicago universe is ~5,000+ condos per Cook Assessor's 21,443 condo
+buildings (assume 1/4 publish docs). 117 live = ~2-3% of realistic
+ceiling. Full saturation needs Round 4+ via Cook Recorder bulk pull
+(deferred — Playwright probe confirmed it's accessible but yields
+developer LLC names, requires PIN cross-reference for canonical
+association names).
+
+### What round 3 unlocked
+
+1. **Cook Assessor `mail_address_name` was the §2a fast-path.** 822
+   distinct condo/HOA names from one Socrata API call, no auth, no
+   FOIA. The Round-1 retrospective said "Cook County has no public,
+   queryable named-condo registry"; Round 2 found it hiding in a
+   non-obvious column. This is the unlock for any state with a county
+   assessor that publishes parcel-mailing data.
+
+2. **DuPage ArcGIS BILLNAME confirmed the pattern transfers.** 487
+   distinct DuPage entities from the same approach, different REST
+   endpoint. The pattern should work for any county whose Assessor
+   exposes parcel-with-mailing data via either Socrata or ArcGIS.
+   Confirmed dead: Lake (geometry-only), Will (no public REST endpoint
+   for assessor data), Kane (only aerial imagery + geocoders).
+
+3. **Serper Places mapping is high-yield post-import.** 144 matches
+   from 250 queries (58% match rate) lifted Chicagoland mapping from
+   52% to 85%. Per-match cost: $0.001. Same pattern that GA used to
+   go from 14% → 60%; works because the seed names are clean and
+   anchored on city.
+
+4. **Cook Recorder via Playwright is accessible.** The
+   `crs.cookcountyclerkil.gov/Search/Additional` endpoint accepts
+   POST with DocumentType=COND (CONDOMINIUM DECLARATION) and returns
+   paginated results with grantor/grantee/PIN. Confirmed feasible for
+   round 4. The reason we deferred: grantor field contains developer
+   LLCs ("VOLO HOLDINGS LLC - 1445 CHICAGO SERIES") not association
+   canonical names. Resolving requires a PIN-join against the
+   Assessor mail_address_name registry, which is meaningful round-4
+   dev work.
+
+### What didn't work (round 3)
+
+1. **OCR-state cross-validation didn't fire.** Built
+   `ocr_state_validate_chicagoland.py` to fetch page-1 OCR text via
+   `/search?hoa=<name>&q=...` and count US-state mentions. All 423
+   eligible returned `no_text` because the public `/search` endpoint
+   doesn't return doc text in the response (just chunk references).
+   Need a different text-fetch path; defer to round 4.
+
+2. **The synthetic prefix map matched too aggressively.** When the
+   round-3 phase2 timed out before writing live_import_report.json, I
+   reconstructed the name→prefix map by walking bank manifests and
+   matching to live names by slug. Suffix-stripped slug-prefix
+   matching produced 944 (live, prefix) pairs from 504 bank × 423 live,
+   pulling in many downstate-mapped HOAs as Chicagoland. The "city in
+   Chicagoland set" heuristic gives a more defensible 117. Future
+   fix: persist the bank prefix as a column on the live HOA record at
+   import time, not infer it post-hoc.
+
+3. **Phase 2 import call timed out.** The default
+   `/admin/ingest-ready-gcs` POST has a 900-second client timeout.
+   With 313 prepared bundles and the Render server processing them
+   serially in batches of 50, a single call exceeded the wall budget.
+   Re-triggered with batch=15 in a Python loop and got 176/313
+   imports through (some marked as duplicates from concurrent
+   downstate work). Future fix: default the runner's import loop to
+   batch=15 and add a per-call backoff retry.
+
+4. **Lake / Will / Kane Assessor pivots did not work.** Lake's CCAO
+   layer is geometry-only; the BILLNAME-equivalent isn't exposed.
+   Will's GIS Data Viewer is JS-driven without a clean public REST
+   endpoint. Kane's ArcGIS only exposes aerial imagery and geocoders.
+   Each county's Assessor publishes mailing-name data internally for
+   tax billing but only Cook and DuPage make it publicly queryable.
+   Round 4 fix: file FOIA / data-extract requests for the three.
+
+### Round-4 punch list (bigger lift)
+
+1. **Cook Recorder Playwright bulk pull.** Now that we know the
+   endpoint works and the pagination format, write a paginated
+   scraper for DocumentType=COND across all years 1985-present (~60
+   years × ~190 declarations/year ≈ 11,400 records). Cross-reference
+   PINs to Cook Assessor mailing-name registry. Yield: thousands of
+   net new named entities.
+
+2. **Lake/Will/Kane FOIA filing.** ~30-60 day wait but the data
+   exists; counties just don't publish it. Estimate +1,500-3,000
+   entities across the three.
+
+3. **Looser-query rediscovery on no-docs entities.** Cumulative
+   ~1,500 entities across rounds 2+3 hit no-docs. Re-run with HTML
+   pages (no `filetype:pdf`), address-anchored queries, and rules/
+   minutes variants. Estimate +200-400 net banked.
+
+4. **Per-state OCR text endpoint.** Build `/admin/hoa/{id}/text`
+   that returns concatenated page-1 OCR for the HOA's first doc.
+   Unblocks the OCR-state cross-validation script and removes the
+   need to fetch chunks via /search.
+
+5. **Persist bank prefix on live HOA record.** Schema add to
+   `hoa_locations` or new `hoa_provenance` table. Removes the
+   need for post-hoc slug matching.
+
+## Final tallies (post-Round-3)
+
+- **Chicagoland bank: 504 manifests** (Cook 314, DuPage 83, Lake 27,
+  Will 20, Kane 24, McHenry 15, Kendall 12, il-fallback 9)
+- **Live IL with Chicagoland city tag: 117 HOAs**
+- **Mapped: 100 / 117 (85%)**
+- **State-wide IL live: 422**
+- **Cumulative cost: ~$22.20 across three rounds**
+- **Cumulative wall: ~12 hours**
+- **Distance to ceiling:** 117 / ~5,000 estimated true Cook condo
+  associations = ~2-3%. Round 4 (Cook Recorder + collar FOIA) is the
+  path to 30-60% saturation.
+
