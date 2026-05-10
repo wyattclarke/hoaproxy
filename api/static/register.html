@@ -152,7 +152,15 @@
         try {
           const data = await Auth.fetchJson("/auth/register", {
             method: "POST",
-            body: JSON.stringify({ email, password, display_name: name || null }),
+            body: JSON.stringify({
+              email,
+              password,
+              display_name: name || null,
+              // Bumped from server-side TOS_VERSION constant. If this drifts
+              // from the server, /auth/register returns 400 and the user is
+              // prompted to retry — see api/main.py TOS_VERSION.
+              accepted_terms_version: "2026-05-10",
+            }),
           });
           Auth.setToken(data.token);
           const me = await Auth.fetchJson("/auth/me");

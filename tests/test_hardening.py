@@ -406,3 +406,161 @@ def test_qa_multi_has_tighter_limit_than_qa():
         _check_rate_limit(req, limit=10)
     with pytest.raises(HTTPException):
         _check_rate_limit(req, limit=10)
+
+
+# ---------------------------------------------------------------------------
+# TOS clickwrap on /auth/register
+# ---------------------------------------------------------------------------
+
+def _force_tos_check(monkeypatch):
+    """Disable the TestClient bypass for TOS clickwrap tests.
+
+    /auth/register skips TOS validation when request.client.host == "testclient"
+    (matches the rate-limiter convention). To assert the real production
+    behaviour, replace _enforce_tos_acceptance with one that ignores the host
+    bypass while preserving the version check.
+    """
+    import api.main as main_mod
+
+    def _strict_enforce(request, body_version):
+        if body_version != main_mod.TOS_VERSION:
+            from fastapi import HTTPException
+            raise HTTPException(
+                status_code=400,
+                detail=f"You must agree to the current Terms of Service (version {main_mod.TOS_VERSION}).",
+            )
+
+    monkeypatch.setattr(main_mod, "_enforce_tos_acceptance", _strict_enforce)
+
+
+def test_register_rejects_missing_tos_acceptance(monkeypatch):
+    """POST /auth/register without accepted_terms_version returns 400."""
+    _force_tos_check(monkeypatch)
+    r = client.post(
+        "/auth/register",
+        json={"email": "tos1@example.com", "password": "password1234"},
+    )
+    assert r.status_code == 400
+    assert "Terms of Service" in r.json()["detail"]
+
+
+def test_register_rejects_stale_tos_version(monkeypatch):
+    """POST /auth/register with an old version returns 400."""
+    _force_tos_check(monkeypatch)
+    r = client.post(
+        "/auth/register",
+        json={
+            "email": "tos2@example.com",
+            "password": "password1234",
+            "accepted_terms_version": "2024-01-01",
+        },
+    )
+    assert r.status_code == 400
+
+
+def test_register_persists_tos_version_and_timestamp(monkeypatch):
+    """A successful registration writes both terms columns on the user row."""
+    _force_tos_check(monkeypatch)
+    from api.main import TOS_VERSION
+
+    r = client.post(
+        "/auth/register",
+        json={
+            "email": "tos3@example.com",
+            "password": "password1234",
+            "accepted_terms_version": TOS_VERSION,
+        },
+    )
+    assert r.status_code == 200, r.text
+
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        row = conn.execute(
+            "SELECT terms_version_accepted, terms_accepted_at FROM users WHERE email = ?",
+            ("tos3@example.com",),
+        ).fetchone()
+    assert row is not None
+    assert row["terms_version_accepted"] == TOS_VERSION
+    assert row["terms_accepted_at"] is not None
+
+
+# ---------------------------------------------------------------------------
+# Request logging middleware
+# ---------------------------------------------------------------------------
+
+def test_request_log_writes_row_for_normal_request(monkeypatch):
+    """A request to a non-skipped path should produce one request_log row."""
+    monkeypatch.setenv("REQUEST_LOG_ENABLED", "1")
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        conn.execute("DELETE FROM request_log")
+        conn.commit()
+
+    r = client.get("/hoas")
+    assert r.status_code == 200
+
+    with db.get_connection(settings.db_path) as conn:
+        rows = conn.execute(
+            "SELECT method, path, status_code FROM request_log WHERE path = ?",
+            ("/hoas",),
+        ).fetchall()
+    assert len(rows) >= 1
+    assert rows[0]["method"] == "GET"
+    assert rows[0]["status_code"] == 200
+
+
+def test_request_log_skips_healthz(monkeypatch):
+    """/healthz should not appear in request_log even with logging enabled."""
+    monkeypatch.setenv("REQUEST_LOG_ENABLED", "1")
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        conn.execute("DELETE FROM request_log")
+        conn.commit()
+
+    client.get("/healthz")
+
+    with db.get_connection(settings.db_path) as conn:
+        count = conn.execute(
+            "SELECT COUNT(*) c FROM request_log WHERE path = ?", ("/healthz",)
+        ).fetchone()["c"]
+    assert count == 0
+
+
+def test_request_log_disabled_via_env(monkeypatch):
+    """REQUEST_LOG_ENABLED=0 stops middleware from writing rows."""
+    monkeypatch.setenv("REQUEST_LOG_ENABLED", "0")
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        conn.execute("DELETE FROM request_log")
+        conn.commit()
+
+    client.get("/hoas/states")
+
+    with db.get_connection(settings.db_path) as conn:
+        count = conn.execute("SELECT COUNT(*) c FROM request_log").fetchone()["c"]
+    assert count == 0
+
+
+def test_prune_request_log_deletes_old_rows():
+    """prune_request_log removes rows older than retention_days."""
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        conn.execute("DELETE FROM request_log")
+        # Insert an "old" row dated 60 days ago, and a fresh one.
+        conn.execute(
+            "INSERT INTO request_log (timestamp, method, path, status_code, response_ms) "
+            "VALUES (datetime('now','-60 days'), 'GET', '/old', 200, 1)"
+        )
+        conn.execute(
+            "INSERT INTO request_log (timestamp, method, path, status_code, response_ms) "
+            "VALUES (datetime('now'), 'GET', '/new', 200, 1)"
+        )
+        conn.commit()
+
+        deleted = db.prune_request_log(conn, retention_days=30)
+        assert deleted == 1
+
+        remaining = conn.execute(
+            "SELECT path FROM request_log ORDER BY id"
+        ).fetchall()
+    assert [r["path"] for r in remaining] == ["/new"]

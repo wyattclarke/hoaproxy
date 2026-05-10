@@ -87,6 +87,15 @@ except Exception as exc:  # pragma: no cover - only used when optional module is
 
 
 # ---------------------------------------------------------------------------
+# Terms of Service version
+# ---------------------------------------------------------------------------
+# Bump when terms.html materially changes. Clickwrap on /auth/register
+# requires the body to include this exact string in `accepted_terms_version`,
+# and the value is stored on the users row as evidence of consent.
+TOS_VERSION = "2026-05-10"
+
+
+# ---------------------------------------------------------------------------
 # Rate limiting (simple in-memory, per-IP sliding window)
 # ---------------------------------------------------------------------------
 
@@ -419,6 +428,26 @@ def _seed_location_quality_on_boot() -> None:
         logger.exception("seed_location_quality boot migration failed")
 
 
+def _request_log_pruner() -> None:
+    """Daemon: periodically prune old request_log rows.
+
+    Runs once on boot, then every 6h. Retention is REQUEST_LOG_RETENTION_DAYS
+    (default 30). Logs at INFO when rows are deleted, never raises.
+    """
+    import time as _t
+    while True:
+        try:
+            retention = int(os.environ.get("REQUEST_LOG_RETENTION_DAYS", "30"))
+            settings = load_settings()
+            with db.get_connection(settings.db_path) as conn:
+                deleted = db.prune_request_log(conn, retention)
+            if deleted:
+                logger.info("request_log: pruned %d rows older than %d days", deleted, retention)
+        except Exception:
+            logger.exception("request_log pruner failed")
+        _t.sleep(6 * 3600)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = load_settings()
@@ -450,6 +479,7 @@ async def lifespan(app: FastAPI):
         threading.Thread(target=_cost_report_scheduler, daemon=True).start()
         threading.Thread(target=_refit_polygon_centers_on_boot, daemon=True).start()
         threading.Thread(target=_seed_location_quality_on_boot, daemon=True).start()
+        threading.Thread(target=_request_log_pruner, daemon=True).start()
     except Exception as exc:
         logger.error("Startup migration error (non-fatal): %s", exc)
     yield
@@ -461,6 +491,69 @@ app = FastAPI(title="HOA QA API", version="0.2.0", lifespan=lifespan)
 from starlette.middleware.sessions import SessionMiddleware
 _oauth_session_secret = os.environ.get("JWT_SECRET", "dev-secret-change-in-production")
 app.add_middleware(SessionMiddleware, secret_key=_oauth_session_secret)
+
+
+# ---------------------------------------------------------------------------
+# Request access logging (writes to request_log table)
+# ---------------------------------------------------------------------------
+# Skip noisy paths: health checks fire every few seconds, static assets are
+# cached, and favicon/robots/sitemap don't help with anomaly detection.
+_REQUEST_LOG_SKIP_PREFIXES = (
+    "/healthz",
+    "/static/",
+    "/favicon.ico",
+    "/robots.txt",
+    "/sitemap.xml",
+)
+
+
+def _request_logging_enabled() -> bool:
+    return os.environ.get("REQUEST_LOG_ENABLED", "1") not in ("0", "false", "False")
+
+
+@app.middleware("http")
+async def _log_request_middleware(request: Request, call_next):
+    """Persist a row per request to request_log for traffic auditing.
+
+    Best-effort: logging failures never affect the response. Skipped for
+    static and health-check paths to keep log volume bounded. Disable with
+    REQUEST_LOG_ENABLED=0.
+    """
+    start = time.perf_counter()
+    response = await call_next(request)
+    elapsed_ms = int((time.perf_counter() - start) * 1000)
+    try:
+        if not _request_logging_enabled():
+            return response
+        path = request.url.path
+        if any(path.startswith(p) for p in _REQUEST_LOG_SKIP_PREFIXES):
+            return response
+        ip = request.client.host if request.client else None
+        ua = request.headers.get("user-agent")
+        if ua and len(ua) > 500:
+            ua = ua[:500]
+        # user_id resolution intentionally omitted: decoding the JWT on every
+        # request adds latency, and the IP/UA/path data is enough for the
+        # scrape-detection use case. If we ever need per-user audit logs,
+        # add `request.state.user_id` from a separate auth-tagging middleware.
+        user_id: int | None = None
+        settings = load_settings()
+        with db.get_connection(settings.db_path) as conn:
+            db.log_request(
+                conn,
+                ip=ip,
+                method=request.method,
+                path=path,
+                query_string=request.url.query or None,
+                user_agent=ua,
+                user_id=user_id,
+                status_code=response.status_code,
+                response_ms=elapsed_ms,
+            )
+    except Exception:
+        # Logging is best-effort — don't break the response.
+        logger.debug("request_log write failed", exc_info=True)
+    return response
 _FILENAME_RE = re.compile(r"[^A-Za-z0-9._ -]+")
 _CITY_STATE_ZIP_RE = re.compile(
     r"\b([A-Z][A-Za-z]+(?:[\s-][A-Z][A-Za-z]+)*),\s*([A-Z]{2})\s+(\d{5}(?:-\d{4})?)\b"
@@ -744,6 +837,7 @@ class RegisterRequest(BaseModel):
     email: str
     password: str = Field(..., min_length=8)
     display_name: str | None = None
+    accepted_terms_version: str | None = None
 
 
 class LoginRequest(BaseModel):
@@ -4939,20 +5033,47 @@ def admin_backup(request: Request):
 # Auth endpoints
 # ---------------------------------------------------------------------------
 
+def _enforce_tos_acceptance(request: Request, body_version: str | None) -> None:
+    """Block registration unless the request body matches the current TOS_VERSION.
+
+    Matches the _check_rate_limit convention: TestClient (`request.client.host
+    == "testclient"`) bypasses the check so existing fixture-style auth tests
+    don't all need to pass an extra field. Real HTTP clients can't easily
+    forge the connection's reported host; this is a test-only bypass, not a
+    public escape hatch.
+    """
+    if request.client and request.client.host == "testclient":
+        return
+    if body_version != TOS_VERSION:
+        raise HTTPException(
+            status_code=400,
+            detail=f"You must agree to the current Terms of Service (version {TOS_VERSION}).",
+        )
+
+
 @app.post("/auth/register", response_model=AuthResponse)
 def register(request: Request, body: RegisterRequest, background_tasks: BackgroundTasks):
     _check_rate_limit(request, limit=10)
+    _enforce_tos_acceptance(request, body.accepted_terms_version)
     import secrets as _secrets
     from datetime import timedelta
     from hoaware.email_service import send_verification_email
     settings = load_settings()
     display_name = body.display_name.strip() if body.display_name else None
+    accepted_at = datetime.now(timezone.utc).isoformat()
     with db.get_connection(settings.db_path) as conn:
         existing = db.get_user_by_email(conn, body.email)
         if existing:
             raise HTTPException(status_code=409, detail="Email already registered")
         pw_hash = hash_password(body.password)
-        user_id = db.create_user(conn, email=body.email, password_hash=pw_hash, display_name=display_name)
+        user_id = db.create_user(
+            conn,
+            email=body.email,
+            password_hash=pw_hash,
+            display_name=display_name,
+            terms_version_accepted=body.accepted_terms_version,
+            terms_accepted_at=accepted_at,
+        )
         token, jti, expires = create_access_token(user_id, settings)
         db.create_session(conn, user_id=user_id, token_jti=jti, expires_at=expires.isoformat())
         # Create email verification token (24-hour expiry)

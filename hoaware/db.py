@@ -337,6 +337,26 @@ CREATE TABLE IF NOT EXISTS api_usage_log (
 CREATE INDEX IF NOT EXISTS idx_api_usage_log_ts ON api_usage_log(timestamp);
 CREATE INDEX IF NOT EXISTS idx_api_usage_log_service ON api_usage_log(service);
 
+-- HTTP request log: every non-health-check, non-static request. Used to
+-- detect scraping (per-IP request rate, path concentration, UA patterns)
+-- and audit traffic shape. Retention is bounded by REQUEST_LOG_RETENTION_DAYS
+-- (default 30); pruned by _prune_request_log on startup + every 6h.
+CREATE TABLE IF NOT EXISTS request_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    ip TEXT,
+    method TEXT NOT NULL,
+    path TEXT NOT NULL,
+    query_string TEXT,
+    user_agent TEXT,
+    user_id INTEGER,
+    status_code INTEGER,
+    response_ms INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS idx_request_log_ts ON request_log(timestamp);
+CREATE INDEX IF NOT EXISTS idx_request_log_ip ON request_log(ip);
+
 CREATE TABLE IF NOT EXISTS fixed_costs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     service TEXT NOT NULL,
@@ -580,6 +600,10 @@ def get_connection(db_path: Path) -> sqlite3.Connection:
     _ensure_table_column(conn, "documents", "text_extractable", "INTEGER")
     _ensure_table_column(conn, "documents", "source_url", "TEXT")
     _ensure_table_column(conn, "documents", "hidden_reason", "TEXT")
+    # Clickwrap: which Terms of Service version a user accepted at registration.
+    # Existing rows stay NULL (grandfathered); new registrations set both.
+    _ensure_table_column(conn, "users", "terms_version_accepted", "TEXT")
+    _ensure_table_column(conn, "users", "terms_accepted_at", "TIMESTAMP")
     conn.commit()
     return conn
 
@@ -2287,16 +2311,60 @@ def create_user(
     display_name: str | None = None,
     google_id: str | None = None,
     verified_at: str | None = None,
+    terms_version_accepted: str | None = None,
+    terms_accepted_at: str | None = None,
 ) -> int:
     cur = conn.execute(
         """
-        INSERT INTO users (email, password_hash, display_name, verified_at, google_id)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO users (email, password_hash, display_name, verified_at, google_id,
+                           terms_version_accepted, terms_accepted_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
-        (email.strip().lower(), password_hash, (display_name or "").strip() or None, verified_at, google_id),
+        (
+            email.strip().lower(),
+            password_hash,
+            (display_name or "").strip() or None,
+            verified_at,
+            google_id,
+            terms_version_accepted,
+            terms_accepted_at,
+        ),
     )
     conn.commit()
     return int(cur.lastrowid)
+
+
+def log_request(
+    conn: sqlite3.Connection,
+    *,
+    ip: str | None,
+    method: str,
+    path: str,
+    query_string: str | None,
+    user_agent: str | None,
+    user_id: int | None,
+    status_code: int,
+    response_ms: int,
+) -> None:
+    conn.execute(
+        """
+        INSERT INTO request_log
+            (ip, method, path, query_string, user_agent, user_id, status_code, response_ms)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (ip, method, path, query_string, user_agent, user_id, status_code, response_ms),
+    )
+    conn.commit()
+
+
+def prune_request_log(conn: sqlite3.Connection, retention_days: int) -> int:
+    """Delete request_log rows older than retention_days. Returns # deleted."""
+    cur = conn.execute(
+        "DELETE FROM request_log WHERE timestamp < datetime('now', ?)",
+        (f"-{int(retention_days)} days",),
+    )
+    conn.commit()
+    return int(cur.rowcount or 0)
 
 
 def create_verification_token(
