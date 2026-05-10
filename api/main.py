@@ -4940,50 +4940,28 @@ def admin_backup_hoa_tables(request: Request):
     }
 
 
-def _run_backup_full(db_path: str, bucket_name: str, blob_name: str, snapshot_path: str) -> None:
-    import sqlite3 as _sqlite3
-    from google.cloud import storage as gcs
-    log = logging.getLogger("admin.backup-full")
-    started = time.monotonic()
-    try:
-        src = _sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
-        try:
-            src.execute("VACUUM INTO ?", (snapshot_path,))
-        finally:
-            src.close()
-        size_bytes = os.path.getsize(snapshot_path)
-        blob = gcs.Client().bucket(bucket_name).blob(blob_name)
-        # Long-running uploads default to chunked + retry, ride out network blips.
-        blob.upload_from_filename(snapshot_path, timeout=1800)
-        log.info(
-            "backup-full ok elapsed=%.1fs blob=%s bytes=%d",
-            time.monotonic() - started, blob_name, size_bytes,
-        )
-    except Exception:
-        log.exception("backup-full failed")
-    finally:
-        try:
-            os.remove(snapshot_path)
-        except OSError:
-            pass
-
-
 @app.post("/admin/backup-full")
 def admin_backup_full(request: Request):
-    """VACUUM INTO the full SQLite DB and upload to GCS in a background thread.
+    """VACUUM INTO the full SQLite DB and upload to GCS in a detached child.
 
     Returns immediately with the planned blob name. Render's 5-minute HTTP
     timeout kills synchronous full-DB uploads (the live DB is ~1 GB), so the
-    work runs in a daemon thread and we report success by checking GCS later.
+    work runs in a separate process. We use Popen with start_new_session=True
+    rather than a daemon thread because uvicorn worker recycles, graceful
+    shutdowns on deploy, and OOM kills of the request worker would all silently
+    take a daemon thread with them — leaving no log line and no blob.
 
     Output: ``gs://{BACKUP_GCS_BUCKET}/db/hoa_index-{stamp}.db``.
+    Worker logs land at ``{db_dir}/_backup-{stamp}.log``; tail with
+    GET /admin/backup-full-log?stamp=...
 
     Use /admin/backup for the precious-only user-state SQL dump (small,
     synchronous). This is the full binary snapshot for irrecoverable-edit
     recovery.
     """
     _require_admin(request)
-    import threading
+    import subprocess as _sp
+    import sys as _sys
     from datetime import datetime, timezone
 
     settings = load_settings()
@@ -4995,19 +4973,90 @@ def admin_backup_full(request: Request):
     # use the persistent disk's free space, then delete after upload.
     src_dir = os.path.dirname(settings.db_path) or "."
     snapshot_path = os.path.join(src_dir, f"_backup-{stamp}.db")
+    log_path = os.path.join(src_dir, f"_backup-{stamp}.log")
 
-    threading.Thread(
-        target=_run_backup_full,
-        args=(settings.db_path, bucket_name, blob_name, snapshot_path),
-        daemon=True,
-    ).start()
+    helper = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "scripts", "backup_full_worker.py")
+    )
+
+    # Open the log file in the parent and pass the fd to the child. The child
+    # gets its own dup of the fd, so closing it here doesn't affect the worker.
+    log_fh = open(log_path, "wb")
+    try:
+        proc = _sp.Popen(
+            [_sys.executable, helper, settings.db_path, bucket_name, blob_name, snapshot_path],
+            stdout=log_fh,
+            stderr=_sp.STDOUT,
+            start_new_session=True,
+            close_fds=True,
+        )
+    finally:
+        log_fh.close()
 
     return {
         "status": "started",
         "uploaded": blob_name,
         "snapshot_path": snapshot_path,
-        "note": "running in background thread; poll gs://"
-                f"{bucket_name}/{blob_name} for completion",
+        "log_path": log_path,
+        "stamp": stamp,
+        "pid": proc.pid,
+        "note": "running in detached child process; poll gs://"
+                f"{bucket_name}/{blob_name} for completion, or "
+                f"GET /admin/backup-full-log?stamp={stamp}",
+    }
+
+
+@app.get("/admin/backup-full-log")
+def admin_backup_full_log(request: Request, stamp: str):
+    """Return the tail of a /admin/backup-full worker's log.
+
+    Used to confirm the detached subprocess actually ran VACUUM + upload, and
+    to surface its traceback if the GCS blob never landed.
+    """
+    _require_admin(request)
+    settings = load_settings()
+    src_dir = os.path.dirname(settings.db_path) or "."
+    # Defend against path traversal: only accept the YYYYMMDD-HHMMSS shape.
+    import re as _re
+    if not _re.fullmatch(r"\d{8}-\d{6}", stamp):
+        raise HTTPException(status_code=400, detail="invalid stamp")
+    log_path = os.path.join(src_dir, f"_backup-{stamp}.log")
+    if not os.path.exists(log_path):
+        return {"exists": False, "log_path": log_path}
+    size = os.path.getsize(log_path)
+    with open(log_path, "rb") as f:
+        if size > 32_000:
+            f.seek(size - 32_000)
+        body = f.read()
+    return {
+        "exists": True,
+        "log_path": log_path,
+        "size": size,
+        "tail": body.decode("utf-8", errors="replace"),
+    }
+
+
+@app.get("/admin/disk-usage")
+def admin_disk_usage(request: Request):
+    """Free space on the persistent disk holding the live SQLite DB.
+
+    VACUUM INTO needs ~1.5x the active data size of free space; if the
+    persistent disk is near capacity the backup will fail silently mid-vacuum.
+    """
+    _require_admin(request)
+    import shutil
+    settings = load_settings()
+    src_dir = os.path.dirname(settings.db_path) or "."
+    usage = shutil.disk_usage(src_dir)
+    db_bytes = os.path.getsize(settings.db_path) if os.path.exists(settings.db_path) else 0
+    return {
+        "path": src_dir,
+        "total_bytes": usage.total,
+        "used_bytes": usage.used,
+        "free_bytes": usage.free,
+        "db_path": settings.db_path,
+        "db_bytes": db_bytes,
+        "free_minus_15x_db": usage.free - int(db_bytes * 1.5),
     }
 
 
