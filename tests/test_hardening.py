@@ -236,3 +236,66 @@ def test_proxy_retention_days_env(monkeypatch):
     monkeypatch.setenv("PROXY_RETENTION_DAYS", "30")
     settings = load_settings()
     assert settings.proxy_retention_days == 30
+
+
+# ---------------------------------------------------------------------------
+# Disk-free ingest guard
+# ---------------------------------------------------------------------------
+
+def test_check_disk_free_passes_when_above_threshold(monkeypatch, tmp_path):
+    from collections import namedtuple
+    from api.main import _check_disk_free
+
+    monkeypatch.setenv("MIN_FREE_DISK_GB", "10")
+    Usage = namedtuple("Usage", "total used free")
+    fake_free_bytes = 50 * 1024 ** 3  # 50 GB free
+    monkeypatch.setattr(
+        "api.main.shutil.disk_usage",
+        lambda p: Usage(total=200 * 1024 ** 3, used=150 * 1024 ** 3, free=fake_free_bytes),
+    )
+    _check_disk_free(tmp_path)  # should not raise
+
+
+def test_check_disk_free_aborts_when_below_threshold(monkeypatch, tmp_path):
+    from collections import namedtuple
+    from fastapi import HTTPException
+    from api.main import _check_disk_free
+
+    monkeypatch.setenv("MIN_FREE_DISK_GB", "10")
+    Usage = namedtuple("Usage", "total used free")
+    fake_free_bytes = 5 * 1024 ** 3  # 5 GB free, below 10 GB threshold
+    monkeypatch.setattr(
+        "api.main.shutil.disk_usage",
+        lambda p: Usage(total=200 * 1024 ** 3, used=195 * 1024 ** 3, free=fake_free_bytes),
+    )
+    with pytest.raises(HTTPException) as exc_info:
+        _check_disk_free(tmp_path)
+    assert exc_info.value.status_code == 503
+    assert "5.0 GB" in exc_info.value.detail
+    assert "10 GB" in exc_info.value.detail
+
+
+def test_check_disk_free_default_threshold_is_10gb(monkeypatch, tmp_path):
+    from collections import namedtuple
+    from fastapi import HTTPException
+    from api.main import _check_disk_free
+
+    monkeypatch.delenv("MIN_FREE_DISK_GB", raising=False)
+    Usage = namedtuple("Usage", "total used free")
+    monkeypatch.setattr(
+        "api.main.shutil.disk_usage",
+        lambda p: Usage(total=200 * 1024 ** 3, used=195 * 1024 ** 3, free=9 * 1024 ** 3),
+    )
+    with pytest.raises(HTTPException):
+        _check_disk_free(tmp_path)
+
+
+def test_check_disk_free_swallows_oserror(monkeypatch, tmp_path):
+    from api.main import _check_disk_free
+
+    def boom(_):
+        raise OSError("no such device")
+
+    monkeypatch.setenv("MIN_FREE_DISK_GB", "10")
+    monkeypatch.setattr("api.main.shutil.disk_usage", boom)
+    _check_disk_free(tmp_path)  # best-effort: do not block ingest on stat failure

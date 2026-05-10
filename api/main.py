@@ -107,6 +107,35 @@ def _check_rate_limit(request: Request, limit: int = _RATE_LIMIT) -> None:
     _rate_buckets[ip].append(now)
 
 
+def _check_disk_free(docs_root: Path) -> None:
+    """Abort ingest if the persistent disk is too close to full.
+
+    Render disks can't shrink and can't be auto-grown mid-batch, so a runaway
+    drain that fills /var/data takes the API down. Threshold is configurable
+    via MIN_FREE_DISK_GB (default 10).
+    """
+    try:
+        min_gb = float(os.environ.get("MIN_FREE_DISK_GB", "10"))
+    except ValueError:
+        min_gb = 10.0
+    try:
+        # Walk up to a parent that exists — docs_root may not be created yet.
+        check_path = docs_root
+        while not check_path.exists():
+            parent = check_path.parent
+            if parent == check_path:
+                return
+            check_path = parent
+        free_gb = shutil.disk_usage(str(check_path)).free / (1024 ** 3)
+    except OSError:
+        return  # best-effort; don't block on a stat failure
+    if free_gb < min_gb:
+        raise HTTPException(
+            status_code=503,
+            detail=f"disk free {free_gb:.1f} GB below MIN_FREE_DISK_GB={min_gb:.0f} GB threshold; ingest paused",
+        )
+
+
 # ---------------------------------------------------------------------------
 # Data retention: expire and purge old proxy assignments
 # ---------------------------------------------------------------------------
@@ -2010,16 +2039,13 @@ def sitemap_xml() -> Response:
     )
 
 
-# Public-facing regional grouping for the homepage state-pill grid (item #3
-# of docs/seo-roadmap.md). This keeps Delaware with the Mid-Atlantic states,
-# which matches how users search for HOA records better than strict Census
-# divisions.
+# Public-facing regional grouping for the homepage state-pill grid, using the
+# four top-level US Census regions (Northeast, Midwest, South, West).
 _STATE_REGIONS: list[tuple[str, list[str]]] = [
-    ("Northeast", ["ct", "me", "ma", "nh", "ri", "vt"]),
-    ("Mid-Atlantic", ["de", "dc", "md", "nj", "ny", "pa"]),
-    ("Midwest", ["il", "in", "ia", "ks", "mi", "mn", "mo", "ne", "nd", "oh", "sd", "wi"]),
-    ("South", ["al", "ar", "fl", "ga", "ky", "la", "ms", "nc", "ok", "sc", "tn", "tx", "va", "wv"]),
-    ("West", ["ak", "az", "ca", "co", "hi", "id", "mt", "nv", "nm", "or", "ut", "wa", "wy"]),
+    ("East Coast", ["me", "nh", "vt", "ma", "ri", "ct", "ny", "nj", "pa", "de", "dc", "md", "va"]),
+    ("South", ["al", "ar", "fl", "ga", "ky", "la", "ms", "nc", "ok", "sc", "tn", "tx", "wv"]),
+    ("Midwest", ["ia", "il", "in", "ks", "mi", "mn", "mo", "nd", "ne", "oh", "sd", "wi"]),
+    ("West", ["ak", "az", "ca", "co", "hi", "id", "mt", "nm", "nv", "or", "ut", "wa", "wy"]),
 ]
 
 
@@ -3222,6 +3248,8 @@ def admin_ingest_ready_gcs(
     settings = load_settings()
     if not settings.openai_api_key and not dry_run:
         raise HTTPException(status_code=400, detail="OPENAI_API_KEY is required for ingestion")
+    if not dry_run:
+        _check_disk_free(settings.docs_root)
 
     bucket = _prepared_gcs_bucket(bucket_name)
     prefixes = prepared_ingest.list_ready_bundle_prefixes(bucket, state=state_n, limit=limit)
@@ -3265,6 +3293,7 @@ def admin_ingest_ready_gcs(
                 if dry_run:
                     continue
 
+                _check_disk_free(settings.docs_root)
                 pdf_bytes = prepared_ingest.download_blob_bytes(bucket, pdf_uri.blob)
                 target = _prepared_target_pdf_path(
                     hoa_dir=hoa_dir,
@@ -5828,6 +5857,7 @@ async def upload_documents(
         raise HTTPException(status_code=400, detail="OPENAI_API_KEY is required for ingestion")
     if not files:
         raise HTTPException(status_code=400, detail="At least one file is required")
+    _check_disk_free(settings.docs_root)
     MAX_UPLOAD_BYTES = 25 * 1024 * 1024  # 25 MB per file
     for upload in files:
         upload.file.seek(0, 2)
@@ -5973,6 +6003,7 @@ async def upload_documents_anonymous(
         raise HTTPException(status_code=400, detail="OPENAI_API_KEY is required for ingestion")
     if not files:
         raise HTTPException(status_code=400, detail="At least one file is required")
+    _check_disk_free(settings.docs_root)
     MAX_UPLOAD_BYTES = 25 * 1024 * 1024  # 25 MB per file
     for upload in files:
         upload.file.seek(0, 2)
