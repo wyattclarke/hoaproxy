@@ -1,13 +1,32 @@
 #!/usr/bin/env python3
-"""Restore deleted real HOAs as docless stubs.
+"""Recovery tool — restore already-deleted real HOAs as docless stubs.
 
-For each grade JSON, walk the verdict==junk entries and classify each as:
-  - WAS_REAL_HOA  — registered association whose only banked docs were
-                    junk content (filing receipts, newsletters, etc.).
-                    These are restored as docless stubs via
-                    /admin/create-stub-hoas.
-  - NOT_REAL_HOA  — wrong-state PDFs, court filings, or document fragments
-                    whose name was never a real HOA. Stay deleted.
+WARNING — superseded by ``clean_junk_docs.py`` for new content-audit work.
+
+This script is the post-hoc recovery half of the original 2026-05-09 audit
+flow that turned out to be lossy: ``delete_junk_hoas.py`` deleted entities
+flagged as having junk content, then ``restore_stubs.py`` re-created them as
+stubs carrying only ``name`` / ``state`` / ``city`` — **silently dropping
+``latitude``, ``longitude``, ``boundary_geojson``, ``street``, ``postal_code``,
+and ``location_quality``** because ``/admin/delete-hoa`` cascades through
+``hoa_locations``. The 1,147 entities restored by this script that way ended
+up docless AND geometryless. A separate Pass B run is re-geocoding those
+from bank manifests + HERE.
+
+Going forward, content cleanup should use ``clean_junk_docs.py``, which
+calls the new ``/admin/clear-hoa-docs`` endpoint to drop documents while
+preserving the entity row and all its hoa_locations geometry. That leaves
+no recovery work for a follow-up tool.
+
+This script remains here only for the original 2026-05-09 audit recovery
+flow and any future case where a rogue ``/admin/delete-hoa`` happens
+without geometry preservation. Don't use it as part of a routine cleanup.
+
+Classification (unchanged):
+  - WAS_REAL_HOA  — name passes the HOA-shape heuristic. Restored as a
+                    stub via ``/admin/create-stub-hoas``.
+  - NOT_REAL_HOA  — name is a document fragment (e.g. "Stormwater Drainage
+                    Policy HOA"). Stays deleted.
 
 Run:
   python scripts/audit/restore_stubs.py            # dry-run (print)

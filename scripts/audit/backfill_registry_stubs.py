@@ -111,6 +111,18 @@ def live_admin_token() -> str | None:
 
 
 def normalize_lead(lead: dict, state: str, source: str) -> dict | None:
+    """Normalize a registry lead into the /admin/create-stub-hoas record shape.
+
+    Notable defaults (changed after the 2026-05-09 audit incident):
+      - ``location_quality`` is OMITTED — never set to ``"city_only"``. The
+        upsert COALESCEs every column, so passing ``"city_only"`` against an
+        existing row with a higher quality value (``"address"``,
+        ``"polygon"``, ``"zip_centroid"``) silently demotes it. Letting the
+        field stay NULL means existing values are preserved on upsert.
+      - ``postal_code`` is always carried through when the source has it,
+        so the row gets a ZIP-centroid geocoding anchor for downstream
+        Phase-9 enrichment.
+    """
     name = (lead.get("name") or "").strip()
     if not name or len(name) < 4:
         return None
@@ -132,15 +144,37 @@ def normalize_lead(lead: dict, state: str, source: str) -> dict | None:
         "postal_code": postal,
         "source": source,
         "source_url": lead.get("source_url"),
-        "location_quality": "city_only" if city else None,
+        # Intentionally omit location_quality; see docstring.
     }
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--state", required=True, help="RI, HI, CT, or ALL")
+    ap.add_argument("--state", required=True, help="State key from REGISTRIES, or ALL")
     ap.add_argument("--apply", action="store_true")
     ap.add_argument("--out", default=None)
+    ap.add_argument(
+        "--on-collision",
+        default="disambiguate",
+        choices=["skip", "disambiguate"],
+        help=(
+            "Cross-state name collision policy passed through to "
+            "/admin/create-stub-hoas. 'skip' (safest) refuses any record "
+            "whose name already exists in another state. 'disambiguate' "
+            "(default for bulk registry imports) creates a separate row "
+            "under '{name} ({STATE})' so coverage isn't lost when the same "
+            "legal name is registered in multiple states."
+        ),
+    )
+    ap.add_argument(
+        "--batch-size",
+        type=int,
+        default=50,
+        help=(
+            "Records per /admin/create-stub-hoas POST. Larger batches are "
+            "faster but the endpoint may return 500 above ~100 under load."
+        ),
+    )
     args = ap.parse_args()
 
     targets: list[str]
@@ -194,9 +228,12 @@ def main() -> int:
             print("[backfill] no admin token", file=sys.stderr)
             return 2
 
-        BATCH = 100
+        BATCH = max(1, int(args.batch_size))
         created = 0
         updated = 0
+        disambiguated = 0
+        skipped_total = 0
+        skipped_samples: list[dict] = []
         failed: list[dict] = []
         for i in range(0, len(records), BATCH):
             chunk = records[i:i + BATCH]
@@ -204,13 +241,28 @@ def main() -> int:
                 r = requests.post(
                     "https://hoaproxy.org/admin/create-stub-hoas",
                     headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-                    json={"records": chunk}, timeout=300,
+                    json={
+                        "records": chunk,
+                        "on_collision": args.on_collision,
+                    },
+                    timeout=300,
                 )
                 if r.status_code == 200:
                     body = r.json()
-                    created += int(body.get("created", 0))
-                    updated += int(body.get("updated", 0))
-                    print(f"  [{st}] batch {i // BATCH + 1}: created={body.get('created')} updated={body.get('updated')} skipped={body.get('skipped')}")
+                    c = int(body.get("created", 0))
+                    u = int(body.get("updated", 0))
+                    d = int(body.get("disambiguated", 0))
+                    sk = int(body.get("skipped", 0))
+                    created += c
+                    updated += u
+                    disambiguated += d
+                    skipped_total += sk
+                    if body.get("skipped_sample"):
+                        skipped_samples.extend(body["skipped_sample"][:3])
+                    print(
+                        f"  [{st}] batch {i // BATCH + 1}: "
+                        f"created={c} updated={u} disambiguated={d} skipped={sk}"
+                    )
                 else:
                     failed.append({"batch_start": i, "http": r.status_code, "body": r.text[:300]})
                     print(f"  [{st}] batch {i // BATCH + 1}: FAIL http {r.status_code}")
@@ -222,9 +274,17 @@ def main() -> int:
             "prepared": len(records),
             "created": created,
             "updated": updated,
+            "disambiguated": disambiguated,
+            "skipped": skipped_total,
+            "skipped_samples": skipped_samples[:30],
             "failed": failed,
+            "on_collision": args.on_collision,
         }
-        print(f"[{st}] DONE  created={created}  updated={updated}  failed={len(failed)}")
+        print(
+            f"[{st}] DONE  created={created}  updated={updated}  "
+            f"disambiguated={disambiguated}  skipped={skipped_total}  "
+            f"failed={len(failed)}"
+        )
 
     if args.out:
         Path(args.out).parent.mkdir(parents=True, exist_ok=True)

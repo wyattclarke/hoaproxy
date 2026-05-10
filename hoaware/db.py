@@ -642,6 +642,93 @@ def get_or_create_hoa(conn: sqlite3.Connection, name: str) -> int:
     return int(cur.lastrowid)
 
 
+_TRAILING_STATE_SUFFIX_RE = re.compile(r"\s+\(([A-Z]{2})\)\s*$")
+
+
+def get_or_create_hoa_state_aware(
+    conn: sqlite3.Connection, name: str, state: str | None
+) -> tuple[int, str]:
+    """State-aware HOA lookup that disambiguates name collisions across states.
+
+    Returns ``(hoa_id, canonical_name)`` where ``canonical_name`` is the
+    string actually stored in ``hoas.name``. It equals the input ``name``
+    unless a cross-state collision was detected, in which case it is
+    ``"{name} ({STATE})"``.
+
+    Lookup order:
+      1. Existing row whose ``name`` matches and whose hoa_locations.state
+         is the same (or NULL — first import wins). Returns that id with
+         the original ``name``.
+      2. Existing pre-disambiguated row stored as ``"{name} ({STATE})"``.
+      3. ``name`` exists but for a different state → create a new row
+         under the disambiguated name.
+      4. ``name`` does not exist anywhere → create with the plain name.
+
+    Skips suffixing if ``name`` already ends in ``" (XX)"`` where XX is a
+    2-letter token (handles names that legitimately carry a state suffix
+    in their registered legal form, e.g. ``"Lakewood Estates (CA)"`` from
+    the source registry).
+
+    When ``state`` is None or empty, falls back to ``get_or_create_hoa``
+    (no disambiguation possible without a state to compare).
+    """
+    if not state:
+        return get_or_create_hoa(conn, name), name
+
+    state_upper = str(state).strip().upper()
+    if not state_upper:
+        return get_or_create_hoa(conn, name), name
+
+    # 1. Exact (name, state) match — also accept rows whose location state
+    #    is NULL (newly-created bare row from a prior import that never set
+    #    state). Prefer state-matched rows to NULL ones.
+    row = conn.execute(
+        """
+        SELECT h.id, l.state AS l_state
+        FROM hoas h
+        LEFT JOIN hoa_locations l ON l.hoa_id = h.id
+        WHERE h.name = ?
+          AND (l.state = ? OR l.state IS NULL)
+        ORDER BY (l.state IS NULL) ASC
+        LIMIT 1
+        """,
+        (name, state_upper),
+    ).fetchone()
+    if row:
+        return int(row["id"]), name
+
+    # 2. Pre-disambiguated row already exists.
+    disambiguated = f"{name} ({state_upper})"
+    row = conn.execute(
+        "SELECT id FROM hoas WHERE name = ?",
+        (disambiguated,),
+    ).fetchone()
+    if row:
+        return int(row["id"]), disambiguated
+
+    # 3. Bare name exists but in a different state — disambiguate.
+    row = conn.execute(
+        "SELECT id FROM hoas WHERE name = ?",
+        (name,),
+    ).fetchone()
+    if row:
+        # If the input name already carries a 2-letter parenthetical suffix,
+        # don't double-stack it — fall through to a plain create. The
+        # caller's name as-is becomes the canonical (uniqueness will fail
+        # if there's already a row by that exact name; that's a true
+        # duplicate).
+        if _TRAILING_STATE_SUFFIX_RE.search(name):
+            canonical = name
+        else:
+            canonical = disambiguated
+    else:
+        canonical = name
+
+    cur = conn.execute("INSERT INTO hoas (name) VALUES (?)", (canonical,))
+    conn.commit()
+    return int(cur.lastrowid), canonical
+
+
 def get_hoa_id(conn: sqlite3.Connection, name: str) -> int | None:
     cur = conn.execute("SELECT id FROM hoas WHERE name = ?", (name,))
     row = cur.fetchone()
