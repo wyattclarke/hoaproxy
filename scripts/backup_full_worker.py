@@ -76,6 +76,30 @@ def main() -> int:
         except OSError as e:
             print(f"[{_ts()}] cleanup failed: {e}", flush=True)
 
+        # Defense in depth: opportunistically reap any other _backup-*.db
+        # / -journal / .log left from prior killed workers (>1h old, so we
+        # never touch a peer that's still running). The /admin/cleanup-
+        # backup-orphans endpoint is the manual handle for the same.
+        try:
+            import re as _re
+            cutoff = time.time() - 3600
+            db_dir = os.path.dirname(snapshot_path) or "."
+            pat = _re.compile(r"^_backup-\d{8}-\d{6}\.(db|db-journal|log)$")
+            for name in os.listdir(db_dir):
+                if not pat.match(name):
+                    continue
+                p = os.path.join(db_dir, name)
+                try:
+                    if os.path.getmtime(p) >= cutoff:
+                        continue
+                    sz = os.path.getsize(p)
+                    os.remove(p)
+                    print(f"[{_ts()}] reaped orphan={p} bytes={sz}", flush=True)
+                except OSError:
+                    continue
+        except Exception as e:
+            print(f"[{_ts()}] orphan reap failed: {e}", flush=True)
+
 
 if __name__ == "__main__":
     sys.exit(main())

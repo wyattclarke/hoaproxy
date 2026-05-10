@@ -5162,27 +5162,70 @@ def admin_backup_full_log(request: Request, stamp: str):
     }
 
 
-@app.get("/admin/disk-usage")
-def admin_disk_usage(request: Request):
-    """Free space on the persistent disk holding the live SQLite DB.
+@app.post("/admin/cleanup-backup-orphans")
+def admin_cleanup_backup_orphans(request: Request, min_age_minutes: int = 30, dry_run: bool = False):
+    """Delete leftover ``_backup-*.db``, ``-journal``, and ``.log`` files in
+    the DB directory whose mtime is older than ``min_age_minutes`` (default
+    30). These accumulate when /admin/backup-full's worker is killed mid-VACUUM
+    or mid-upload — the daemon-thread implementation produced 51 GiB of dead
+    snapshots on 2026-05-10 alone before being switched to detached subprocess.
 
-    VACUUM INTO needs ~1.5x the active data size of free space; if the
-    persistent disk is near capacity the backup will fail silently mid-vacuum.
+    The age guard is the only safety against deleting an in-flight backup. Set
+    it generously when triggering manually; the detached worker now self-cleans
+    its own snapshot in its ``finally`` block, so future orphans should only
+    appear when the worker itself is SIGKILL-ed.
+
+    Pass ``dry_run=true`` to preview without deleting.
     """
     _require_admin(request)
-    import shutil
+    import re as _re
+    import time as _time
     settings = load_settings()
-    src_dir = os.path.dirname(settings.db_path) or "."
-    usage = shutil.disk_usage(src_dir)
-    db_bytes = os.path.getsize(settings.db_path) if os.path.exists(settings.db_path) else 0
+    src_dir = Path(os.path.dirname(settings.db_path) or ".")
+
+    pattern = _re.compile(r"^_backup-\d{8}-\d{6}\.(db|db-journal|log)$")
+    cutoff = _time.time() - int(min_age_minutes) * 60
+
+    candidates = []
+    for entry in src_dir.iterdir():
+        if not entry.is_file():
+            continue
+        if not pattern.match(entry.name):
+            continue
+        try:
+            stat = entry.stat()
+        except OSError:
+            continue
+        if stat.st_mtime > cutoff:
+            continue
+        candidates.append({
+            "path": str(entry),
+            "bytes": stat.st_size,
+            "age_minutes": round((_time.time() - stat.st_mtime) / 60, 1),
+        })
+
+    deleted = []
+    skipped: list[dict] = []
+    bytes_freed = 0
+    for c in candidates:
+        if dry_run:
+            skipped.append({**c, "reason": "dry_run"})
+            continue
+        try:
+            os.remove(c["path"])
+            deleted.append(c)
+            bytes_freed += c["bytes"]
+        except OSError as e:
+            skipped.append({**c, "reason": f"unlink_failed: {e}"})
+
     return {
-        "path": src_dir,
-        "total_bytes": usage.total,
-        "used_bytes": usage.used,
-        "free_bytes": usage.free,
-        "db_path": settings.db_path,
-        "db_bytes": db_bytes,
-        "free_minus_15x_db": usage.free - int(db_bytes * 1.5),
+        "dry_run": dry_run,
+        "min_age_minutes": min_age_minutes,
+        "scanned_dir": str(src_dir),
+        "deleted_count": len(deleted),
+        "bytes_freed": bytes_freed,
+        "deleted": deleted,
+        "skipped": skipped,
     }
 
 
