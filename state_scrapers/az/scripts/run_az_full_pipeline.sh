@@ -20,10 +20,14 @@ mkdir -p "$(dirname "$LOG")"
 log() { echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] $*" | tee -a "$LOG"; }
 
 cd "$ROOT"
+# Activate venv and load settings.env without tripping `set -u` on incidental
+# unset shell variables in those scripts.
+set +u
 source .venv/bin/activate
 set -a
 [ -f "$ROOT/settings.env" ] && source "$ROOT/settings.env" 2>/dev/null
 set +a
+set -u
 export GOOGLE_CLOUD_PROJECT=hoaware
 export PYTHONUNBUFFERED=1
 
