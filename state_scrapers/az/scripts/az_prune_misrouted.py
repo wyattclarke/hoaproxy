@@ -80,12 +80,27 @@ def main() -> int:
         if not apply:
             print(f"    [DRY] would delete {prefix}")
             continue
-        # Delete the entire subtree. Increase timeout — gsutil can be slow on
-        # subtrees with many objects + GCS eventual consistency.
-        rm = subprocess.run(
-            ["gsutil", "-m", "rm", "-r", prefix],
-            capture_output=True, text=True, timeout=900,
+        # List individual objects + delete in batches via xargs-style.
+        # gsutil -m rm -r can hang on subtrees with multi-level structure;
+        # explicit per-file rm is more reliable in practice.
+        ls = subprocess.run(
+            ["gsutil", "ls", "-r", prefix],
+            capture_output=True, text=True, timeout=120,
         )
+        files = [l.strip() for l in (ls.stdout or "").splitlines()
+                 if l.strip() and not l.strip().endswith(":") and not l.strip().endswith("/")]
+        if not files:
+            print(f"    {slug}: no files to delete")
+            rm = subprocess.run(
+                ["gsutil", "rm", "-r", prefix],
+                capture_output=True, text=True, timeout=120,
+            )
+        else:
+            # Single-threaded gsutil rm with file list piped via stdin
+            rm = subprocess.run(
+                ["gsutil", "rm"] + files,
+                capture_output=True, text=True, timeout=600,
+            )
         if rm.returncode == 0:
             print(f"    DELETED")
             deleted_count += len(manifests)
