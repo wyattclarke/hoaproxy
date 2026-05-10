@@ -884,10 +884,10 @@ def cmd_run(args: argparse.Namespace) -> int:
     bucket = client.bucket(args.bank_bucket)
 
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    output_dir = Path(getattr(args, "output_dir", None) or (ROOT / "state_scrapers" / "fl" / "results"))
+    output_dir = Path(getattr(args, "output_dir", None) or (ROOT / "state_scrapers" / "az" / "results"))
     output_dir.mkdir(parents=True, exist_ok=True)
-    ledger_path = output_dir / f"fl_ocr_run_{timestamp}.jsonl"
-    summary_path = output_dir / "fl_ocr_run_summary.json"
+    ledger_path = output_dir / f"az_ocr_run_{timestamp}.jsonl"
+    summary_path = output_dir / "az_ocr_run_summary.json"
 
     log.info("Full AZ OCR pass. Budget: $%.2f. Ledger: %s", args.max_cost_usd, ledger_path)
     log.info("Scanning gs://%s/%s ...", args.bank_bucket, BANK_PREFIX)

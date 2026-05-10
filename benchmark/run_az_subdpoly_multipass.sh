@@ -9,11 +9,13 @@
 #
 # Usage:
 #   benchmark/run_az_subdpoly_multipass.sh <county-slug> <CountyDisplay>
-#                                          <unique-name-count> [pass-size]
+#                                          <unique-name-count> [pass-size] [start-pass]
 #
 # Example:
 #   benchmark/run_az_subdpoly_multipass.sh maricopa Maricopa 25201
 #   benchmark/run_az_subdpoly_multipass.sh pima Pima 5744
+#   # Start at pass 2 (skip pass 1 if the regular replenisher already ran it):
+#   benchmark/run_az_subdpoly_multipass.sh maricopa Maricopa 25201 2500 2
 
 set -euo pipefail
 
@@ -21,6 +23,7 @@ SLUG="${1:?county slug required}"
 DISPLAY="${2:?county display required}"
 UNIQUE_NAMES="${3:?unique name count required}"
 PASS_SIZE="${4:-2500}"  # names per pass
+START_PASS="${5:-1}"    # skip earlier passes (e.g. 2 if regular replenisher already did pass 1)
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TOTAL_PASSES=$(( (UNIQUE_NAMES + PASS_SIZE - 1) / PASS_SIZE ))
@@ -32,7 +35,7 @@ echo "Log dir: $LOG_DIR"
 
 cd "$ROOT"
 
-for ((pass=1; pass<=TOTAL_PASSES; pass++)); do
+for ((pass=START_PASS; pass<=TOTAL_PASSES; pass++)); do
     offset=$(( (pass - 1) * PASS_SIZE ))
     pass_slug="${SLUG}_pass${pass}"
     pass_results="$ROOT/benchmark/results/az_subdpoly_${pass_slug}"
