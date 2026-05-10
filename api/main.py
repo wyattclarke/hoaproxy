@@ -4597,6 +4597,85 @@ def admin_delete_hoa(request: Request, body: dict):
     }
 
 
+@app.post("/admin/clear-hoa-docs")
+def admin_clear_hoa_docs(request: Request, body: dict):
+    """Delete one or more HOAs' documents and chunks while preserving the
+    entity row, its hoa_locations geometry, and any proxy/membership state.
+
+    Use this when content audit flags a row's banked docs as junk but the
+    entity itself is a real registered HOA worth keeping as a docless stub.
+    Calling /admin/delete-hoa followed by /admin/create-stub-hoas was the
+    previous workflow and silently lost lat/lon/boundary_geojson/street/
+    postal_code/location_quality because the cascade clears hoa_locations
+    and the stub recreate carries only name/state/city.
+
+    Body: {"hoa_ids": [123, 456], "dry_run": false}
+
+    Cascades: chunks (via document_id), documents. Does NOT touch hoas,
+    hoa_locations, membership_claims, delegates, proxy_*, proposals,
+    or meetings.
+
+    Returns the same shape as /admin/delete-hoa, with a "cleared" count
+    instead of "deleted".
+    """
+    _require_admin(request)
+    import sqlite3
+    settings = load_settings()
+    ids = body.get("hoa_ids") or ([body["hoa_id"]] if "hoa_id" in body else [])
+    if not isinstance(ids, list) or not ids:
+        raise HTTPException(status_code=400, detail="hoa_ids[] required")
+    try:
+        ids = [int(x) for x in ids]
+    except Exception:
+        raise HTTPException(status_code=400, detail="hoa_ids must be integers")
+    dry_run = bool(body.get("dry_run") or False)
+
+    results: list[dict] = []
+    errors = 0
+    with db.get_connection(settings.db_path) as conn:
+        for hid in ids:
+            row = conn.execute("SELECT id, name FROM hoas WHERE id = ?", (hid,)).fetchone()
+            if not row:
+                results.append({"hoa_id": hid, "status": "not_found"})
+                errors += 1
+                continue
+            doc_count = conn.execute(
+                "SELECT COUNT(*) FROM documents WHERE hoa_id = ?", (hid,)
+            ).fetchone()[0]
+            chunk_count = conn.execute(
+                "SELECT COUNT(*) FROM chunks WHERE document_id IN (SELECT id FROM documents WHERE hoa_id = ?)",
+                (hid,),
+            ).fetchone()[0]
+            if dry_run:
+                results.append({
+                    "hoa_id": hid, "name": row["name"], "status": "would_clear",
+                    "doc_count": doc_count, "chunk_count": chunk_count,
+                })
+                continue
+            try:
+                conn.execute(
+                    "DELETE FROM chunks WHERE document_id IN (SELECT id FROM documents WHERE hoa_id = ?)",
+                    (hid,),
+                )
+                conn.execute("DELETE FROM documents WHERE hoa_id = ?", (hid,))
+                results.append({
+                    "hoa_id": hid, "name": row["name"], "status": "cleared",
+                    "doc_count": doc_count, "chunk_count": chunk_count,
+                })
+            except sqlite3.Error as exc:
+                results.append({"hoa_id": hid, "status": "error", "reason": str(exc)})
+                errors += 1
+        if not dry_run:
+            conn.commit()
+    return {
+        "dry_run": dry_run,
+        "cleared": sum(1 for r in results if r.get("status") == "cleared"),
+        "would_clear": sum(1 for r in results if r.get("status") == "would_clear"),
+        "errors": errors,
+        "results": results,
+    }
+
+
 @app.post("/admin/create-stub-hoas")
 def admin_create_stub_hoas(request: Request, body: dict):
     """Bulk-create or upsert HOAs *without* requiring documents. Used for
@@ -4632,13 +4711,32 @@ def admin_create_stub_hoas(request: Request, body: dict):
 
     Allowed location_quality values match /admin/backfill-locations.
     Returns counts of created vs updated stubs.
+
+    Cross-state collision policy is per-record via ``on_collision``:
+      - ``"skip"`` (default): refuse the upsert and log a ``state_collision``
+        skip. This is the bleed-stop guard added after the 2026-05-09 audit
+        incident; safest when the caller cannot guarantee the input set is
+        free of names that already live in another state.
+      - ``"disambiguate"``: detect the collision and create a separate row
+        under ``"{name} ({STATE})"``, with ``display_name`` set to the
+        original ``name`` so the UI surfaces the clean form. Use this for
+        bulk imports where the same legal name being registered in
+        multiple states is expected (e.g. "Lakewood Estates HOA").
     """
     _require_admin(request)
     settings = load_settings()
     records = body.get("records") or []
     valid_quality = {"polygon", "address", "place_centroid", "zip_centroid", "city_only", "unknown"}
+    valid_on_collision = {"skip", "disambiguate"}
+    default_on_collision = (body.get("on_collision") or "skip").strip().lower()
+    if default_on_collision not in valid_on_collision:
+        raise HTTPException(
+            status_code=400,
+            detail=f"on_collision must be one of {sorted(valid_on_collision)}",
+        )
     created = 0
     updated = 0
+    disambiguated = 0
     skipped: list[dict] = []
     by_quality: dict[str, int] = {}
 
@@ -4654,37 +4752,63 @@ def admin_create_stub_hoas(request: Request, body: dict):
                 if quality not in valid_quality:
                     skipped.append({"reason": f"bad_quality:{quality}", "name": name})
                     continue
+            entry_state = entry.get("state")
+            entry_on_collision = (entry.get("on_collision") or default_on_collision).strip().lower()
+            if entry_on_collision not in valid_on_collision:
+                skipped.append({"reason": f"bad_on_collision:{entry_on_collision}", "name": name})
+                continue
+
+            canonical = name
+            display_name = entry.get("display_name")
             existing = conn.execute(
                 "SELECT id FROM hoas WHERE name = ?", (name,)
             ).fetchone()
             is_new = existing is None
-            # Bleed-stop guard (added after the 2026-05-09 audit incident).
-            # The COALESCE upsert silently overwrites state/city/quality on a
-            # name collision, so a TX-registry record colliding with a pre-
-            # existing AZ row would re-label the AZ row as TX while preserving
-            # the AZ lat/lon. Refuse cross-state collisions outright; they're
-            # never the right outcome for stub creation.
-            if not is_new and entry.get("state"):
+
+            if not is_new and entry_state:
                 cur_state = conn.execute(
                     "SELECT state FROM hoa_locations WHERE hoa_id = ?",
                     (existing["id"],),
                 ).fetchone()
-                if cur_state and cur_state[0] and str(cur_state[0]).upper() != str(entry["state"]).upper():
-                    skipped.append({
-                        "reason": "state_collision",
-                        "name": name,
-                        "incoming_state": entry["state"],
-                        "existing_state": cur_state[0],
-                    })
-                    continue
+                cur_state_val = cur_state[0] if cur_state else None
+                if cur_state_val and str(cur_state_val).upper() != str(entry_state).upper():
+                    if entry_on_collision == "skip":
+                        # Bleed-stop guard from the 2026-05-09 audit incident:
+                        # cross-state name collisions silently corrupted state/
+                        # city/location_quality on the colliding row. Refuse
+                        # outright unless the caller opts into disambiguation.
+                        skipped.append({
+                            "reason": "state_collision",
+                            "name": name,
+                            "incoming_state": entry_state,
+                            "existing_state": cur_state_val,
+                        })
+                        continue
+                    # disambiguate: route this record to a separate row
+                    # carrying "{name} ({STATE})" as its canonical name; keep
+                    # display_name = the clean original.
+                    disambiguated_target = f"{name} ({str(entry_state).upper()})"
+                    pre_check = conn.execute(
+                        "SELECT id FROM hoas WHERE name = ?", (disambiguated_target,)
+                    ).fetchone()
+                    _hid, canonical = db.get_or_create_hoa_state_aware(conn, name, entry_state)
+                    if canonical != name:
+                        disambiguated += 1
+                        if display_name is None:
+                            display_name = name
+                        # `is_new` for accounting tracks the disambiguated
+                        # row, not the colliding original.
+                        is_new = pre_check is None
+
             db.upsert_hoa_location(
                 conn,
-                hoa_name=name,
+                hoa_name=canonical,
                 metadata_type=entry.get("metadata_type"),
+                display_name=display_name,
                 website_url=entry.get("website_url"),
                 street=entry.get("street"),
                 city=entry.get("city"),
-                state=entry.get("state"),
+                state=entry_state,
                 postal_code=entry.get("postal_code"),
                 latitude=entry.get("latitude"),
                 longitude=entry.get("longitude"),
@@ -4700,10 +4824,12 @@ def admin_create_stub_hoas(request: Request, body: dict):
     return {
         "created": created,
         "updated": updated,
+        "disambiguated": disambiguated,
         "skipped": len(skipped),
         "skipped_sample": skipped[:10],
         "by_quality": by_quality,
         "total_in_request": len(records),
+        "on_collision_default": default_on_collision,
     }
 
 
