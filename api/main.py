@@ -5086,6 +5086,7 @@ def admin_backup_full(request: Request):
     recovery.
     """
     _require_admin(request)
+    import shutil as _shutil
     import subprocess as _sp
     import sys as _sys
     from datetime import datetime, timezone
@@ -5105,12 +5106,27 @@ def admin_backup_full(request: Request):
         os.path.join(os.path.dirname(__file__), "..", "scripts", "backup_full_worker.py")
     )
 
+    # OS-level priority: nice (CPU) + ionice -c 3 (I/O idle class). Idle-class
+    # I/O only runs when no other process needs the disk, so the backup yields
+    # to API requests instead of competing with them — solves the "VACUUM
+    # saturates the disk and Render docker-stops the container" failure mode
+    # that killed the daemon-thread and threaded-backup attempts. Both tools
+    # are skipped if not in PATH (e.g. local dev on macOS).
+    cmd: list[str] = []
+    nice_path = _shutil.which("nice")
+    ionice_path = _shutil.which("ionice")
+    if nice_path:
+        cmd.extend([nice_path, "-n", "19"])
+    if ionice_path:
+        cmd.extend([ionice_path, "-c", "3"])
+    cmd.extend([_sys.executable, helper, settings.db_path, bucket_name, blob_name, snapshot_path])
+
     # Open the log file in the parent and pass the fd to the child. The child
     # gets its own dup of the fd, so closing it here doesn't affect the worker.
     log_fh = open(log_path, "wb")
     try:
         proc = _sp.Popen(
-            [_sys.executable, helper, settings.db_path, bucket_name, blob_name, snapshot_path],
+            cmd,
             stdout=log_fh,
             stderr=_sp.STDOUT,
             start_new_session=True,
