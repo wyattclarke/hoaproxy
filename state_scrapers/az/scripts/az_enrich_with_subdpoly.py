@@ -204,6 +204,11 @@ def enrich_county(
             "confidence": "subdpoly-polygon",
             "centroid_lat": seed_row["centroid"]["lat"],
             "centroid_lon": seed_row["centroid"]["lon"],
+            # Also write canonical latitude/longitude so prepare_bank's
+            # Nominatim guard (`geometry.get("latitude") is not None`) skips
+            # this manifest in Phase 7.
+            "latitude": seed_row["centroid"]["lat"],
+            "longitude": seed_row["centroid"]["lon"],
             "boundary_geojson": seed_row.get("boundary_geojson"),
             "area_acres": seed_row.get("area_acres"),
             "match": {

@@ -169,6 +169,9 @@ def main() -> int:
                 "confidence": "zip-centroid",
                 "centroid_lat": lat,
                 "centroid_lon": lon,
+                # Canonical lat/lon for prepare_bank Nominatim guard.
+                "latitude": lat,
+                "longitude": lon,
                 "match": {"postal_code": zip5},
                 "enriched_at": datetime.now(tz=timezone.utc).isoformat(),
             }
