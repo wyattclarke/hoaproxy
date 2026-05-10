@@ -80,10 +80,11 @@ def main() -> int:
         if not apply:
             print(f"    [DRY] would delete {prefix}")
             continue
-        # Delete the entire subtree
+        # Delete the entire subtree. Increase timeout — gsutil can be slow on
+        # subtrees with many objects + GCS eventual consistency.
         rm = subprocess.run(
             ["gsutil", "-m", "rm", "-r", prefix],
-            capture_output=True, text=True, timeout=300,
+            capture_output=True, text=True, timeout=900,
         )
         if rm.returncode == 0:
             print(f"    DELETED")

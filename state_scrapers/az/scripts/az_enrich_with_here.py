@@ -67,7 +67,7 @@ OSM_PLACE_SOURCE = "osm-place"
 
 
 # ---------------------------------------------------------------------------
-# GCS helpers (mirrors fl_enrich_manifests_with_sunbiz.py)
+# GCS helpers (mirrors az enrichers.py)
 # ---------------------------------------------------------------------------
 
 def gcs_read_json(uri: str) -> dict | None:
@@ -95,7 +95,7 @@ def gcs_write_json(uri: str, data: dict) -> bool:
         return False
 
 
-def list_fl_manifests() -> list[str]:
+def list_az_manifests() -> list[str]:
     print(f"[list] Listing FL manifests under {BANK_PREFIX} (may take 30-60s) ...")
     t0 = time.time()
     result = subprocess.run(
@@ -301,7 +301,7 @@ def parse_uri(uri: str) -> tuple[str, str] | None:
 def phase1_audit() -> None:
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
-    uris = list_fl_manifests()
+    uris = list_az_manifests()
     counts = Counter()
     eligible_uris: list[str] = []
     eligible_by_county: Counter = Counter()
