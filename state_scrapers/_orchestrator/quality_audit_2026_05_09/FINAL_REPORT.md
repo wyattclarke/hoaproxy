@@ -1,162 +1,155 @@
-# Quality Audit + Cleanup + Coverage Backfill — 2026-05-09 → 2026-05-10
+# HOA Quality Audit + Coverage Backfill — 2026-05-09 → 2026-05-10
 
 ## What this run did
 
-Two distinct workstreams, run in sequence on the same day:
+Three workstreams, in order:
 
-1. **Content-quality audit and cleanup.** Across 30 states, every live HOA
-   that had documents was graded by an LLM (DeepSeek-v4-flash, with
-   Claude-Haiku-4.5 fallback for empties) on whether its banked text was
-   genuine HOA governing-document content. 1,174 HOAs graded "junk" were
-   deleted from the live DB, then 1,147 of them — those whose entity name
-   itself was a real HOA name — were re-created as docless stubs to
-   preserve registered-entity coverage. The 27 that stayed deleted had
-   names that were document fragments (e.g. "Stormwater Drainage Policy
-   HOA", "Sloa Bulletin November", "Madison County Zoning") and were not
-   real HOAs.
+1. **Content-quality audit and cleanup.** LLM-graded every live HOA's
+   banked text (DeepSeek-v4-flash + Claude-Haiku fallback for empties)
+   to decide whether the document content was a real HOA governing doc
+   or junk (state filing receipts, biennial registrations, newsletters,
+   wrong-state PDFs, etc.). Across 30 states + sample-graded 19 more.
 
-2. **Coverage backfill from authoritative public registries.** 11 states
-   had usable free public registries; for each, we pulled the universe
-   of HOA/condo entities and bulk-created docless stubs via
-   `/admin/create-stub-hoas`. This treats each entity as a "registered
-   HOA, no public docs" entry — the same pattern DC's CONDO REGIME run
-   used. ~109,000 stubs were created across these states.
+2. **Authoritative-registry stub backfill.** For 20 states where free
+   public registries exist, bulk-imported the universe of HOA/condo
+   entities as docless stubs via `/admin/create-stub-hoas`. ~180,000
+   stubs created or upserted across:
+
+   | State | Source |
+   |---|---|
+   | FL | Sunbiz dump |
+   | CA | CA SoS bizfile bulk corp dump |
+   | TX | TREC HOA Management Certificate registry |
+   | NY | NY DOS Active Corporations |
+   | CO | DORA HOA Information Office |
+   | OR | OR SoS Active Nonprofit Corporations |
+   | CT | CT SoS condo associations |
+   | HI | DCCA AOUO Contact List |
+   | IL | Cook County Assessor (Chicagoland only) |
+   | RI | RI SoS associations |
+   | AZ | Pima County GIS HOA layer (Tucson only) |
+   | MA | MassGIS L3 parcels owner-name extraction (statewide) |
+   | MN | Statewide LiveBy subdivisions (Socrata) |
+   | MO | Springfield Greene County subdivisions |
+   | WA | Snohomish County subdivisions |
+   | OH | Hamilton + Stark + Delaware county GIS |
+   | VA | Fairfax + Loudoun + Henrico + Chesterfield + Stafford county GIS |
+   | MD | Baltimore + Harford county GIS |
+   | NC | Wake + New Hanover county GIS |
+   | MI | Kent + Kalamazoo county GIS |
+
+3. **2026-05-09 incident remediation + bug-fix work** (sibling session
+   handled the urgent repair; this session finished the long-tail
+   structural fixes once Pass B cleared):
+   - Pass A: bbox + HERE reverse-geocode repaired ~8,851 corrupted rows
+     across the 11 first-wave audit sources.
+   - Pass B: re-geocoded 1,147 deleted-then-stubbed entities from bank
+     manifests + HERE postal-code geocoding.
+   - New `/admin/clear-hoa-docs` endpoint (this session) deletes
+     documents+chunks while preserving `hoas` + `hoa_locations` rows
+     and their geometry — replaces the lossy delete-then-stub flow that
+     caused the 2026-05-09 corruption.
+   - New `/admin/create-stub-hoas` `on_collision: "disambiguate"` mode
+     (this session) creates `"{name} ({STATE})"` rows when the same
+     legal name registers in multiple states, instead of silently
+     clobbering the prior state's row.
+   - New `db.get_or_create_hoa_state_aware()` underlies the
+     disambiguation logic.
 
 ## Live count change
 
 | | Before | After |
 |---|---|---|
-| Total live HOAs | ~20,700 | **120,577** |
+| Total live HOAs | ~20,700 | **193,539** |
 
-Top states by live count after this run:
+Per-state gain across the 9 second-wave states:
 
-| State | Live | Source of bulk stubs |
-|---|---|---|
-| FL | 36,238 | Sunbiz dump (`data/fl_sunbiz_hoas.jsonl`, 36,644 entities) |
-| CA | 25,664 | CA SoS bulk corp dump filtered to nonprofit-mutual-benefit + HOA name |
-| TX | 16,322 | TX TREC HOA Management Certificate registry (Socrata) |
-| NY | 12,283 | NY DOS Active Corporations (Socrata) filtered by entity-type + HOA name regex |
-| CO | 8,490 | CO DORA HOA Information Office active list |
-| OR | 4,403 | OR SoS Active Nonprofit Corporations (Socrata) |
-| CT | 3,502 | CT SoS condo associations |
-| DC | 3,215 | DC GIS CAMA CONDO REGIME (preexisting) |
-| IL | 1,592 | Cook County Assessor (Chicagoland only — rest of IL blocked) |
-| HI | 1,513 | DCCA AOUO Contact List PDF |
-| AZ | 1,097 | Pima County GIS HOA layer (Tucson only — rest of AZ blocked) |
-| NC | 1,072 | preexisting (no statewide bulk found) |
-| GA | 924 | preexisting + small audit cleanup |
-| RI | 705 | RI SoS associations (full registry) |
-| TN | 649 | preexisting |
+| State | Pre | Post | Gain |
+|---|---|---|---|
+| MN | 40 | 24,925 | +24,885 |
+| OH | 159 | 9,970 | +9,811 |
+| VA | 177 | 9,727 | +9,550 |
+| WA | 134 | 8,988 | +8,854 |
+| MD | 77 | 7,566 | +7,489 |
+| MI | 107 | 5,475 | +5,368 |
+| NC | 1,072 | 6,136 | +5,064 |
+| MA | 34 | 4,753 | +4,719 |
+| MO | 119 | 3,449 | +3,330 |
+| **Total** | **1,919** | **80,989** | **+79,070** |
 
-## Per-state content audit results
+Plus ~109,000 from the 11 first-wave states earlier in the run.
 
-| State | Graded | Real | Junk | Junk rate | Delete + restore-stub |
+## Verification — bbox-pollution sweep (post Pass A + post 2nd-wave)
+
+180,707 rows tagged with audit/backfill sources surveyed. **4 cross-state
+bbox-pollution rows remaining**, all in `audit_2026_05_09_restored_stub`
+(Pass B leftover). Net of the original ~114 cross-state rows we found
+right after the 2026-05-09 incident, that's 96.5% repaired and the
+remaining 4 are in the source Pass B is still finalizing.
+
+The disambiguate-on-collision logic in the patched `/admin/create-stub-hoas`
+prevented any new corruption. Across ~80K new stubs from the second-wave
+backfill, ~2,350 cross-state name collisions were detected and routed to
+separate `(STATE)`-suffixed rows instead of silently overwriting prior
+states' data.
+
+## Per-state content audit results (highlights)
+
+| State | Graded | Real | Junk | Junk rate | Action |
 |---|---|---|---|---|---|
-| RI | 196 | 34 | 162 | 83% | 162 deleted, 162 restored |
-| HI | 614 | 79 | 535 | 87% | 535 deleted, 535 restored |
-| GA | 989 | 726 | 261 | 26% | 261 deleted, 251 restored |
-| MT | 146 | 101 | 45 | 31% | 45 deleted, 40 restored |
-| IL (audit) | 160 | 129 | 31 | 19% | 31 deleted, 31 restored |
-| OK | 134 | 103 | 23 | 17% | 23 deleted, 18 restored |
-| NE | 106 | 88 | 17 | 16% | 17 deleted, 15 restored |
-| TN | 667 | 650 | 17 | 3% | 17 deleted, 17 restored |
-| CT | 230 | 98 | 132 | 57% | 132 deleted, 125 restored |
-| KS | 355 | 342 | 13 | 4% | 13 deleted, 12 restored |
-| DC (with-docs) | 21 | 8 | 13 | 62% | 13 deleted, 13 restored |
-| MS | 42 | 33 | 9 | 21% | 9 deleted, 8 restored |
-| MD | 77 | 69 | 8 | 10% | 8 deleted, 8 restored |
-| WY | 85 | 77 | 6 | 7% | 6 deleted, 6 restored |
-| DE | 112 | 106 | 6 | 5% | 6 deleted, 5 restored |
-| UT | 69 | 63 | 6 | 9% | 6 deleted, 6 restored |
-| NM | 60 | 55 | 5 | 8% | 5 deleted, 5 restored |
-| AK | 31 | 28 | 3 | 10% | 3 deleted, 3 restored |
-| AL | 86 | 83 | 3 | 3% | 3 deleted, 3 restored |
-| AR | 36 | 33 | 3 | 8% | 3 deleted, 3 restored |
-| MN | 40 | 35 | 3 | 8% | 3 deleted, 3 restored |
-| LA | 32 | 30 | 2 | 6% | 2 deleted, 2 restored |
-| NV | 26 | 24 | 2 | 8% | 2 deleted, 2 restored |
-| ME | 19 | 17 | 2 | 11% | 2 deleted, 2 restored |
-| FL (sample) | 20 | 18 | 1 | 5% | 1 deleted, 1 restored |
-| IA | 44 | 42 | 2 | 5% | 2 deleted, 2 restored |
-| KY | 40 | 38 | 1 | 3% | 1 deleted, 1 restored |
-| ID | 36 | 34 | 1 | 3% | 1 deleted, 1 restored |
-| NH | 31 | 30 | 1 | 3% | 1 deleted, 0 restored |
-| ND | 20 | 18 | 1 | 5% | 1 deleted, 0 restored |
-| AZ (sample) | 6 | 5 | 1 | 17% | 1 deleted, 1 restored |
-| PA | 56 | 53 | 2 | 4% | 2 deleted, 2 restored |
-| VT | 16 | 15 | 1 | 6% | 1 deleted, 1 restored |
-| WV | 16 | 15 | 1 | 6% | 1 deleted, 1 restored |
-| SD | 12 | 10 | 1 | 8% | 1 deleted, 1 restored |
-| CA (partial) | 75 of 1097 | 24 | 49 | 65% | 15 deleted, 11 restored |
-| CO (partial) | 100 of 557 | 53 | 40 | 40% | partial; 21 restored |
+| HI | 614 | 79 | 535 | 87% | Pass B re-geocoded |
+| RI | 196 | 34 | 162 | 83% | Pass B re-geocoded |
+| CT | 230 | 98 | 132 | 57% | Pass B re-geocoded |
+| CA | 1,082 | 422 | 641 | 59% | Handed off to sibling session |
+| CO | 505 | 294 | 196 | 39% | clear-hoa-docs (69 cleared, rest stale IDs) |
+| MT | 146 | 101 | 45 | 31% | Pass B re-geocoded |
+| GA | 989 | 726 | 261 | 26% | Pass B re-geocoded |
+| OK | 134 | 103 | 23 | 17% | Pass B re-geocoded |
+| MD | 77 | 69 | 8 | 10% | clean_junk_docs ran |
+| (other states) | various | various | <10 each | <8% | Pass B re-geocoded |
 
-CA and CO grades stopped early due to a session crash + Render slowness;
-their bulk registry stubs (24K + 8K) were not affected. The unfilled
-remainder can be graded in a follow-up pass.
+Note: CA's audit is being handled by a sibling session that was already
+doing CA-specific work; full handoff message is in this session's
+transcript.
 
-## Pattern observed: SoS-filing-receipt content failure
-
-The states with the worst content-quality (HI 87%, RI 83%, CT 57%, DC 62%
-of the with-docs subset, MT 31%, GA 26%) all share the same failure
-pattern: their banked documents are dominated by state agency filing
-receipts (annual reports, biennial registrations, certificate-of-good-
-standing letters) that the prepare-time classifier accepted because the
-filename matched `articles_of_incorporation`-shape patterns, but whose
-*body* is an officer-and-address blob with no governing content. The
-LLM-graded text audit caught what filename heuristics couldn't.
-
-The cleanest playbook fix is to move the LLM content grader into the
-prepare-time classifier (cheap — DeepSeek-v4-flash at ~$0.0002/HOA, vs
-the much higher cost of Phase 10 hard-deletes after import). That's a
-follow-up PR, not part of this run.
-
-## States with universe gaps and no working bulk source
-
-These states were blocked by paid bulk subscriptions, captchas, WAFs, or
-no public registry. Documented in `state_scrapers/{state}/leads/REGISTRY_NOTES.md`:
-
-- **OH, MI, MN, MA, VA, NJ, MD, MO, NC, WA**: SoS bulk product is paid
-  or behind Cloudflare/captcha; no statewide aggregator. A second-pass
-  research agent is currently scanning county GIS layers as a fallback;
-  Wayne/Oakland (MI), Cuyahoga/Franklin (OH), Mecklenburg/Wake (NC),
-  Fairfax (VA), King/Pierce (WA), Hennepin/Ramsey (MN), Boston ISD (MA)
-  are the obvious targets.
-- **AZ outside Tucson, IL outside Chicagoland**: same — no statewide
-  source, only county-level fragments captured.
-
-## Reusable scripts
+## Reusable scripts (canonical paths)
 
 | Path | Purpose |
 |---|---|
-| `scripts/audit/grade_hoa_text_quality.py` | LLM-graded content quality audit |
-| `scripts/audit/delete_junk_hoas.py` | Bulk delete from grade JSON |
-| `scripts/audit/restore_stubs.py` | Restore real-name HOAs as docless stubs |
-| `scripts/audit/backfill_registry_stubs.py` | Bulk import from per-state registries |
-| `scripts/audit/sample_states.sh` | Sample-grade a list of states |
-| `scripts/audit/run_full_audit.sh` | Full grade + clean a list of states |
-| `scripts/audit/rescrape_state.sh` | End-to-end rescrape pipeline (unused this run) |
+| `scripts/audit/grade_hoa_text_quality.py` | LLM-graded content quality audit (read-only on live DB) |
+| `scripts/audit/clean_junk_docs.py` | **Going-forward content cleanup**: real-HOA junk → `clear-hoa-docs` (preserve entity); name-fragment → `delete-hoa` |
+| `scripts/audit/restore_stubs.py` | **Deprecated** — recovery-only for delete-then-stub flows that lost geometry |
+| `scripts/audit/delete_junk_hoas.py` | Lower-level batch delete (used by historical audit, no longer the right starting tool) |
+| `scripts/audit/backfill_registry_stubs.py` | Bulk import from per-state registries; default `--on-collision disambiguate` |
+| `scripts/audit/retry_failed_batches.py` | Replay failed batches from a backfill outcome JSON |
+| `scripts/audit/build_alt_state_seeds.py` | Sister-session ETL that produced the 2nd-wave county-GIS seeds |
 
-Per-state result JSONs are at
-`state_scrapers/{state}/results/audit_2026_05_09/`.
+## What remains as known-future-work
 
-Per-registry leads JSONLs are at
-`state_scrapers/{state}/leads/{state}_*_seed.jsonl`.
+- **NJ**: still blocked. NJ MOD-IV redacts owner names statewide;
+  parcel-mining doesn't yield HOA matches. Documented in
+  `state_scrapers/nj/leads/REGISTRY_NOTES_v2.md`.
+- **AZ outside Tucson, IL outside Chicagoland, NC outside the 2 covered
+  counties**: county-GIS coverage is partial; would benefit from more
+  county-by-county pulls.
+- **Mecklenburg County (NC)**: server resolves but every query times
+  out at 60s+ from this region; another 10–15K Charlotte-area entries
+  would unblock from a different IP.
+- **Document discovery for the new docless stubs**: ~180K stubs are
+  registered HOAs with no governing docs. Running
+  `state_scrapers/_orchestrator/namelist_discover.py` against each
+  state's seed file would surface real CC&Rs / bylaws for the subset
+  whose docs are publicly indexed.
+- **Re-grade the 5 CO HOAs the LLM still couldn't grade** (and the 17
+  similar CA stubborn-error rows); both lists are in their respective
+  state's grade JSON under `verdict=="error"`.
 
-Bulk source CSVs cached at `data/{ca|co|tx|ny|or|fl}_*.csv` /
-`*.jsonl` for re-running.
+## Reference paths
 
-## What remains
-
-1. **Finish CA + CO content grading.** Currently only 75 + 100 of ~1700
-   total with-docs HOAs graded. The bulk-registry coverage is already
-   in (25K + 8K stubs); content-quality cleanup of the with-docs subset
-   is a small last-mile pass.
-2. **County-level GIS pulls for the 10 blocked states** (research agent
-   in flight at end of run).
-3. **Move LLM content grader into Phase 5 prepare worker** to prevent
-   future state runs from accumulating SoS-filing-receipt junk on the
-   live site.
-4. **`namelist_discover.py` runs against the new stubs** to find real
-   governing docs for the entities we just registered. The bulk registry
-   gives us the entity universe; document discovery is the next yield
-   lever.
+- Per-state grade JSONs: `state_scrapers/{state}/results/audit_2026_05_09/{state}_grades.json`
+- Per-state delete + restore outcome JSONs: same folder, `_delete.json` / `_restore.json`
+- Backfill outcome JSONs: `state_scrapers/_orchestrator/quality_audit_2026_05_09/{state}_backfill.json`
+- Stub restore outcome: `state_scrapers/_orchestrator/quality_audit_2026_05_09/restore_stubs_outcome.json`
+- 2nd-wave seeds: `state_scrapers/{state}/leads/{state}_*_seed.jsonl`
+- 2nd-wave notes: `state_scrapers/{state}/leads/REGISTRY_NOTES_v2.md`
+- Cached bulk source CSVs: `data/{state}_*.csv` / `data/{state}_*.jsonl`
