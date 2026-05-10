@@ -244,6 +244,7 @@ run_phase10() {
         --state AZ \
         --bbox-json '{"min_lat":31.3,"max_lat":37.0,"min_lon":-114.9,"max_lon":-109.0}' \
         --run-id "az_$(date -u +%Y%m%d_%H%M%S)" \
+        --apply \
         2>&1 | tee -a "$LOG"
 }
 
