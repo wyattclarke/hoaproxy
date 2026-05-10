@@ -45,13 +45,20 @@ SOURCES_NO_OVERWRITE = {
 
 
 def load_zcta_centroids() -> dict[str, tuple[float, float]]:
-    """Return zip5 -> (lat, lon)."""
+    """Return zip5 -> (lat, lon).
+
+    Census 2023 gazetteer header trailing-whitespace pads the last column
+    (e.g. `INTPTLONG                                          `), so we normalize
+    the DictReader fieldnames before lookup.
+    """
     if not GAZ_PATH.exists():
         raise FileNotFoundError(f"missing {GAZ_PATH}; run from project root")
     out: dict[str, tuple[float, float]] = {}
     with GAZ_PATH.open() as fh:
         reader = csv.DictReader(fh, delimiter="\t")
-        # The Census gazetteer has whitespace-padded headers/values.
+        # Strip whitespace from header field names; we'll use cleaned keys.
+        if reader.fieldnames:
+            reader.fieldnames = [f.strip() for f in reader.fieldnames]
         for row in reader:
             zip5 = (row.get("GEOID") or row.get("GEOID_ZCTA5") or "").strip().zfill(5)
             if not zip5 or len(zip5) != 5:
@@ -59,7 +66,7 @@ def load_zcta_centroids() -> dict[str, tuple[float, float]]:
             try:
                 lat = float((row.get("INTPTLAT") or "").strip())
                 lon = float((row.get("INTPTLONG") or "").strip())
-            except ValueError:
+            except (ValueError, TypeError):
                 continue
             out[zip5] = (lat, lon)
     return out

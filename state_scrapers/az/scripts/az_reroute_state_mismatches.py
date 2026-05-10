@@ -69,8 +69,21 @@ log = logging.getLogger("az_reroute")
 BUCKET = os.environ.get("HOA_BANK_GCS_BUCKET", "hoaproxy-bank")
 VERSION = "v1"
 SOURCE_STATE = "AZ"
-DEFAULT_LEDGER = ROOT / "state_scrapers" / "fl" / "results" / "az_state_reroute_audit.jsonl"
-DEFAULT_OCR_RUN = ROOT / "state_scrapers" / "fl" / "results" / "az_ocr_run_20260509T033205Z.jsonl"
+DEFAULT_LEDGER = ROOT / "state_scrapers" / "az" / "results" / "az_state_reroute_audit.jsonl"
+
+
+def _latest_ocr_run() -> Path:
+    """Pick the newest az_ocr_run_*.jsonl ledger from state_scrapers/az/results/."""
+    runs_dir = ROOT / "state_scrapers" / "az" / "results"
+    if not runs_dir.exists():
+        return runs_dir / "az_ocr_run_unknown.jsonl"
+    candidates = sorted(runs_dir.glob("az_ocr_run_*.jsonl"))
+    if not candidates:
+        return runs_dir / "az_ocr_run_unknown.jsonl"
+    return candidates[-1]
+
+
+DEFAULT_OCR_RUN = _latest_ocr_run()
 
 # State name -> 2-letter abbreviation (no FL).
 US_STATES_NON_AZ: dict[str, str] = {
@@ -119,17 +132,23 @@ RECORDER_RE = re.compile(
     + "|".join(re.escape(n) for n in US_STATES_NON_AZ) + r")\b",
     re.IGNORECASE,
 )
-# FL recorder-style hits (used to detect ambiguous mixed-state docs).
-FL_ZIP_ADDR_RE = re.compile(r",\s*FL\s+(?:3[2-4]\d{3})(?:-\d{4})?\b", re.IGNORECASE)
-FL_COUNTY_RE = re.compile(
-    r"\b[A-Z][A-Za-z'.\-]+(?:\s+[A-Z][A-Za-z'.\-]+){0,2}\s+County,?\s+(?:Florida|FL)\b",
+# AZ recorder-style hits (source-state protective patterns; presence of these
+# indicates the doc IS Arizona-shaped and shouldn't be rerouted out).
+AZ_ZIP_ADDR_RE = re.compile(r",\s*AZ\s+(?:8[5-6]\d{3})(?:-\d{4})?\b", re.IGNORECASE)
+AZ_COUNTY_RE = re.compile(
+    r"\b[A-Z][A-Za-z'.\-]+(?:\s+[A-Z][A-Za-z'.\-]+){0,2}\s+County,?\s+(?:Arizona|AZ)\b",
 )
-FL_STATE_OF_RE = re.compile(r"\bState\s+of\s+Florida\b", re.IGNORECASE)
-FL_RECORDER_RE = re.compile(
+AZ_STATE_OF_RE = re.compile(r"\bState\s+of\s+Arizona\b", re.IGNORECASE)
+AZ_RECORDER_RE = re.compile(
     r"(?:recorded|records?|deed[s]?|register|registry)\s+(?:of|in)\s+"
-    r"(?:[A-Z][a-zA-Z'.\-]+\s+){0,4}(?:Florida|FL)\b",
+    r"(?:[A-Z][a-zA-Z'.\-]+\s+){0,4}(?:Arizona|AZ)\b",
     re.IGNORECASE,
 )
+# Backwards-compatibility aliases — some downstream code references FL_* names.
+FL_ZIP_ADDR_RE = AZ_ZIP_ADDR_RE
+FL_COUNTY_RE = AZ_COUNTY_RE
+FL_STATE_OF_RE = AZ_STATE_OF_RE
+FL_RECORDER_RE = AZ_RECORDER_RE
 
 
 def _now_iso() -> str:
@@ -610,7 +629,7 @@ def main() -> int:
                 })
             ledger_fh.write(json.dumps(entry, sort_keys=True) + "\n")
 
-    print("\n=== FL state-mismatch reroute summary ===")
+    print("\n=== AZ state-mismatch reroute summary ===")
     print(f"Total flagged:        {len(flagged)}")
     print(f"Promoted:             {stats['promoted']}")
     print(f"  By target state:    {dict(by_state)}")
