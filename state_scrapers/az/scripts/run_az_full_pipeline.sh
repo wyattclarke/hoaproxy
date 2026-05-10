@@ -21,6 +21,9 @@ log() { echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] $*" | tee -a "$LOG"; }
 
 cd "$ROOT"
 source .venv/bin/activate
+set -a
+[ -f "$ROOT/settings.env" ] && source "$ROOT/settings.env" 2>/dev/null
+set +a
 export GOOGLE_CLOUD_PROJECT=hoaware
 export PYTHONUNBUFFERED=1
 
@@ -112,10 +115,23 @@ run_reroute() {
 # Step 6: geometry stack
 # ---------------------------------------------------------------------------
 run_geometry() {
-    log "=== Geometry: ZIP centroid baseline ==="
+    log "=== Geometry E4: ZIP centroid baseline ==="
     python state_scrapers/az/scripts/az_enrich_with_zip_centroid.py --apply 2>&1 | tee -a "$LOG"
-    log "=== Geometry: subdpoly polygon cross-link ==="
+    log "=== Geometry E3: OSM Nominatim (free, ~1.5 req/s) ==="
+    # OSM is slow but yields polygons for known places; cap with --limit so we
+    # don't run for 24h on a stale enrichment pass.
+    python state_scrapers/az/scripts/az_enrich_manifests_with_osm.py --limit 10000 2>&1 | tee -a "$LOG" || log "OSM pass failed/timed out — continuing"
+    log "=== Geometry E2: HERE address-precision (free 30k/mo) ==="
+    if [ -n "${HERE_API_KEY:-}" ]; then
+        python state_scrapers/az/scripts/az_enrich_with_here.py --audit 2>&1 | tee -a "$LOG"
+        python state_scrapers/az/scripts/az_enrich_with_here.py --run --rate-per-sec 4 2>&1 | tee -a "$LOG" || log "HERE pass failed — continuing"
+    else
+        log "  HERE_API_KEY not set; skipping HERE pass"
+    fi
+    log "=== Geometry E1: subdpoly polygon cross-link (overwrites lower tiers) ==="
     python state_scrapers/az/scripts/az_enrich_with_subdpoly.py --apply 2>&1 | tee -a "$LOG"
+    log "=== Pruning misrouted slugs (non-AZ counties) ==="
+    python state_scrapers/az/scripts/az_prune_misrouted.py --apply 2>&1 | tee -a "$LOG" || log "prune failed/timed out — continuing"
 }
 
 # ---------------------------------------------------------------------------
