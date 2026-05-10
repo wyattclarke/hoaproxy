@@ -87,12 +87,24 @@ wait_initial_sweeps() {
 # Step 2 & 3: Driver A' multipass (Maricopa and Pima)
 # ---------------------------------------------------------------------------
 run_multipass() {
+    # Run Maricopa and Pima multipasses in PARALLEL (each multipass internally
+    # sequences its passes; running both at once doubles aggregate throughput
+    # without stretching Serper concurrency much — Pima has only 2 remaining
+    # passes vs Maricopa's 9).
     # Start at pass 2 since the regular replenisher already ran pass 1 (offset=0,
     # names 0..2499) under benchmark/results/az_subdpoly_<slug>/.
-    log "=== Driver A' multipass: Maricopa (25,201 names, start at pass 2) ==="
-    bash "$ROOT/benchmark/run_az_subdpoly_multipass.sh" maricopa Maricopa 25201 2500 2 2>&1 | tee -a "$LOG"
-    log "=== Driver A' multipass: Pima (5,744 names, start at pass 2) ==="
-    bash "$ROOT/benchmark/run_az_subdpoly_multipass.sh" pima Pima 5744 2500 2 2>&1 | tee -a "$LOG"
+    log "=== Driver A' multipass (parallel): Maricopa (25,201 names) + Pima (5,744 names) starting at pass 2 ==="
+    bash "$ROOT/benchmark/run_az_subdpoly_multipass.sh" maricopa Maricopa 25201 2500 2 \
+        > "$ROOT/state_scrapers/az/results/az_multipass_maricopa.log" 2>&1 &
+    MULTIPASS_M_PID=$!
+    bash "$ROOT/benchmark/run_az_subdpoly_multipass.sh" pima Pima 5744 2500 2 \
+        > "$ROOT/state_scrapers/az/results/az_multipass_pima.log" 2>&1 &
+    MULTIPASS_P_PID=$!
+    log "  maricopa multipass pid=$MULTIPASS_M_PID, pima multipass pid=$MULTIPASS_P_PID"
+    wait $MULTIPASS_M_PID
+    log "  maricopa multipass exit=$?"
+    wait $MULTIPASS_P_PID
+    log "  pima multipass exit=$?"
 }
 
 # ---------------------------------------------------------------------------
