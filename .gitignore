@@ -39,6 +39,18 @@ benchmark/results/
 state_scrapers/**/results/
 state_scrapers/**/cache/
 
+# Orchestrator runtime artifacts (regenerated every run)
+state_scrapers/_orchestrator/*.pid
+state_scrapers/_orchestrator/*.log
+state_scrapers/_orchestrator/*.run_id
+state_scrapers/_orchestrator/nohup.out
+state_scrapers/_orchestrator/*_nohup.out
+state_scrapers/_orchestrator/*_DONE.flag
+state_scrapers/_orchestrator/quality_audit_*/
+
+# Per-state run markers used by the orchestrator
+state_scrapers/**/notes/.active_run*
+
 # Claude Code / Playwright working dirs
 .claude/
 .playwright-mcp/
