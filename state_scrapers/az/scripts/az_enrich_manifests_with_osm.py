@@ -312,7 +312,7 @@ def _nominatim_search(query: str, county: str) -> list[dict]:
     global _last_request_time, _cache_dirty
 
     # Build the query string as Nominatim will see it
-    q = f"{query}, {county} County, Florida, USA"
+    q = f"{query}, {county} County, Arizona, USA"
     cache_key = q
 
     if cache_key in _cache:
@@ -617,7 +617,7 @@ def main() -> None:
         queries_tried: list[str] = []
 
         for candidate in candidates:
-            cache_key = f"{candidate}, {manifest_county} County, Florida, USA"
+            cache_key = f"{candidate}, {manifest_county} County, Arizona, USA"
             was_cached = cache_key in _cache
             results = _nominatim_search(candidate, manifest_county)
             if was_cached:
