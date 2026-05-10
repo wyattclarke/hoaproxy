@@ -1,0 +1,34 @@
+{
+  "CA": {
+    "prepared": 24757,
+    "created": 24243,
+    "updated": 14,
+    "failed": [
+      {
+        "batch_start": 10600,
+        "http": 500,
+        "body": "Internal Server Error"
+      },
+      {
+        "batch_start": 10700,
+        "http": 500,
+        "body": "Internal Server Error"
+      },
+      {
+        "batch_start": 10800,
+        "http": 500,
+        "body": "Internal Server Error"
+      },
+      {
+        "batch_start": 10900,
+        "http": 500,
+        "body": "Internal Server Error"
+      },
+      {
+        "batch_start": 11000,
+        "http": 500,
+        "body": "Internal Server Error"
+      }
+    ]
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "restored_total": 3,
+  "kept_deleted_total": 0,
+  "created": 0,
+  "updated": 0,
+  "failed": [
+    {
+      "batch_start": 0,
+      "http": 500,
+      "body": "Internal Server Error"
+    }
+  ],
+  "by_state": {
+    "MN": {
+      "restore_count": 3,
+      "kept_deleted": 0
+    }
+  }
+}

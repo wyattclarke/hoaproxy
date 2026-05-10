@@ -1,0 +1,13 @@
+{
+  "restored_total": 45,
+  "kept_deleted_total": 4,
+  "created": 11,
+  "updated": 34,
+  "failed": [],
+  "by_state": {
+    "CA": {
+      "restore_count": 45,
+      "kept_deleted": 4
+    }
+  }
+}

@@ -1,0 +1,129 @@
+{
+  "restored_total": 1147,
+  "kept_deleted_total": 27,
+  "created": 1147,
+  "updated": 0,
+  "failed": [],
+  "by_state": {
+    "AK": {
+      "restore_count": 3,
+      "kept_deleted": 0
+    },
+    "AL": {
+      "restore_count": 3,
+      "kept_deleted": 0
+    },
+    "AR": {
+      "restore_count": 3,
+      "kept_deleted": 0
+    },
+    "AZ": {
+      "restore_count": 1,
+      "kept_deleted": 0
+    },
+    "DC": {
+      "restore_count": 13,
+      "kept_deleted": 0
+    },
+    "DE": {
+      "restore_count": 5,
+      "kept_deleted": 1
+    },
+    "GA": {
+      "restore_count": 251,
+      "kept_deleted": 10
+    },
+    "HI": {
+      "restore_count": 535,
+      "kept_deleted": 0
+    },
+    "IA": {
+      "restore_count": 2,
+      "kept_deleted": 0
+    },
+    "ID": {
+      "restore_count": 1,
+      "kept_deleted": 0
+    },
+    "IL": {
+      "restore_count": 31,
+      "kept_deleted": 0
+    },
+    "KS": {
+      "restore_count": 12,
+      "kept_deleted": 1
+    },
+    "KY": {
+      "restore_count": 1,
+      "kept_deleted": 0
+    },
+    "LA": {
+      "restore_count": 2,
+      "kept_deleted": 0
+    },
+    "ME": {
+      "restore_count": 2,
+      "kept_deleted": 0
+    },
+    "MS": {
+      "restore_count": 8,
+      "kept_deleted": 1
+    },
+    "MT": {
+      "restore_count": 40,
+      "kept_deleted": 5
+    },
+    "ND": {
+      "restore_count": 0,
+      "kept_deleted": 1
+    },
+    "NE": {
+      "restore_count": 15,
+      "kept_deleted": 2
+    },
+    "NH": {
+      "restore_count": 0,
+      "kept_deleted": 1
+    },
+    "NM": {
+      "restore_count": 5,
+      "kept_deleted": 0
+    },
+    "NV": {
+      "restore_count": 2,
+      "kept_deleted": 0
+    },
+    "OK": {
+      "restore_count": 18,
+      "kept_deleted": 5
+    },
+    "RI": {
+      "restore_count": 162,
+      "kept_deleted": 0
+    },
+    "SD": {
+      "restore_count": 1,
+      "kept_deleted": 0
+    },
+    "TN": {
+      "restore_count": 17,
+      "kept_deleted": 0
+    },
+    "UT": {
+      "restore_count": 6,
+      "kept_deleted": 0
+    },
+    "VT": {
+      "restore_count": 1,
+      "kept_deleted": 0
+    },
+    "WV": {
+      "restore_count": 1,
+      "kept_deleted": 0
+    },
+    "WY": {
+      "restore_count": 6,
+      "kept_deleted": 0
+    }
+  }
+}

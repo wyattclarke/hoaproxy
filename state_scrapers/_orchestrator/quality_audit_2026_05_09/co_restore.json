@@ -1,0 +1,13 @@
+{
+  "restored_total": 35,
+  "kept_deleted_total": 5,
+  "created": 0,
+  "updated": 35,
+  "failed": [],
+  "by_state": {
+    "CO": {
+      "restore_count": 35,
+      "kept_deleted": 5
+    }
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "RI": {
+    "prepared": 720,
+    "created": 521,
+    "updated": 199,
+    "failed": []
+  },
+  "HI": {
+    "prepared": 1444,
+    "created": 899,
+    "updated": 545,
+    "failed": []
+  },
+  "CT": {
+    "prepared": 3447,
+    "created": 3432,
+    "updated": 15,
+    "failed": []
+  }
+}

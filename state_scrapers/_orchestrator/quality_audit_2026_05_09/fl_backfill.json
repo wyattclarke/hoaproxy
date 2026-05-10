@@ -1,0 +1,64 @@
+{
+  "FL": {
+    "prepared": 36622,
+    "created": 35208,
+    "updated": 314,
+    "failed": [
+      {
+        "batch_start": 24900,
+        "http": 500,
+        "body": "Internal Server Error"
+      },
+      {
+        "batch_start": 25000,
+        "http": 500,
+        "body": "Internal Server Error"
+      },
+      {
+        "batch_start": 25100,
+        "http": 500,
+        "body": "Internal Server Error"
+      },
+      {
+        "batch_start": 25200,
+        "http": 500,
+        "body": "Internal Server Error"
+      },
+      {
+        "batch_start": 25300,
+        "http": 500,
+        "body": "Internal Server Error"
+      },
+      {
+        "batch_start": 25400,
+        "http": 500,
+        "body": "Internal Server Error"
+      },
+      {
+        "batch_start": 25500,
+        "http": 500,
+        "body": "Internal Server Error"
+      },
+      {
+        "batch_start": 25600,
+        "http": 500,
+        "body": "Internal Server Error"
+      },
+      {
+        "batch_start": 25700,
+        "http": 500,
+        "body": "Internal Server Error"
+      },
+      {
+        "batch_start": 25800,
+        "http": 500,
+        "body": "Internal Server Error"
+      },
+      {
+        "batch_start": 25900,
+        "http": 500,
+        "body": "Internal Server Error"
+      }
+    ]
+  }
+}

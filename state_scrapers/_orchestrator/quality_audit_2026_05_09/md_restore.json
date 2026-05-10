@@ -1,0 +1,13 @@
+{
+  "restored_total": 8,
+  "kept_deleted_total": 0,
+  "created": 8,
+  "updated": 0,
+  "failed": [],
+  "by_state": {
+    "MD": {
+      "restore_count": 8,
+      "kept_deleted": 0
+    }
+  }
+}
