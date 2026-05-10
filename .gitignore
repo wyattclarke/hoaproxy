@@ -12,6 +12,10 @@ settings.env
 !.vscode/
 !.vscode/settings.json
 !.vscode/tasks.json
+# State-scraper hand-curated reference JSONs (mgmt-co domains, master-planned
+# community lists, etc.) live under state_scrapers/<state>/leads/ and ARE
+# committed.
+!state_scrapers/**/leads/*.json
 
 # docs (PDFs)
 hoa_docs/

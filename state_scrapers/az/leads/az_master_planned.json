@@ -1,0 +1,562 @@
+[
+  {
+    "name": "Sun City",
+    "alt_names": ["Sun City Arizona", "SCHOA", "Sun City AZ", "Sun City Home Owners Association"],
+    "county": "maricopa",
+    "city": "Sun City",
+    "suspected_portal_urls": ["https://suncityhoa.org/", "https://www.suncitycouncil.com/"],
+    "notes": "Original Del Webb age-restricted community (1960); ~26,000 homes; SCHOA est. 1963"
+  },
+  {
+    "name": "Sun City West",
+    "alt_names": ["PORA", "Sun City West Property Owners and Residents Association", "SCW"],
+    "county": "maricopa",
+    "city": "Sun City West",
+    "suspected_portal_urls": ["https://www.pora.org/", "https://www.suncitywest.com/"],
+    "notes": "Del Webb 55+ community (1978); ~17,000 homes; PORA is owner association"
+  },
+  {
+    "name": "Sun City Grand",
+    "alt_names": ["Sun City Grand HOA", "The Grand", "Sun City Grand Community Association", "Live Grand"],
+    "county": "maricopa",
+    "city": "Surprise",
+    "suspected_portal_urls": ["https://livegrandaz.com/", "https://livegrandaz.com/cam"],
+    "notes": "Del Webb 45+ active adult community; ~9,800 homes; recently rebranded to The Grand"
+  },
+  {
+    "name": "Sun City Festival",
+    "alt_names": ["Sun City Festival HOA", "Festival Ranch"],
+    "county": "maricopa",
+    "city": "Buckeye",
+    "suspected_portal_urls": ["https://oursuncityfestival.net/"],
+    "notes": "Del Webb 55+ community in NW Maricopa; sister Festival Foothills"
+  },
+  {
+    "name": "Festival Foothills",
+    "alt_names": ["Festival Foothills Community Association"],
+    "county": "maricopa",
+    "city": "Buckeye",
+    "suspected_portal_urls": ["https://www.festivalfoothillscommunity.org/"],
+    "notes": "Deed-restricted community at Festival Ranch in Buckeye, sister to Sun City Festival"
+  },
+  {
+    "name": "Sun Lakes",
+    "alt_names": ["Sun Lakes Country Club", "SLHOA #1", "Sun Lakes HOA"],
+    "county": "maricopa",
+    "city": "Sun Lakes",
+    "suspected_portal_urls": ["https://www.sunlakesofarizona.com/", "https://www.sunlakescountryclub.com/"],
+    "notes": "Multi-HOA 55+ community south of Chandler; ~10,000 homes"
+  },
+  {
+    "name": "Cottonwood Palo Verde at Sun Lakes",
+    "alt_names": ["SLHOA #2", "Cottonwood at Sun Lakes", "Palo Verde at Sun Lakes"],
+    "county": "maricopa",
+    "city": "Sun Lakes",
+    "suspected_portal_urls": ["https://www.cottonwoodpaloverde.com/"],
+    "notes": "Sun Lakes HOA #2 covering Cottonwood and Palo Verde country clubs"
+  },
+  {
+    "name": "IronOaks at Sun Lakes",
+    "alt_names": ["SLHOA #3", "Ironwood Country Club", "Oakwood Country Club"],
+    "county": "maricopa",
+    "city": "Sun Lakes",
+    "suspected_portal_urls": ["https://www.ironoaksaz.com/"],
+    "notes": "Sun Lakes HOA #3 covering Ironwood and Oakwood country clubs"
+  },
+  {
+    "name": "Anthem (Maricopa)",
+    "alt_names": ["Anthem Community Council", "ACC", "Anthem Arizona", "Anthem Parkside"],
+    "county": "maricopa",
+    "city": "Anthem",
+    "suspected_portal_urls": ["https://www.anthemcouncil.com/", "https://www.onlineatanthem.com/"],
+    "notes": "Master-planned community in north Maricopa; sub-HOAs Country Club, Parkside, The Village"
+  },
+  {
+    "name": "Anthem Country Club",
+    "alt_names": ["ACCCA", "Anthem Country Club Community Association"],
+    "county": "maricopa",
+    "city": "Anthem",
+    "suspected_portal_urls": ["https://www.anthemhoa.org/"],
+    "notes": "Gated golf-oriented sub-association inside Anthem master community"
+  },
+  {
+    "name": "DC Ranch",
+    "alt_names": ["DC Ranch Association", "DC Ranch Community Council"],
+    "county": "maricopa",
+    "city": "Scottsdale",
+    "suspected_portal_urls": ["https://dcranch.com/"],
+    "notes": "4,400-acre community adjacent to McDowell Sonoran Preserve in north Scottsdale"
+  },
+  {
+    "name": "Verrado",
+    "alt_names": ["Verrado Community Association", "VCA", "Verrado HOA"],
+    "county": "maricopa",
+    "city": "Buckeye",
+    "suspected_portal_urls": ["https://www.verrado.com/", "https://www.verradoway.net/"],
+    "notes": "DMB-developed master-planned community in west valley; Victory District is 55+ sub-area"
+  },
+  {
+    "name": "Vistancia",
+    "alt_names": ["Vistancia Community Association", "Village at Vistancia", "MyVistancia"],
+    "county": "maricopa",
+    "city": "Peoria",
+    "suspected_portal_urls": ["https://vistancia.com/", "https://www.myvistancia.com/"],
+    "notes": "North Peoria masterplan; Trilogy/Blackstone/Northpointe/Five North/Village sub-communities"
+  },
+  {
+    "name": "Trilogy at Vistancia",
+    "alt_names": ["Trilogy Vistancia", "Shea Trilogy at Vistancia"],
+    "county": "maricopa",
+    "city": "Peoria",
+    "suspected_portal_urls": ["https://www.mytrilogylife.com/vistancia/"],
+    "notes": "Shea Homes 55+ gated community within Vistancia masterplan"
+  },
+  {
+    "name": "Blackstone at Vistancia",
+    "alt_names": ["Blackstone HOA"],
+    "county": "maricopa",
+    "city": "Peoria",
+    "suspected_portal_urls": ["https://www.blackstonehoa.net/", "https://vistancia.com/the-communities/blackstone/"],
+    "notes": "Luxury gated golf neighborhood within Vistancia"
+  },
+  {
+    "name": "Trilogy at Power Ranch",
+    "alt_names": ["Trilogy Power Ranch", "MyTPR"],
+    "county": "maricopa",
+    "city": "Gilbert",
+    "suspected_portal_urls": ["https://www.mytpr.com/", "https://www.mytrilogylife.com/"],
+    "notes": "Shea Homes 55+ gated 2,000-home community within Power Ranch master community"
+  },
+  {
+    "name": "Power Ranch",
+    "alt_names": ["Power Ranch Community Association", "MyPowerRanch"],
+    "county": "maricopa",
+    "city": "Gilbert",
+    "suspected_portal_urls": ["https://mypowerranch.com/", "https://powerranchhoa.com/"],
+    "notes": "Master-planned community in southeast Gilbert; CCMC-managed; Trilogy is 55+ sub-community"
+  },
+  {
+    "name": "Estrella",
+    "alt_names": ["Estrella Mountain Ranch", "Life in Estrella", "Estrella Community Association"],
+    "county": "maricopa",
+    "city": "Goodyear",
+    "suspected_portal_urls": ["https://www.lifeinestrella.com/", "https://estrella.com/"],
+    "notes": "Newland Communities masterplan; ~2 dozen sub-HOAs"
+  },
+  {
+    "name": "CantaMia at Estrella",
+    "alt_names": ["CantaMia Community Association", "CantaMia HOA"],
+    "county": "maricopa",
+    "city": "Goodyear",
+    "suspected_portal_urls": ["https://cantamiaestrella.net/"],
+    "notes": "55+ active adult village within Estrella masterplan"
+  },
+  {
+    "name": "Eastmark",
+    "alt_names": ["Eastmark Community Association"],
+    "county": "maricopa",
+    "city": "Mesa",
+    "suspected_portal_urls": ["https://www.eastmark.com/"],
+    "notes": "DMB-developed masterplan in southeast Mesa; Encore is 55+ sub-community"
+  },
+  {
+    "name": "Encore at Eastmark",
+    "alt_names": ["Encore Eastmark HOA"],
+    "county": "maricopa",
+    "city": "Mesa",
+    "suspected_portal_urls": ["https://encoreateastmarkhoa.org/"],
+    "notes": "Taylor Morrison 55+ resort-style community within Eastmark; ~970 homes"
+  },
+  {
+    "name": "Estates at Eastmark",
+    "alt_names": ["Estates at Eastmark Community Association"],
+    "county": "maricopa",
+    "city": "Mesa",
+    "suspected_portal_urls": ["https://www.estatesateastmark.org/"],
+    "notes": "545-unit AZCMS-managed sub-community within Eastmark"
+  },
+  {
+    "name": "Encanterra",
+    "alt_names": ["Encanterra Country Club", "Trilogy Encanterra", "Encanterra HOA"],
+    "county": "pinal",
+    "city": "San Tan Valley",
+    "suspected_portal_urls": ["https://www.mytrilogylife.com/encanterra/"],
+    "notes": "Shea Trilogy 55+/all-ages golf-oriented resort community on Pinal/Queen Creek border"
+  },
+  {
+    "name": "McDowell Mountain Ranch",
+    "alt_names": ["MMRCA", "McDowell Mountain Ranch Community Association"],
+    "county": "maricopa",
+    "city": "Scottsdale",
+    "suspected_portal_urls": ["https://www.mmrca.net/", "https://mcdowellmountainranch.com/"],
+    "notes": "North Scottsdale masterplan; ~4,000 homes"
+  },
+  {
+    "name": "Troon North",
+    "alt_names": ["Troon North Association"],
+    "county": "maricopa",
+    "city": "Scottsdale",
+    "suspected_portal_urls": ["https://www.troonnorthhoa.com/"],
+    "notes": "Premier Scottsdale golf community in far north Scottsdale"
+  },
+  {
+    "name": "Troon Village",
+    "alt_names": ["Troon Village Association"],
+    "county": "maricopa",
+    "city": "Scottsdale",
+    "suspected_portal_urls": ["https://troonvillageassociation.com/"],
+    "notes": "1,400-acre master association covering 12 sub-associations"
+  },
+  {
+    "name": "Grayhawk",
+    "alt_names": ["Grayhawk Community Association"],
+    "county": "maricopa",
+    "city": "Scottsdale",
+    "suspected_portal_urls": ["https://grayhawkcommunity.org/"],
+    "notes": "North Scottsdale masterplan; ~3,800 homes across The Park and The Retreat villages"
+  },
+  {
+    "name": "Desert Mountain",
+    "alt_names": ["Desert Mountain Master Association", "Desert Mountain HOA"],
+    "county": "maricopa",
+    "city": "Scottsdale",
+    "suspected_portal_urls": ["https://desertmthoa.com/", "https://www.desertmountain.com/hoa/"],
+    "notes": "Luxury golf masterplan in far north Scottsdale; ~3,000 homes"
+  },
+  {
+    "name": "Desert Ridge",
+    "alt_names": ["Desert Ridge Community Association", "Desert Ridge Lifestyles"],
+    "county": "maricopa",
+    "city": "Phoenix",
+    "suspected_portal_urls": ["https://desertridgelifestyles.org/", "https://desertridge.connectresident.com/"],
+    "notes": "North Phoenix masterplan FirstService Residential; villages Aviano, Fireside, Sanctuary"
+  },
+  {
+    "name": "Aviano at Desert Ridge",
+    "alt_names": ["Aviano Community Association", "MyAviano"],
+    "county": "maricopa",
+    "city": "Phoenix",
+    "suspected_portal_urls": ["https://www.myaviano.com/"],
+    "notes": "Toll Brothers community within Desert Ridge; 902 single-family homes on 400 acres"
+  },
+  {
+    "name": "Tatum Ranch",
+    "alt_names": ["Tatum Ranch Community Association"],
+    "county": "maricopa",
+    "city": "Cave Creek",
+    "suspected_portal_urls": ["https://www.tatumranch.org/", "https://tatumranch.connectresident.com/"],
+    "notes": "1,500-acre Cave Creek masterplan; 3,500+ homes; founded 1989"
+  },
+  {
+    "name": "Mountain Park Ranch",
+    "alt_names": ["Mt Park Ranch HOA", "Mountain Park Ranch HOA"],
+    "county": "maricopa",
+    "city": "Phoenix",
+    "suspected_portal_urls": ["https://www.mtparkranch.org/"],
+    "notes": "~3,000-acre Ahwatukee masterplan with 9 sub-associations"
+  },
+  {
+    "name": "Ahwatukee Foothills",
+    "alt_names": ["Ahwatukee Board of Management", "ABM"],
+    "county": "maricopa",
+    "city": "Phoenix",
+    "suspected_portal_urls": ["https://www.ahwatukeehoa.com/"],
+    "notes": "Self-managed master HOA for Ahwatukee planned community; 56 subdivisions; ~5,000 homes"
+  },
+  {
+    "name": "PebbleCreek",
+    "alt_names": ["PebbleCreek HOA", "PebbleCreek Homeowners Association"],
+    "county": "maricopa",
+    "city": "Goodyear",
+    "suspected_portal_urls": ["https://pebblecreekhoa.org/"],
+    "notes": "Robson 55+ luxury retirement community in Goodyear"
+  },
+  {
+    "name": "Robson Ranch Arizona",
+    "alt_names": ["Robson Ranch Eloy", "Robson Ranch HOA"],
+    "county": "pinal",
+    "city": "Eloy",
+    "suspected_portal_urls": ["https://robsonranchazhoa.org/"],
+    "notes": "Robson 55+ golf community on Pinal/Casa Grande boundary"
+  },
+  {
+    "name": "Province",
+    "alt_names": ["Province Community Association", "Province at Maricopa"],
+    "county": "pinal",
+    "city": "Maricopa",
+    "suspected_portal_urls": ["https://www.provincecoa.com/"],
+    "notes": "Engle Homes / Meritage 55+ gated community in city of Maricopa; ~1,700 homes"
+  },
+  {
+    "name": "Rancho El Dorado",
+    "alt_names": ["Rancho El Dorado HOA", "The Lakes at Rancho El Dorado", "Villages at Rancho El Dorado"],
+    "county": "pinal",
+    "city": "Maricopa",
+    "suspected_portal_urls": ["https://ranchoeldorado.connectresident.com/", "https://www.red3hoa.com/"],
+    "notes": "Multi-phase masterplan in city of Maricopa; FirstService Residential"
+  },
+  {
+    "name": "Sun City Anthem at Merrill Ranch",
+    "alt_names": ["Sun City Anthem Merrill Ranch", "Anthem at Merrill Ranch"],
+    "county": "pinal",
+    "city": "Florence",
+    "suspected_portal_urls": ["https://www.oursuncityamr.net/", "https://www.ouranthemmr.net/"],
+    "notes": "Del Webb 55+ section + all-ages Anthem Parkside in Merrill Ranch masterplan in Florence"
+  },
+  {
+    "name": "Johnson Ranch",
+    "alt_names": ["Johnson Ranch Community Association"],
+    "county": "pinal",
+    "city": "San Tan Valley",
+    "suspected_portal_urls": ["https://www.johnsonranch.com/"],
+    "notes": "Large San Tan Valley masterplan; 20,000+ residents; CCMC-managed"
+  },
+  {
+    "name": "Solera at Johnson Ranch",
+    "alt_names": ["Solera HOA"],
+    "county": "pinal",
+    "city": "San Tan Valley",
+    "suspected_portal_urls": ["https://www.soleraatjohnsonranch.net/"],
+    "notes": "Del Webb 55+ gated 727-home community within Johnson Ranch masterplan"
+  },
+  {
+    "name": "Wickenburg Ranch",
+    "alt_names": ["Wickenburg Ranch Community Association", "Trilogy at Wickenburg Ranch"],
+    "county": "yavapai",
+    "city": "Wickenburg",
+    "suspected_portal_urls": ["https://wickenburgranch.org/", "https://www.mytrilogylife.com/wickenburg/"],
+    "notes": "Shea Homes Trilogy resort community NW of Phoenix; not age-restricted"
+  },
+  {
+    "name": "Trilogy at Verde River",
+    "alt_names": ["Trilogy Verde River", "Verde River HOA"],
+    "county": "maricopa",
+    "city": "Rio Verde",
+    "suspected_portal_urls": ["https://www.mytrilogylife.com/verderiver/"],
+    "notes": "Shea Homes Trilogy guard-gated community in Rio Verde east of Scottsdale"
+  },
+  {
+    "name": "Saddlebrooke",
+    "alt_names": ["Saddlebrooke HOA1", "Saddlebrooke HOA2", "SaddleBrooke One", "SaddleBrooke Two"],
+    "county": "pinal",
+    "city": "Saddlebrooke",
+    "suspected_portal_urls": ["https://saddlebrooke-one.org/", "https://www.saddlebrooke.org/"],
+    "notes": "Largest private active-adult resort community in southern Arizona; ~7,000 homes"
+  },
+  {
+    "name": "Saddlebrooke Ranch",
+    "alt_names": ["Saddlebrooke Ranch HOA"],
+    "county": "pinal",
+    "city": "Oracle",
+    "suspected_portal_urls": ["https://saddlebrookeranchhoa.org/"],
+    "notes": "Robson Resort Communities 55+ section north of Tucson"
+  },
+  {
+    "name": "Quail Creek",
+    "alt_names": ["Quail Creek HOA", "Quail Creek POA"],
+    "county": "pima",
+    "city": "Sahuarita",
+    "suspected_portal_urls": ["https://www.quailcreekhoa.org/", "https://robson.com/communities/quail-creek/"],
+    "notes": "Robson 55+ resort retirement community in Green Valley/Sahuarita area"
+  },
+  {
+    "name": "Rancho Sahuarita",
+    "alt_names": ["My Rancho Sahuarita", "Rancho Sahuarita Village Program HOA"],
+    "county": "pima",
+    "city": "Sahuarita",
+    "suspected_portal_urls": ["https://www.myranchosahuarita.com/", "https://ranchosahuarita.com/"],
+    "notes": "Sharpe Family masterplan in Sahuarita; on-site Associa management"
+  },
+  {
+    "name": "Continental Ranch",
+    "alt_names": ["Continental Ranch Community Association", "CRCA"],
+    "county": "pima",
+    "city": "Marana",
+    "suspected_portal_urls": ["https://crcatucson.com/"],
+    "notes": "Largest subdivision in Marana; 4,000+ homes in Tucson Mountains foothills"
+  },
+  {
+    "name": "Continental Reserve",
+    "alt_names": ["Continental Reserve HOA"],
+    "county": "pima",
+    "city": "Marana",
+    "suspected_portal_urls": [],
+    "notes": "Sister masterplan to Continental Ranch in Marana"
+  },
+  {
+    "name": "Saguaro Bloom",
+    "alt_names": ["Saguaro Bloom Community Association"],
+    "county": "pima",
+    "city": "Marana",
+    "suspected_portal_urls": ["https://saguarobloomaz.com/"],
+    "notes": "Grayhawk Development 700-acre masterplan; ~2,400 home sites"
+  },
+  {
+    "name": "Gladden Farms",
+    "alt_names": ["Gladden Farms Community Association", "GFCA Lifestyle"],
+    "county": "pima",
+    "city": "Marana",
+    "suspected_portal_urls": ["https://www.gfcalifestyle.com/"],
+    "notes": "Marana's first masterplan (2004); 850+ acres, 30+ themed parks"
+  },
+  {
+    "name": "Dove Mountain",
+    "alt_names": ["Dove Mountain HOA", "Del Webb at Dove Mountain"],
+    "county": "pima",
+    "city": "Marana",
+    "suspected_portal_urls": ["https://www.ourdovemountain.net/", "http://www.dovemnthoa.com/"],
+    "notes": "Cottonwood Properties masterplan in Tortolita Mountains; multiple sub-HOAs"
+  },
+  {
+    "name": "Heritage Highlands at Dove Mountain",
+    "alt_names": ["The Highlands at Dove Mountain", "Heritage Highlands HOA"],
+    "county": "pima",
+    "city": "Marana",
+    "suspected_portal_urls": ["https://www.thehighlandsatdovemountain.com/"],
+    "notes": "Self-managed 55+ gated community of 1,297 homes within Dove Mountain"
+  },
+  {
+    "name": "Stone Canyon",
+    "alt_names": ["Stone Canyon Community Association", "Stone Canyon Owners Association"],
+    "county": "pima",
+    "city": "Oro Valley",
+    "suspected_portal_urls": ["https://mystonecanyon.com/", "https://stonecanyonoa.org/"],
+    "notes": "Master-planned gated community in Tortolita Mountains, Oro Valley"
+  },
+  {
+    "name": "Vistoso",
+    "alt_names": ["Rancho Vistoso", "Vistoso Community Association", "VCA"],
+    "county": "pima",
+    "city": "Oro Valley",
+    "suspected_portal_urls": ["https://ranchovistosohoa.com/"],
+    "notes": "5,743-home masterplan in Catalina Foothills; FirstService Residential"
+  },
+  {
+    "name": "Sun City Oro Valley",
+    "alt_names": ["Sun City Vistoso", "SCOV"],
+    "county": "pima",
+    "city": "Oro Valley",
+    "suspected_portal_urls": ["https://suncityorovalley.com/"],
+    "notes": "Del Webb 45+ active adult community adjacent to Rancho Vistoso; 2,488 homes"
+  },
+  {
+    "name": "Madera Highlands",
+    "alt_names": ["Madera Highlands HOA", "Madera Highlands Villages"],
+    "county": "pima",
+    "city": "Sahuarita",
+    "suspected_portal_urls": ["https://maderahighlands.com/"],
+    "notes": "Cadden Community Management masterplan in Sahuarita with multiple village types"
+  },
+  {
+    "name": "Civano",
+    "alt_names": ["Civano I Neighborhood I HOA", "Community of Civano"],
+    "county": "pima",
+    "city": "Tucson",
+    "suspected_portal_urls": ["https://civano.org/"],
+    "notes": "Sustainable masterplan southeast of Tucson"
+  },
+  {
+    "name": "Las Sendas",
+    "alt_names": ["Las Sendas Community Association", "MyLasSendas"],
+    "county": "maricopa",
+    "city": "Mesa",
+    "suspected_portal_urls": ["https://www.mylassendas.org/"],
+    "notes": "East Mesa premier masterplan; 3,400+ homes"
+  },
+  {
+    "name": "Red Mountain Ranch",
+    "alt_names": ["Red Mountain Ranch Owners Association", "RMROA"],
+    "county": "maricopa",
+    "city": "Mesa",
+    "suspected_portal_urls": ["https://www.rmroa.org/"],
+    "notes": "Northeast Mesa masterplan with country club, 18-hole golf course"
+  },
+  {
+    "name": "Mountain Bridge",
+    "alt_names": ["Mountain Bridge Community Association", "MyMountainBridge"],
+    "county": "maricopa",
+    "city": "Mesa",
+    "suspected_portal_urls": ["https://www.mymountainbridge.com/"],
+    "notes": "Resort-style north Mesa masterplan; CCMC-managed"
+  },
+  {
+    "name": "Adora Trails",
+    "alt_names": ["Adora Trails Community Association"],
+    "county": "maricopa",
+    "city": "Gilbert",
+    "suspected_portal_urls": ["https://adoratrailscoa.com/"],
+    "notes": "Taylor Morrison/Maracay south Gilbert masterplan at base of San Tan Mountains"
+  },
+  {
+    "name": "Fulton Ranch",
+    "alt_names": ["Fulton Ranch Homeowners Association"],
+    "county": "maricopa",
+    "city": "Chandler",
+    "suspected_portal_urls": ["https://www.fultonranchhoa.com/"],
+    "notes": "Fulton Homes Chandler masterplan with 28-acre lake system; CCMC-managed"
+  },
+  {
+    "name": "Ocotillo",
+    "alt_names": ["Ocotillo Community Association", "OCA-AZ"],
+    "county": "maricopa",
+    "city": "Chandler",
+    "suspected_portal_urls": ["https://www.oca-az.com/"],
+    "notes": "Chandler masterplan known for 100+ acres of lakes; CCMC-managed"
+  },
+  {
+    "name": "Ironwood Crossing",
+    "alt_names": ["Ironwood Crossing HOA", "MyIronwoodCrossing"],
+    "county": "pinal",
+    "city": "Queen Creek",
+    "suspected_portal_urls": ["https://www.myironwoodcrossing.com/"],
+    "notes": "Fulton Homes 2,147-home masterplan in Queen Creek/San Tan Valley area"
+  },
+  {
+    "name": "Arizona Traditions",
+    "alt_names": ["Arizona Traditions HOA", "AZTHOA"],
+    "county": "maricopa",
+    "city": "Surprise",
+    "suspected_portal_urls": ["https://www.azthoa.net/"],
+    "notes": "55+ gated community in Surprise on 718 acres; ~1,700 homes; 18-hole golf"
+  },
+  {
+    "name": "Cortessa",
+    "alt_names": ["Cortessa Community HOA", "Cortessa Living"],
+    "county": "maricopa",
+    "city": "Waddell",
+    "suspected_portal_urls": ["https://cortessaliving.com/"],
+    "notes": "Master-planned community in Waddell with HOA-maintained parks"
+  },
+  {
+    "name": "Sundance Residential",
+    "alt_names": ["Sundance Residential HOA"],
+    "county": "maricopa",
+    "city": "Buckeye",
+    "suspected_portal_urls": ["https://www.sundanceresidentialhoa.org/"],
+    "notes": "Buckeye masterplan, sister to Sundance Adult Village"
+  },
+  {
+    "name": "Sundance Adult Village",
+    "alt_names": ["Sundance Adult Village HOA"],
+    "county": "maricopa",
+    "city": "Buckeye",
+    "suspected_portal_urls": ["https://www.sundanceadulthoa.org/"],
+    "notes": "Deed-restricted 55+ village within the Sundance masterplan, Buckeye"
+  },
+  {
+    "name": "Villages at Sundance",
+    "alt_names": ["Villages at Sundance HOA"],
+    "county": "maricopa",
+    "city": "Buckeye",
+    "suspected_portal_urls": ["https://villagesatsundance.org/"],
+    "notes": "Sub-village within the Sundance Buckeye masterplan"
+  },
+  {
+    "name": "Sundance Ranch",
+    "alt_names": ["Sundance Ranch HOA"],
+    "county": "maricopa",
+    "city": "Buckeye",
+    "suspected_portal_urls": ["https://www.sundanceranchhoa.com/"],
+    "notes": "Planned Development Services-managed Buckeye area HOA"
+  }
+]

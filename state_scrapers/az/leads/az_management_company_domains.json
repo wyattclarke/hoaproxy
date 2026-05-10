@@ -1,0 +1,96 @@
+{
+  "_meta": {
+    "description": "AZ HOA management companies — verified portal domains for Driver C site: sweep. Sourced from 2026-05-10 recon; verified to resolve and serve community-related content. Note: many AZ mgmt cos gate documents behind HomeWiseDocs / CondoCerts / Nabr Network / Buurt portals; site-search yield is lower than NC/IN.",
+    "verified_at": "2026-05-10"
+  },
+  "FirstService Residential": {
+    "domain": "fsresidential.com",
+    "extra_domains": ["fsrconnect.com", "connectresident.com"],
+    "regions": "statewide; very strong AZ market share"
+  },
+  "CCMC": {
+    "domain": "ccmcnet.com",
+    "extra_domains": [],
+    "regions": "statewide; master-planned focus (Power Ranch, Johnson Ranch, Mountain Bridge, Ocotillo, Fulton Ranch)"
+  },
+  "AAM (Associated Asset Management)": {
+    "domain": "associatedasset.com",
+    "extra_domains": ["allaccess.associatedasset.com"],
+    "regions": "Phoenix HQ"
+  },
+  "Brown Community Management": {
+    "domain": "brownmanagement.com",
+    "extra_domains": ["villageconnection.nabrnetwork.com"],
+    "regions": "Phoenix metro; ~200 communities; RealManage subsidiary"
+  },
+  "Vision Community Management": {
+    "domain": "visioncommunitymanagement.com",
+    "extra_domains": ["wearevision.com"],
+    "regions": "Phoenix metro; RealManage subsidiary"
+  },
+  "Cadden Community Management": {
+    "domain": "cadden.com",
+    "extra_domains": ["portal.cadden.com", "cadden.condocerts.com"],
+    "regions": "Tucson; ~200 communities"
+  },
+  "Kinney Management Services": {
+    "domain": "kinneymanagement.com",
+    "extra_domains": ["kmshomeowners.azurewebsites.net", "kinneyhoaportal.net"],
+    "regions": "Phoenix metro"
+  },
+  "HOA Living": {
+    "domain": "hoaliving.com",
+    "extra_domains": ["portal.hoaliving.com"],
+    "regions": "multi-state, Phoenix presence"
+  },
+  "City Property Management Company": {
+    "domain": "cityproperty.com",
+    "extra_domains": [],
+    "regions": "Phoenix metro; 24+ municipalities; 40+ years"
+  },
+  "Total Property Management": {
+    "domain": "totalpropertymanagement.net",
+    "extra_domains": [],
+    "regions": "Phoenix metro mid-tier"
+  },
+  "Trestle Management Group": {
+    "domain": "trestle-mg.com",
+    "extra_domains": [],
+    "regions": "Phoenix metro"
+  },
+  "Premier Community Management": {
+    "domain": "premiercommunityaz.com",
+    "extra_domains": [],
+    "regions": "Phoenix metro mid-tier"
+  },
+  "Capital Consultants Management Corporation (CCMC subsidiary or distinct)": {
+    "domain": "ccmchoa.com",
+    "extra_domains": [],
+    "regions": "Phoenix metro"
+  },
+  "Heywood Community Management": {
+    "domain": "heywoodaz.com",
+    "extra_domains": [],
+    "regions": "Phoenix metro mid-tier"
+  },
+  "Snow Property Services": {
+    "domain": "snowps.com",
+    "extra_domains": [],
+    "regions": "Phoenix metro"
+  },
+  "Planned Development Services": {
+    "domain": "pdsaz.com",
+    "extra_domains": [],
+    "regions": "Phoenix metro; manages Sundance Ranch and similar"
+  },
+  "Stratford Management": {
+    "domain": "stratfordmgmt.com",
+    "extra_domains": [],
+    "regions": "Tucson"
+  },
+  "Lewis Management Resources": {
+    "domain": "lewismgt.com",
+    "extra_domains": [],
+    "regions": "Tucson, southern AZ"
+  }
+}
