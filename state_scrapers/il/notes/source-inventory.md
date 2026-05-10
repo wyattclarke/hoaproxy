@@ -36,16 +36,16 @@ and the Chicagoland session's (not present in this repo).
 |---|---|---|---|
 | Wave A: 7 Chicagoland counties | **out-of-scope** | n/a | Owned by parallel session |
 | Wave B: 10 downstate metros, round 1 | **productive** | +91 net live, 264 manifests | Single sweep with playbook-style queries + IL-specific `-site:` exclusions. See `state_scrapers/il/queries/il_{winnebago,sangamon,...}_serper_queries.txt` |
-| Wave B: round 2 with city-anchored variants | **scheduled, session 3** | TBD | Per playbook two-sweep stop rule. None of round-1 tripped stop thresholds |
+| Wave B: round 2 with city-anchored variants | **productive (session 3)** | ~+600 net manifests across 10 metros (Rockford/Springfield/Chatham/Champaign-Urbana/Bloomington-Normal/Peoria/Belleville-O'Fallon/Edwardsville-Granite/Moline-RI/Pekin-Morton/Kankakee-Bourbonnais) | Idempotent appends via `# round-2-city-anchored-v1` sentinel. None tripped two-sweep stop |
 | Wave C-1: 5 long-tail counties (DeKalb/LaSalle/Macon/Williamson/Adams), round 1 | **productive** | +14 net live, 26 prepared | DeKalb strongest; LaSalle/Adams noisy (court opinions, county board minutes) |
-| Wave C-2: 14 remaining long-tail counties | **scheduled, session 3** | TBD | Vermilion, Knox, Effingham, Coles, Marion, Boone, Grundy, Stephenson, Whiteside, Henry, Lee, Ogle, Jackson, Franklin |
+| Wave C-2: 14 remaining long-tail counties | **productive (session 3)** | ~+600 manifests across 14 counties; Vermilion/Whiteside/Knox strongest, Stephenson/Boone weakest | Same query template as Wave C-1 + city anchors. None tripped kill threshold |
 | Wave D: rest of IL's 102 counties (the small ones not on any list) | **untried-with-reason** | — | Long-tail of <500 households per county. Estimated yield <2 HOAs each per playbook stop-rule curves. Not worth Serper budget |
 
 ### Tier 2 — Source-family promotion (playbook Phase 2)
 
 | Source | Status | Yield | Notes |
 |---|---|---|---|
-| HOA-owned WordPress sites with `/wp-content/uploads/*.pdf` | **scheduled, session 3** | TBD | Confirmed productive in session 2 leads: foxpoint.org, www.111echestnut.org, neuhavenhoa.com, www.wheatlandshoa.org, www.willowwalkpalatine.org, www.erjames.com, www.millerchicagorealestate.com (+others). Direct mining bypasses Serper |
+| HOA-owned WordPress sites with `/wp-content/uploads/*.pdf` | **productive (session 3)** | 248 PDFs banked across 23 of 31 productive domains | `state_scrapers/il/scripts/mine_owned_domains.py`; pinned-name for known single-HOA domains, heuristic-name for multi-HOA domains. ~$0.30 Serper |
 | Squarespace `/s/` aliases | **untried** | — | Not yet identified in IL leads; check during session 3 |
 | `inurl:/DocumentCenter/View` (municipal) | **partial productive** | unknown | Hit count not separated from per-county logs; will quantify in session 3 |
 
@@ -79,7 +79,7 @@ and the Chicagoland session's (not present in this repo).
 | Associa Illinois downstate | **declined** | — | Same Chicagoland-only footprint |
 | ACM (Association of Condominium Managers) member listings | **out-of-scope** | n/a | Chicagoland-anchored |
 | Sudler / Foster Premier / Vanguard / Habitat / Lieberman / Heil/Smart/Golee / RealManage / Inland | **out-of-scope** | n/a | Chicago-based |
-| Per-domain owned-site direct PDF mining | **active, session 3** | TBD | 31 productive HOA-owned + small-municipal + developer domains being mined via `state_scrapers/il/scripts/mine_owned_domains.py`. Pure direct-PDF source-family promotion per playbook Phase 2 |
+| Per-domain owned-site direct PDF mining | **productive (session 3)** | 248 PDFs banked across 23 of 31 productive HOA-owned/municipal/developer domains. ~$0.30 cost | Pure direct-PDF source-family promotion per playbook Phase 2. Listed under Tier 2 above; cross-referenced here |
 
 ### Tier 6 — Investigated but declined
 
@@ -99,9 +99,22 @@ and the Chicagoland session's (not present in this repo).
 - **out-of-scope**: belongs to the parallel Chicagoland session
 - **declined**: investigated and rejected (e.g. paywall, robots.txt, model blocklist)
 
+## Session 3 close-out
+
+- IL live total at session-3 close: **1,592** (state-wide, includes
+  parallel Chicagoland session's name-list-first imports).
+- Downstate-mapped live (this session's bank → live attribution): **157**
+  (was 103 at session-2 close).
+- Map coverage state-wide: **95.5%** (1,521 / 1,592 with usable geo).
+- Noise rate at close: **0.25%** (4 short-acronym remnants, possibly
+  legitimate, left as-is).
+- Universe-anchored coverage: **8.06%** state-wide / ~1.5-2.2%
+  downstate (against ~7-10K downstate sub-universe estimate).
+- Budget envelope used: ~$7.50 of (~$50 + $9 + $6) caps = ~14% of
+  envelope. Under-utilized; retrospective documents the under-spend.
+
 ## Cross-reference
 
 - Session 1 retrospective: `state_scrapers/il/notes/retrospective.md` (first-pass)
-- Session 2 retrospective: `state_scrapers/il/notes/retrospective-downstate.md` (Wave B + Wave C-1)
-- Session 3 retrospective: TBD (this session, in progress)
-- Source-family inventory v1 (this file): updated as session 3 progresses
+- Session 2+3 retrospective: `state_scrapers/il/notes/retrospective-downstate.md` (Wave B + Wave C-1 + Wave B round-2 + Wave C remainder + owned-domain mining)
+- Source-family inventory v1 (this file): updated through session 3 close
