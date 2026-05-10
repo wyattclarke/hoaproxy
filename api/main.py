@@ -4564,6 +4564,25 @@ def admin_create_stub_hoas(request: Request, body: dict):
                 "SELECT id FROM hoas WHERE name = ?", (name,)
             ).fetchone()
             is_new = existing is None
+            # Bleed-stop guard (added after the 2026-05-09 audit incident).
+            # The COALESCE upsert silently overwrites state/city/quality on a
+            # name collision, so a TX-registry record colliding with a pre-
+            # existing AZ row would re-label the AZ row as TX while preserving
+            # the AZ lat/lon. Refuse cross-state collisions outright; they're
+            # never the right outcome for stub creation.
+            if not is_new and entry.get("state"):
+                cur_state = conn.execute(
+                    "SELECT state FROM hoa_locations WHERE hoa_id = ?",
+                    (existing["id"],),
+                ).fetchone()
+                if cur_state and cur_state[0] and str(cur_state[0]).upper() != str(entry["state"]).upper():
+                    skipped.append({
+                        "reason": "state_collision",
+                        "name": name,
+                        "incoming_state": entry["state"],
+                        "existing_state": cur_state[0],
+                    })
+                    continue
             db.upsert_hoa_location(
                 conn,
                 hoa_name=name,
@@ -4592,6 +4611,60 @@ def admin_create_stub_hoas(request: Request, body: dict):
         "by_quality": by_quality,
         "total_in_request": len(records),
     }
+
+
+@app.post("/admin/list-corruption-targets")
+def admin_list_corruption_targets(request: Request, body: dict):
+    """Read-only helper for the audit-corruption repair script.
+
+    Returns hoa_locations rows whose ``source`` matches any of the supplied
+    audit source strings, along with all the fields the repair logic needs to
+    decide on a fix (state, city, postal_code, latitude, longitude,
+    boundary_geojson, street, location_quality).
+
+    Body: ``{"sources": ["tx-trec-...", ...], "require_lat": false}``
+
+    ``require_lat=true`` restricts to rows with latitude IS NOT NULL — useful
+    for Pass A's bbox-classify step (Pass B wants the opposite).
+    """
+    _require_admin(request)
+    settings = load_settings()
+    sources = body.get("sources") or []
+    if not isinstance(sources, list) or not sources:
+        raise HTTPException(status_code=400, detail="sources[] required")
+    require_lat = bool(body.get("require_lat") or False)
+
+    placeholders = ",".join("?" * len(sources))
+    sql = f"""
+        SELECT h.id AS hoa_id, h.name AS hoa,
+               l.metadata_type, l.street, l.city, l.state, l.postal_code,
+               l.latitude, l.longitude, l.boundary_geojson,
+               l.source, l.location_quality
+        FROM hoa_locations l
+        JOIN hoas h ON h.id = l.hoa_id
+        WHERE l.source IN ({placeholders})
+    """
+    if require_lat:
+        sql += " AND l.latitude IS NOT NULL"
+
+    rows: list[dict] = []
+    with db.get_connection(settings.db_path) as conn:
+        for r in conn.execute(sql, sources).fetchall():
+            rows.append({
+                "hoa_id": r["hoa_id"],
+                "hoa": r["hoa"],
+                "metadata_type": r["metadata_type"],
+                "street": r["street"],
+                "city": r["city"],
+                "state": r["state"],
+                "postal_code": r["postal_code"],
+                "latitude": r["latitude"],
+                "longitude": r["longitude"],
+                "has_boundary": r["boundary_geojson"] is not None and r["boundary_geojson"] != "",
+                "source": r["source"],
+                "location_quality": r["location_quality"],
+            })
+    return {"count": len(rows), "rows": rows}
 
 
 @app.post("/admin/extract-doc-zips")
