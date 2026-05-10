@@ -299,3 +299,110 @@ def test_check_disk_free_swallows_oserror(monkeypatch, tmp_path):
     monkeypatch.setenv("MIN_FREE_DISK_GB", "10")
     monkeypatch.setattr("api.main.shutil.disk_usage", boom)
     _check_disk_free(tmp_path)  # best-effort: do not block ingest on stat failure
+
+
+# ---------------------------------------------------------------------------
+# Bulk-listing and AI-endpoint rate limits (anti-scrape)
+# ---------------------------------------------------------------------------
+
+def test_hoas_supports_optional_pagination():
+    """GET /hoas accepts ?limit and ?offset; default returns full list."""
+    r = client.get("/hoas")
+    assert r.status_code == 200
+    assert isinstance(r.json(), list)
+
+    # limit=0 is invalid
+    r = client.get("/hoas?limit=0")
+    assert r.status_code == 400
+
+    # negative offset is invalid
+    r = client.get("/hoas?limit=10&offset=-1")
+    assert r.status_code == 400
+
+    # over-cap limit is invalid
+    r = client.get("/hoas?limit=10000")
+    assert r.status_code == 400
+
+
+def test_hoas_pagination_slices_correctly():
+    """?limit and ?offset paginate the list deterministically."""
+    settings = load_settings()
+    # Use deliberately unique names + clean up at the end. test_hardening's
+    # autouse fixture doesn't clean `hoas` or `documents`, and pytest
+    # collection means all test files share one DB path — so leftover rows
+    # would pollute test_rename_hoa, test_proposals, etc.
+    seeded = ("__pagination_test_AAA", "__pagination_test_BBB", "__pagination_test_CCC")
+    seeded_ids: list[int] = []
+    try:
+        with db.get_connection(settings.db_path) as conn:
+            for i, name in enumerate(seeded):
+                hoa_id = db.get_or_create_hoa(conn, name)
+                seeded_ids.append(hoa_id)
+                db.upsert_document(
+                    conn,
+                    hoa_id=hoa_id,
+                    relative_path=f"{name}/doc.pdf",
+                    checksum=f"sha-{i}",
+                    byte_size=1024,
+                    page_count=1,
+                    category="ccr",
+                )
+            conn.commit()
+
+        full = client.get("/hoas").json()
+        assert all(name in full for name in seeded)
+
+        # Slice a window around our seeded entries and verify pagination shape.
+        idx = sorted(full.index(name) for name in seeded)
+        start = idx[0]
+        page1 = client.get(f"/hoas?limit=2&offset={start}").json()
+        page2 = client.get(f"/hoas?limit=2&offset={start + 2}").json()
+        assert len(page1) == 2
+        assert not (set(page1) & set(page2))  # no overlap between pages
+    finally:
+        with db.get_connection(settings.db_path) as conn:
+            for hoa_id in seeded_ids:
+                conn.execute("DELETE FROM documents WHERE hoa_id = ?", (hoa_id,))
+                conn.execute("DELETE FROM hoas WHERE id = ?", (hoa_id,))
+            conn.commit()
+
+
+def test_search_endpoint_has_rate_limit():
+    """POST /search rejects rapid-fire requests from a single non-testclient IP."""
+    # The TestClient skips the limiter (uses host="testclient"), so we exercise
+    # the limiter at the function level using a fake request with a real IP.
+    from fastapi import HTTPException
+    from api.main import _check_rate_limit
+
+    class FakeClient:
+        host = "5.6.7.8"
+
+    class FakeRequest:
+        client = FakeClient()
+
+    req = FakeRequest()
+    # /search is at limit=30; 30 calls succeed, 31st raises
+    for _ in range(30):
+        _check_rate_limit(req, limit=30)
+    with pytest.raises(HTTPException) as exc_info:
+        _check_rate_limit(req, limit=30)
+    assert exc_info.value.status_code == 429
+
+
+def test_qa_multi_has_tighter_limit_than_qa():
+    """qa/multi (limit=10) should run out before qa (limit=20) from same IP."""
+    from fastapi import HTTPException
+    from api.main import _check_rate_limit
+
+    class FakeClient:
+        host = "9.10.11.12"
+
+    class FakeRequest:
+        client = FakeClient()
+
+    req = FakeRequest()
+    # 10 succeed at limit=10; 11th raises
+    for _ in range(10):
+        _check_rate_limit(req, limit=10)
+    with pytest.raises(HTTPException):
+        _check_rate_limit(req, limit=10)

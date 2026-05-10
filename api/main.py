@@ -5557,19 +5557,38 @@ def set_board_email(hoa_id: int, body: SetBoardEmailRequest, user: dict = Depend
 
 
 @app.get("/hoas")
-def list_hoas() -> list[str]:
+def list_hoas(
+    request: Request,
+    limit: int | None = None,
+    offset: int = 0,
+) -> list[str]:
+    """Return HOA names that have at least one document.
+
+    Optional ?limit and ?offset paginate the result. With no params the full
+    list is returned (back-compat). Rate-limited to discourage bulk scraping.
+    """
+    _check_rate_limit(request, limit=10)
     settings = load_settings()
     with db.get_connection(settings.db_path) as conn:
-        return db.list_hoa_names_with_documents(conn)
+        names = db.list_hoa_names_with_documents(conn)
+    if limit is not None:
+        if limit < 1 or limit > 1000:
+            raise HTTPException(status_code=400, detail="limit must be between 1 and 1000")
+        if offset < 0:
+            raise HTTPException(status_code=400, detail="offset must be >= 0")
+        names = names[offset : offset + limit]
+    return names
 
 
 @app.get("/hoas/summary", response_model=HoaSummaryPage)
 def list_hoa_summary(
+    request: Request,
     q: str | None = None,
     state: str | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> HoaSummaryPage:
+    _check_rate_limit(request, limit=30)
     limit = min(limit, 500)
     settings = load_settings()
     with db.get_connection(settings.db_path) as conn:
@@ -5586,7 +5605,8 @@ class HoaStateCount(BaseModel):
 
 
 @app.get("/hoas/states", response_model=List[HoaStateCount])
-def list_hoa_states() -> List[HoaStateCount]:
+def list_hoa_states(request: Request) -> List[HoaStateCount]:
+    _check_rate_limit(request, limit=30)
     settings = load_settings()
     with db.get_connection(settings.db_path) as conn:
         return [HoaStateCount(**row) for row in db.list_hoa_states(conn)]
@@ -5594,10 +5614,12 @@ def list_hoa_states() -> List[HoaStateCount]:
 
 @app.get("/hoas/map-points", response_model=List[HoaMapPoint])
 def list_hoa_map_points(
+    request: Request,
     q: str | None = None,
     state: str | None = None,
 ) -> List[HoaMapPoint]:
     """Lightweight endpoint returning only lat/lng/state/doc_count for map markers."""
+    _check_rate_limit(request, limit=15)
     settings = load_settings()
     with db.get_connection(settings.db_path) as conn:
         rows = db.list_hoa_map_points(conn, q=q, state=state)
@@ -5664,7 +5686,8 @@ def universal_lookup(body: UniversalLookupRequest) -> UniversalLookupResponse:
 
 
 @app.get("/hoas/locations", response_model=List[HoaLocation])
-def list_hoa_locations() -> List[HoaLocation]:
+def list_hoa_locations(request: Request) -> List[HoaLocation]:
+    _check_rate_limit(request, limit=10)
     settings = load_settings()
     with db.get_connection(settings.db_path) as conn:
         rows = db.list_hoa_locations(conn)
@@ -6247,7 +6270,8 @@ def agent_precheck(body: AgentPrecheckRequest) -> AgentPrecheckResponse:
 
 
 @app.post("/search", response_model=SearchResponse)
-def search(body: SearchRequest) -> SearchResponse:
+def search(request: Request, body: SearchRequest) -> SearchResponse:
+    _check_rate_limit(request, limit=30)
     settings = load_settings()
     hoa_name = _resolve_hoa_name(body.hoa)
     query = body.query.strip()
@@ -6279,7 +6303,8 @@ def search(body: SearchRequest) -> SearchResponse:
 
 
 @app.post("/search/multi", response_model=MultiSearchResponse)
-def search_multi(body: MultiSearchRequest) -> MultiSearchResponse:
+def search_multi(request: Request, body: MultiSearchRequest) -> MultiSearchResponse:
+    _check_rate_limit(request, limit=15)
     settings = load_settings()
     query = body.query.strip()
     if not query:
@@ -6318,7 +6343,8 @@ def search_multi(body: MultiSearchRequest) -> MultiSearchResponse:
 
 
 @app.post("/qa", response_model=QAResponse)
-def qa(body: QARequest) -> QAResponse:
+def qa(request: Request, body: QARequest) -> QAResponse:
+    _check_rate_limit(request, limit=20)
     settings = load_settings()
     hoa_name = _resolve_hoa_name(body.hoa)
     if not settings.openai_api_key:
@@ -6348,7 +6374,8 @@ def qa(body: QARequest) -> QAResponse:
 
 
 @app.post("/qa/multi", response_model=QAResponse)
-def qa_multi(body: MultiQARequest) -> QAResponse:
+def qa_multi(request: Request, body: MultiQARequest) -> QAResponse:
+    _check_rate_limit(request, limit=10)
     settings = load_settings()
     if not body.hoas:
         raise HTTPException(status_code=400, detail="hoas is required")
@@ -6412,7 +6439,8 @@ def list_law_profiles(
 
 
 @app.post("/law/qa", response_model=LawQAResponse)
-def law_qa(body: LawQARequest) -> LawQAResponse:
+def law_qa(request: Request, body: LawQARequest) -> LawQAResponse:
+    _check_rate_limit(request, limit=20)
     _ensure_law_module_available()
     try:
         answer = answer_law_question(
