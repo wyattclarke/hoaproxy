@@ -4893,6 +4893,53 @@ def _dump_tables_sql(conn, tables: tuple[str, ...]) -> str:
     return "\n".join(out) + "\n"
 
 
+@app.post("/admin/backup-hoa-tables")
+def admin_backup_hoa_tables(request: Request):
+    """Dump only ``hoas`` + ``hoa_locations`` as gzipped SQL to GCS.
+
+    Sized for the rare-edit recovery path: ~100K rows, ~50 MB compressed,
+    synchronous, completes in seconds. Use this immediately after any large
+    manual edit to hoa_locations (audit cleanups, location backfills,
+    manual fixes) so the live state is recoverable without a full DB
+    snapshot.
+    """
+    _require_admin(request)
+    import gzip
+    import sqlite3 as _sqlite3
+    from datetime import datetime, timezone
+    from google.cloud import storage as gcs
+
+    settings = load_settings()
+    bucket_name = os.environ.get("BACKUP_GCS_BUCKET", "hoaproxy-backups")
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    log = logging.getLogger("admin.backup-hoa-tables")
+    started = time.monotonic()
+
+    src = _sqlite3.connect(f"file:{settings.db_path}?mode=ro", uri=True)
+    try:
+        sql_text = _dump_tables_sql(src, ("hoas", "hoa_locations"))
+    finally:
+        src.close()
+
+    payload = gzip.compress(sql_text.encode("utf-8"))
+    blob_name = f"db/hoa-tables-{stamp}.sql.gz"
+    gcs.Client().bucket(bucket_name).blob(blob_name).upload_from_string(
+        payload, content_type="application/gzip"
+    )
+    elapsed = time.monotonic() - started
+    log.info(
+        "backup-hoa-tables ok elapsed=%.1fs blob=%s sql_bytes=%d gz_bytes=%d",
+        elapsed, blob_name, len(sql_text), len(payload),
+    )
+    return {
+        "status": "ok",
+        "uploaded": blob_name,
+        "sql_bytes": len(sql_text),
+        "gz_bytes": len(payload),
+        "elapsed_sec": round(elapsed, 2),
+    }
+
+
 def _run_backup_full(db_path: str, bucket_name: str, blob_name: str, snapshot_path: str) -> None:
     import sqlite3 as _sqlite3
     from google.cloud import storage as gcs
