@@ -4799,6 +4799,65 @@ def _dump_tables_sql(conn, tables: tuple[str, ...]) -> str:
     return "\n".join(out) + "\n"
 
 
+@app.post("/admin/backup-full")
+def admin_backup_full(request: Request):
+    """VACUUM INTO the entire SQLite DB and upload to GCS as a binary blob.
+
+    Use this for full point-in-time recovery. Complements /admin/backup,
+    which only dumps the small "precious" user-state tables and assumes hoa
+    data is rebuildable from the bank — a wrong assumption when irreversible
+    edits (renames, audits, manual fixes) have landed in hoa_locations.
+
+    Output: ``gs://{BACKUP_GCS_BUCKET}/db/hoa_index-{stamp}.db`` (~1 GB).
+    Synchronous; expect 30-90s for the upload.
+    """
+    _require_admin(request)
+    import sqlite3 as _sqlite3
+    from datetime import datetime, timezone
+    from google.cloud import storage as gcs
+
+    settings = load_settings()
+    bucket_name = os.environ.get("BACKUP_GCS_BUCKET", "hoaproxy-backups")
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    log = logging.getLogger("admin.backup-full")
+    started = time.monotonic()
+
+    # VACUUM INTO needs a fresh file path. Land it next to the live DB so
+    # we use the persistent disk's free space, then delete after upload.
+    src_dir = os.path.dirname(settings.db_path) or "."
+    snapshot_path = os.path.join(src_dir, f"_backup-{stamp}.db")
+
+    src = _sqlite3.connect(f"file:{settings.db_path}?mode=ro", uri=True)
+    try:
+        src.execute("VACUUM INTO ?", (snapshot_path,))
+    finally:
+        src.close()
+
+    try:
+        size_bytes = os.path.getsize(snapshot_path)
+        blob_name = f"db/hoa_index-{stamp}.db"
+        client = gcs.Client()
+        blob = client.bucket(bucket_name).blob(blob_name)
+        blob.upload_from_filename(snapshot_path)
+    finally:
+        try:
+            os.remove(snapshot_path)
+        except OSError:
+            log.warning("could not remove snapshot at %s", snapshot_path)
+
+    elapsed = time.monotonic() - started
+    log.info(
+        "backup-full ok elapsed=%.1fs blob=%s bytes=%d",
+        elapsed, blob_name, size_bytes,
+    )
+    return {
+        "status": "ok",
+        "uploaded": blob_name,
+        "size_bytes": size_bytes,
+        "elapsed_sec": round(elapsed, 2),
+    }
+
+
 @app.post("/admin/backup")
 def admin_backup(request: Request):
     """Snapshot the user-created tables to GCS as a gzipped SQL dump.
