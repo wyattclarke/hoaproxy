@@ -4177,6 +4177,74 @@ def admin_reingest_failed(
     }
 
 
+@app.get("/admin/state-doc-coverage")
+def admin_state_doc_coverage(request: Request):
+    """Per-state count of HOAs with vs without governing documents.
+
+    Single SQL aggregation (one GROUP BY) — fast even on the full live
+    DB. Used to track which states are docless-stub-heavy and should
+    therefore be prioritized for ``namelist_discover.py`` document
+    discovery sweeps.
+
+    Returns:
+      {
+        "results": [
+          {"state": "CA", "live": 25670, "with_docs": 312,
+           "without_docs": 25358, "with_docs_pct": 1.2},
+          ...
+        ],
+        "totals": {"live": ..., "with_docs": ..., "without_docs": ...,
+                   "with_docs_pct": ...}
+      }
+    """
+    _require_admin(request)
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        rows = conn.execute(
+            """
+            SELECT
+                l.state,
+                COUNT(DISTINCT h.id) AS live,
+                COUNT(DISTINCT CASE WHEN d.hoa_id IS NOT NULL THEN h.id END) AS with_docs
+            FROM hoas h
+            JOIN hoa_locations l ON l.hoa_id = h.id
+            LEFT JOIN documents d ON d.hoa_id = h.id
+            WHERE l.state IS NOT NULL AND l.state != ''
+            GROUP BY l.state
+            ORDER BY l.state
+            """
+        ).fetchall()
+
+    results = []
+    tot_live = 0
+    tot_with = 0
+    for r in rows:
+        state = str(r["state"]).upper()
+        live = int(r["live"])
+        with_docs = int(r["with_docs"])
+        without_docs = live - with_docs
+        pct = round(100.0 * with_docs / live, 2) if live else 0.0
+        results.append({
+            "state": state,
+            "live": live,
+            "with_docs": with_docs,
+            "without_docs": without_docs,
+            "with_docs_pct": pct,
+        })
+        tot_live += live
+        tot_with += with_docs
+
+    return {
+        "results": results,
+        "totals": {
+            "live": tot_live,
+            "with_docs": tot_with,
+            "without_docs": tot_live - tot_with,
+            "with_docs_pct": round(100.0 * tot_with / tot_live, 2) if tot_live else 0.0,
+        },
+    }
+
+
 @app.get("/admin/disk-usage")
 def admin_disk_usage(request: Request):
     """Temporary diagnostic: report on-disk sizes under /var/data so we can
