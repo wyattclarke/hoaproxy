@@ -131,20 +131,26 @@ Five phases, ordered by **value × confidence ÷ risk**. Phases 1–3 ship now; 
 **Risk:** Low. Document downloads gain ~50–150 ms one-time per click (signed URL redirect). Search/QA latency unchanged.
 **Effort:** ~1 day.
 
-### Phase 2 — Move ingest off the web service *(removes the OOM ceiling)*
+### Phase 2 — Move ingest off the web service *(removes the OOM ceiling)* ✅ SHIPPED 2026-05-11
 
 **Goal:** `/upload` becomes a thin enqueue. Ingest runs on a dedicated worker with its own RAM budget. Eliminates the 75 s pacing memo.
 
-**Changes:**
-1. New Render Background Worker (`hoaproxy-ingest`, 4 GB RAM, $25/mo) running a polling loop over a `pending_ingest` SQLite table (or a GCS prefix).
-2. `/upload` writes the PDF to `gs://hoaproxy-bank/`, inserts a `pending_ingest` row, returns 202 Accepted with a job ID.
-3. Worker drains: DocAI/OCR → chunk → embed → upsert to chunks/chunk_vec → mark complete.
-4. New `/ingest/status/{job_id}` route for the UI to poll.
-5. Web service RAM target drops to ≤1 GB; can multi-instance later.
+**Changes (as shipped):**
+1. ~~New Render Background Worker (`hoaproxy-ingest`, 4 GB RAM, $25/mo)~~ → Co-located worker process in the existing web container (`scripts/start_web_with_worker.sh`). Render persistent disks can't be shared across services, so a single container with two sibling processes (uvicorn + `python -m hoaware.ingest_worker`) is the deployment shape until Phase 4 (Neon Postgres) makes splitting trivial. Each process has its own Python heap → RAM isolation preserved.
+2. `/upload` writes the PDF to local disk (with sidecar JSON of agent metadata), inserts a `pending_ingest` row pointing at a `local://` URI, and returns 200 with `{queued: true, job_id, status_url}`. The worker dispatches on URI scheme: `gs://` for prepared GCS bundles, `local://` for upload sidecars. (Phase 1 will eventually flip /upload to write to `gs://hoaproxy-bank/` directly; both URI schemes will continue to be supported.)
+3. Worker drains: DocAI/OCR → chunk → embed → upsert → mark complete.
+4. New `/ingest/status/{job_id}` route — public, rate-limited.
+5. Web service RAM target stays ~600 MB peak (ingest's RAM lives in the worker heap; concurrent OCR/embed no longer compete with request handlers).
+6. **Feature flag `ASYNC_INGEST_ENABLED`** added so the cutover was a single env-var change with a one-line rollback. Default off; flipped to on at 03:46Z on 2026-05-11.
 
-**Cost delta:** +$25/mo.
-**Risk:** Medium. Async UX — needs a status page and email notification on completion. Worker failure modes need a retry policy (3 strikes, dead-letter queue).
-**Effort:** ~2–3 days.
+**Cost delta:** **$0** at Phase 2 (co-located process); +$25/mo when split off into a true `type: worker` Render service after Phase 4.
+**Risk:** Medium-low as observed. Cutover smoke test ran 10/10 sample jobs successfully, average drain latency ~250 ms/job. No new prod errors post-cutover.
+**Effort:** ~1 day (instead of estimated 2-3) thanks to the existing prepared-ingest scaffolding.
+
+**Gotchas discovered:**
+- Render's API: `PATCH /v1/services/{svc}/env-vars/{key}` returns 405. The correct single-var endpoint is `PUT /v1/services/{svc}/env-vars/{key}` (distinct from the memory-rule footgun, which is the full-collection `PUT /env-vars`).
+- 36 existing state-scraper `run_state_ingestion.py` scripts had a hardcoded counter (`r.get("status") == "imported"`) that doesn't match the async response shape (results are `{job_id, prefix}`, no status). Bulk-patched. Loop *exit* was correct in both modes (uses `found==0`), so the bug was stats-only.
+- See `docs/phase2-retrospective.md` for the full chronology.
 
 ### Phase 3 — Caching *(quick wins on cost and latency)*
 
