@@ -4,6 +4,7 @@ import gzip
 import json
 import re
 import sqlite3
+import time
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -368,6 +369,32 @@ CREATE TABLE IF NOT EXISTS fixed_costs (
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
     updated_at TEXT
 );
+
+-- Phase 2 (scaling-proposal.md §Phase 2): queue rows for the
+-- hoaproxy-ingest background worker. /upload and /admin/ingest-ready-gcs
+-- enqueue when ASYNC_INGEST_ENABLED=1; the worker drains in its own RAM
+-- budget so the web service stops OOMing on concurrent OCR + embedding.
+CREATE TABLE IF NOT EXISTS pending_ingest (
+    job_id TEXT PRIMARY KEY,
+    bundle_uri TEXT NOT NULL,
+    state TEXT NOT NULL,
+    enqueued_at INTEGER NOT NULL,
+    started_at INTEGER,
+    completed_at INTEGER,
+    failed_at INTEGER,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'pending',
+    error TEXT,
+    source TEXT NOT NULL,
+    result_json TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_pending_ingest_status_enqueued
+    ON pending_ingest(status, enqueued_at);
+CREATE INDEX IF NOT EXISTS idx_pending_ingest_state
+    ON pending_ingest(state, status);
+CREATE INDEX IF NOT EXISTS idx_pending_ingest_bundle_uri
+    ON pending_ingest(bundle_uri);
 """
 
 
@@ -604,8 +631,143 @@ def get_connection(db_path: Path) -> sqlite3.Connection:
     # Existing rows stay NULL (grandfathered); new registrations set both.
     _ensure_table_column(conn, "users", "terms_version_accepted", "TEXT")
     _ensure_table_column(conn, "users", "terms_accepted_at", "TIMESTAMP")
+    # Phase 2 ingest worker (additive only; idempotent on already-migrated DBs).
+    _ensure_table_column(conn, "pending_ingest", "result_json", "TEXT")
     conn.commit()
     return conn
+
+
+# ---------------------------------------------------------------------------
+# pending_ingest CRUD (Phase 2 — see scaling-proposal.md §Phase 2)
+# ---------------------------------------------------------------------------
+
+
+def enqueue_pending_ingest(
+    conn: sqlite3.Connection,
+    *,
+    job_id: str,
+    bundle_uri: str,
+    state: str,
+    source: str,
+) -> None:
+    """Insert a new pending_ingest row. Idempotent on job_id collision.
+
+    bundle_uri identifies the work item — for prepared GCS bundles it is the
+    gs:// prefix; for /upload it is a bank manifest URI. The worker resolves
+    the URI to actual work.
+    """
+    now = int(time.time())
+    conn.execute(
+        """
+        INSERT INTO pending_ingest (job_id, bundle_uri, state, enqueued_at, status, source)
+        VALUES (?, ?, ?, ?, 'pending', ?)
+        ON CONFLICT(job_id) DO NOTHING
+        """,
+        (job_id, bundle_uri, state.upper(), now, source),
+    )
+    conn.commit()
+
+
+def claim_next_pending_ingest(conn: sqlite3.Connection) -> sqlite3.Row | None:
+    """Atomically claim the oldest pending row by flipping it to in_progress.
+
+    Returns the claimed row or None if the queue is empty. Uses a guarded
+    UPDATE so only one worker wins under concurrent claims.
+    """
+    now = int(time.time())
+    # Two-step claim guarded by UPDATE ... WHERE status='pending' so racing
+    # workers can't both pick the same job. SQLite is single-writer so this
+    # is safe within one DB; if we ever shard the worker we'd need a CAS on
+    # a generation column too.
+    while True:
+        row = conn.execute(
+            "SELECT * FROM pending_ingest WHERE status = 'pending' "
+            "ORDER BY enqueued_at ASC LIMIT 1"
+        ).fetchone()
+        if row is None:
+            return None
+        cur = conn.execute(
+            "UPDATE pending_ingest "
+            "SET status = 'in_progress', started_at = ?, attempts = attempts + 1 "
+            "WHERE job_id = ? AND status = 'pending'",
+            (now, row["job_id"]),
+        )
+        conn.commit()
+        if cur.rowcount == 1:
+            return conn.execute(
+                "SELECT * FROM pending_ingest WHERE job_id = ?", (row["job_id"],)
+            ).fetchone()
+        # Another worker took it; try again.
+
+
+def mark_pending_ingest_done(
+    conn: sqlite3.Connection,
+    job_id: str,
+    *,
+    result: dict | None = None,
+) -> None:
+    now = int(time.time())
+    conn.execute(
+        "UPDATE pending_ingest SET status = 'done', completed_at = ?, error = NULL, result_json = ? "
+        "WHERE job_id = ?",
+        (now, json.dumps(result) if result is not None else None, job_id),
+    )
+    conn.commit()
+
+
+def mark_pending_ingest_failed(
+    conn: sqlite3.Connection,
+    job_id: str,
+    *,
+    error: str,
+    max_attempts: int = 3,
+) -> str:
+    """Mark as 'failed' (retryable) or 'dead' (terminal) based on attempts.
+
+    Returns the resulting status.
+    """
+    now = int(time.time())
+    row = conn.execute(
+        "SELECT attempts FROM pending_ingest WHERE job_id = ?", (job_id,)
+    ).fetchone()
+    attempts = int(row["attempts"]) if row else 0
+    # If we've exhausted retries, mark dead; otherwise re-enqueue as pending
+    # so the next claim picks it up (with the attempt counter already bumped).
+    if attempts >= max_attempts:
+        conn.execute(
+            "UPDATE pending_ingest SET status = 'dead', failed_at = ?, error = ? WHERE job_id = ?",
+            (now, error[:2000], job_id),
+        )
+    else:
+        conn.execute(
+            "UPDATE pending_ingest SET status = 'pending', failed_at = ?, error = ? WHERE job_id = ?",
+            (now, error[:2000], job_id),
+        )
+    conn.commit()
+    return "dead" if attempts >= max_attempts else "pending"
+
+
+def get_pending_ingest(conn: sqlite3.Connection, job_id: str) -> sqlite3.Row | None:
+    return conn.execute(
+        "SELECT * FROM pending_ingest WHERE job_id = ?", (job_id,)
+    ).fetchone()
+
+
+def reset_dead_pending_ingest(conn: sqlite3.Connection) -> int:
+    """Flip all dead jobs back to pending. Returns count flipped."""
+    cur = conn.execute(
+        "UPDATE pending_ingest SET status = 'pending', failed_at = NULL, error = NULL "
+        "WHERE status = 'dead'"
+    )
+    conn.commit()
+    return cur.rowcount
+
+
+def count_pending_ingest_by_status(conn: sqlite3.Connection) -> dict[str, int]:
+    rows = conn.execute(
+        "SELECT status, COUNT(*) AS n FROM pending_ingest GROUP BY status"
+    ).fetchall()
+    return {row["status"]: int(row["n"]) for row in rows}
 
 
 def _load_geojson(raw_value: object) -> dict | None:

@@ -57,6 +57,27 @@ services:
         value: ""
       - key: SMTP_PASSWORD
         sync: false
+      # Phase 2 (scaling-proposal.md §Phase 2): when 1, /upload and
+      # /admin/ingest-ready-gcs enqueue into pending_ingest instead of
+      # running synchronously. The hoaware.ingest_worker process drains
+      # the queue. Cutover: PATCH this single env-var (do NOT round-trip
+      # the full env via PUT — see reference_render_api.md).
+      - key: ASYNC_INGEST_ENABLED
+        value: "0"
+      # Worker process is co-located in this container (see
+      # scripts/start_web_with_worker.sh). Set to 0 to fall back to
+      # uvicorn-only during rollback. Render persistent disks aren't
+      # share-able across services, so a single container running both
+      # processes is the Phase 2 deployment shape; a separate
+      # `type: worker` service is a Phase 4 follow-up after Neon Postgres.
+      - key: INGEST_WORKER_ENABLED
+        value: "1"
+      - key: INGEST_WORKER_POLL_SEC
+        value: "2"
+      - key: INGEST_WORKER_HEARTBEAT_SEC
+        value: "30"
+      - key: INGEST_WORKER_MAX_ATTEMPTS
+        value: "3"
     disk:
       name: hoaproxy-data
       mountPath: /var/data

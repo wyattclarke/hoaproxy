@@ -116,6 +116,17 @@ def _check_rate_limit(request: Request, limit: int = _RATE_LIMIT) -> None:
     _rate_buckets[ip].append(now)
 
 
+def _new_job_id() -> str:
+    """Opaque queue identifier for pending_ingest rows.
+
+    A UUIDv4 is plenty — the queue is small (<10k rows steady-state) and
+    job_id only needs to be unique, not sortable. ULID/KSUID would add a
+    dependency for no real benefit.
+    """
+    import uuid
+    return uuid.uuid4().hex
+
+
 def _check_disk_free(docs_root: Path) -> None:
     """Abort ingest if the persistent disk is too close to full.
 
@@ -3316,6 +3327,207 @@ def _prepared_bundle_location_fields(bundle: prepared_ingest.PreparedBundle) -> 
     }
 
 
+def _async_ingest_enabled() -> bool:
+    """Phase 2 feature flag — when on, /upload and /admin/ingest-ready-gcs
+    enqueue into pending_ingest instead of running the synchronous ingest
+    body. The hoaproxy-ingest worker drains the queue. Default OFF until
+    cutover (see docs/phase2-cutover.md)."""
+    return os.environ.get("ASYNC_INGEST_ENABLED", "0").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _process_prepared_bundle(
+    prefix: str,
+    *,
+    state_n: str,
+    bucket=None,
+    bucket_name: str | None = None,
+    settings=None,
+    claim: bool = True,
+    dry_run: bool = False,
+) -> dict:
+    """Synchronous body of /admin/ingest-ready-gcs for a single bundle prefix.
+
+    Shared between the (legacy) sync admin route and the Phase 2 background
+    worker (hoaware.ingest_worker). The caller is responsible for any
+    state-level validation and disk-free precheck.
+
+    Returns the per-prefix result dict (always — never raises). On failure
+    the bucket status.json is updated to 'failed' (unless dry_run).
+    """
+    settings = settings or load_settings()
+    if bucket is None:
+        bucket = _prepared_gcs_bucket(bucket_name)
+
+    if claim and not dry_run:
+        claimed = prepared_ingest.claim_ready_bundle(bucket, prefix)
+        if not claimed:
+            # The worker may re-attempt a bundle whose GCS status is already
+            # 'claimed' (it was claimed in a previous attempt and we crashed
+            # before marking imported/failed). Allow that to proceed.
+            status_blob = bucket.blob(prepared_ingest.status_blob_name(prefix))
+            try:
+                status_data, _ = prepared_ingest._load_status_with_generation(status_blob)
+            except Exception:
+                return {"prefix": prefix, "status": "skipped", "reason": "not_ready"}
+            if status_data.get("status") not in {"claimed"}:
+                return {"prefix": prefix, "status": "skipped", "reason": "not_ready"}
+
+    try:
+        bundle_payload = prepared_ingest.load_json_blob(
+            bucket, prepared_ingest.bundle_blob_name(prefix)
+        )
+        bundle = prepared_ingest.validate_bundle(bundle_payload, expected_state=state_n)
+        resolved_hoa = _resolve_hoa_name(bundle.hoa_name)
+
+        settings.docs_root.mkdir(parents=True, exist_ok=True)
+        hoa_dir = settings.docs_root / resolved_hoa
+        if not dry_run:
+            hoa_dir.mkdir(parents=True, exist_ok=True)
+
+        saved_paths: list[Path] = []
+        metadata_by_path: dict[Path, dict] = {}
+        imported_docai_pages = 0
+        for doc in bundle.documents:
+            pdf_uri = prepared_ingest.parse_gcs_uri(doc.pdf_gcs_path)
+            text_uri = prepared_ingest.parse_gcs_uri(doc.text_gcs_path)
+            if pdf_uri.bucket != bucket.name or text_uri.bucket != bucket.name:
+                raise prepared_ingest.PreparedIngestError(
+                    "prepared document paths must point at the prepared queue bucket"
+                )
+
+            sidecar_payload = prepared_ingest.load_json_blob(bucket, text_uri.blob)
+            pages, sidecar_docai_pages = prepared_ingest.validate_text_sidecar(sidecar_payload)
+            imported_docai_pages += sidecar_docai_pages
+
+            if dry_run:
+                continue
+
+            _check_disk_free(settings.docs_root)
+            pdf_bytes = prepared_ingest.download_blob_bytes(bucket, pdf_uri.blob)
+            target = _prepared_target_pdf_path(
+                hoa_dir=hoa_dir,
+                filename=doc.filename,
+                expected_sha256=doc.sha256,
+                pdf_bytes=pdf_bytes,
+            )
+            saved_paths.append(target)
+            metadata_by_path[target] = {
+                "category": doc.category,
+                "text_extractable": doc.text_extractable,
+                "source_url": doc.source_url,
+                "pre_extracted_pages": pages,
+                "docai_pages": sidecar_docai_pages,
+            }
+
+        if dry_run:
+            return {
+                "prefix": prefix,
+                "status": "ready",
+                "hoa": resolved_hoa,
+                "documents": len(bundle.documents),
+            }
+
+        if any(
+            meta.get("pre_extracted_pages") is None
+            for meta in metadata_by_path.values()
+        ):
+            raise prepared_ingest.PreparedIngestError(
+                "prepared bundle is missing text sidecars"
+            )
+
+        location = _prepared_bundle_location_fields(bundle)
+        with db.get_connection(settings.db_path) as conn:
+            existing_location = conn.execute(
+                """
+                SELECT l.state
+                FROM hoa_locations l
+                JOIN hoas h ON h.id = l.hoa_id
+                WHERE lower(h.name) = lower(?)
+                """,
+                (resolved_hoa,),
+            ).fetchone()
+            has_new_spatial = (
+                location["latitude"] is not None
+                and location["longitude"] is not None
+            ) or bool(location["boundary_geojson"])
+            clear_stale_spatial = (
+                not has_new_spatial
+                and existing_location is not None
+                and (existing_location["state"] or "").upper() != location["state"]
+            )
+            db.upsert_hoa_location(
+                conn,
+                resolved_hoa,
+                metadata_type=location["metadata_type"],
+                website_url=location["website_url"],
+                street=location["street"],
+                city=location["city"],
+                state=location["state"],
+                postal_code=location["postal_code"],
+                country=location["country"],
+                latitude=location["latitude"],
+                longitude=location["longitude"],
+                boundary_geojson=location["boundary_geojson"],
+                source="gcs_prepared_ingest",
+                location_quality=location["location_quality"],
+                clear_coordinates=clear_stale_spatial,
+                clear_boundary_geojson=clear_stale_spatial,
+            )
+
+        stats = ingest_pdf_paths(
+            resolved_hoa,
+            saved_paths,
+            settings=settings,
+            show_progress=False,
+            metadata_by_path=metadata_by_path,
+        )
+        for path, meta in metadata_by_path.items():
+            if meta.get("pre_extracted_pages") is not None:
+                rel = path.relative_to(settings.docs_root).as_posix()
+                pages_used = int(meta.get("docai_pages") or 0)
+                if pages_used:
+                    log_docai_usage(pages_used, document=rel)
+
+        status = "imported" if stats.failed == 0 else "failed"
+        result = {
+            "prefix": prefix,
+            "status": status,
+            "hoa": resolved_hoa,
+            "processed": stats.processed,
+            "indexed": stats.indexed,
+            "skipped": stats.skipped,
+            "failed": stats.failed,
+            "docai_pages": imported_docai_pages,
+        }
+        prepared_ingest.update_bundle_status(
+            bucket,
+            prefix,
+            status=status,
+            error=None if status == "imported" else "ingest_pdf_paths reported failures",
+            extra={"import_result": result},
+        )
+        return result
+    except prepared_ingest.PreparedIngestError as exc:
+        if not dry_run:
+            try:
+                prepared_ingest.update_bundle_status(
+                    bucket, prefix, status="failed", error=str(exc)
+                )
+            except Exception:
+                logger.exception("Failed to update prepared-ingest status for %s", prefix)
+        return {"prefix": prefix, "status": "failed", "error": str(exc)}
+    except Exception as exc:
+        logger.exception("Prepared GCS ingest failed for %s", prefix)
+        if not dry_run:
+            try:
+                prepared_ingest.update_bundle_status(
+                    bucket, prefix, status="failed", error=str(exc)
+                )
+            except Exception:
+                logger.exception("Failed to update prepared-ingest status for %s", prefix)
+        return {"prefix": prefix, "status": "failed", "error": str(exc)}
+
+
 @app.post("/admin/ingest-ready-gcs")
 def admin_ingest_ready_gcs(
     request: Request,
@@ -3326,8 +3538,13 @@ def admin_ingest_ready_gcs(
 ):
     """Import prepared GCS bundles that already contain extracted text sidecars.
 
-    This path is intentionally separate from /upload. It never falls back to
+    Path is intentionally separate from /upload. It never falls back to
     server-side PDF extraction or DocAI; missing sidecars fail the bundle.
+
+    Phase 2 (scaling-proposal.md §Phase 2): when ASYNC_INGEST_ENABLED=1
+    this endpoint becomes a thin enqueue — it lists ready bundles and
+    inserts a `pending_ingest` row per prefix without touching DocAI,
+    embeddings, or the disk. The hoaproxy-ingest worker drains the queue.
     """
     _require_admin(request)
     try:
@@ -3342,187 +3559,150 @@ def admin_ingest_ready_gcs(
     settings = load_settings()
     if not settings.openai_api_key and not dry_run:
         raise HTTPException(status_code=400, detail="OPENAI_API_KEY is required for ingestion")
-    if not dry_run:
+    if not dry_run and not _async_ingest_enabled():
         _check_disk_free(settings.docs_root)
 
     bucket = _prepared_gcs_bucket(bucket_name)
     prefixes = prepared_ingest.list_ready_bundle_prefixes(bucket, state=state_n, limit=limit)
-    results: list[dict] = []
 
-    for prefix in prefixes:
-        if not dry_run:
-            claimed = prepared_ingest.claim_ready_bundle(bucket, prefix)
-            if not claimed:
-                results.append({"prefix": prefix, "status": "skipped", "reason": "not_ready"})
-                continue
-        try:
-            bundle_payload = prepared_ingest.load_json_blob(
-                bucket, prepared_ingest.bundle_blob_name(prefix)
-            )
-            bundle = prepared_ingest.validate_bundle(bundle_payload, expected_state=state_n)
-            resolved_hoa = _resolve_hoa_name(bundle.hoa_name)
-
-            settings.docs_root.mkdir(parents=True, exist_ok=True)
-            hoa_dir = settings.docs_root / resolved_hoa
-            if not dry_run:
-                hoa_dir.mkdir(parents=True, exist_ok=True)
-
-            saved_paths: list[Path] = []
-            metadata_by_path: dict[Path, dict] = {}
-            imported_docai_pages = 0
-            for doc in bundle.documents:
-                pdf_uri = prepared_ingest.parse_gcs_uri(doc.pdf_gcs_path)
-                text_uri = prepared_ingest.parse_gcs_uri(doc.text_gcs_path)
-                if pdf_uri.bucket != bucket.name or text_uri.bucket != bucket.name:
-                    raise prepared_ingest.PreparedIngestError(
-                        "prepared document paths must point at the prepared queue bucket"
-                    )
-
-                sidecar_payload = prepared_ingest.load_json_blob(bucket, text_uri.blob)
-                pages, sidecar_docai_pages = prepared_ingest.validate_text_sidecar(
-                    sidecar_payload
-                )
-                imported_docai_pages += sidecar_docai_pages
-
-                if dry_run:
-                    continue
-
-                _check_disk_free(settings.docs_root)
-                pdf_bytes = prepared_ingest.download_blob_bytes(bucket, pdf_uri.blob)
-                target = _prepared_target_pdf_path(
-                    hoa_dir=hoa_dir,
-                    filename=doc.filename,
-                    expected_sha256=doc.sha256,
-                    pdf_bytes=pdf_bytes,
-                )
-                saved_paths.append(target)
-                metadata_by_path[target] = {
-                    "category": doc.category,
-                    "text_extractable": doc.text_extractable,
-                    "source_url": doc.source_url,
-                    "pre_extracted_pages": pages,
-                    "docai_pages": sidecar_docai_pages,
-                }
-
-            if dry_run:
-                results.append(
-                    {
-                        "prefix": prefix,
-                        "status": "ready",
-                        "hoa": resolved_hoa,
-                        "documents": len(bundle.documents),
-                    }
-                )
-                continue
-
-            if any(
-                meta.get("pre_extracted_pages") is None
-                for meta in metadata_by_path.values()
-            ):
-                raise prepared_ingest.PreparedIngestError(
-                    "prepared bundle is missing text sidecars"
-                )
-
-            location = _prepared_bundle_location_fields(bundle)
-            with db.get_connection(settings.db_path) as conn:
-                existing_location = conn.execute(
-                    """
-                    SELECT l.state
-                    FROM hoa_locations l
-                    JOIN hoas h ON h.id = l.hoa_id
-                    WHERE lower(h.name) = lower(?)
-                    """,
-                    (resolved_hoa,),
+    # Phase 2 async path: just enqueue. The web service does NOT touch
+    # DocAI / embeddings / disk on this call.
+    if _async_ingest_enabled() and not dry_run:
+        enqueued: list[dict] = []
+        skipped: list[dict] = []
+        with db.get_connection(settings.db_path) as conn:
+            # Skip prefixes we've already enqueued and that are not yet 'done'
+            # or 'dead'. ('dead' rows mean prior runs exhausted retries — let
+            # the operator decide whether to /admin/ingest/retry-dead.)
+            for prefix in prefixes:
+                bundle_uri = prepared_ingest.gcs_uri(bucket.name, prefix)
+                existing = conn.execute(
+                    "SELECT job_id, status FROM pending_ingest WHERE bundle_uri = ? "
+                    "AND status IN ('pending', 'in_progress')",
+                    (bundle_uri,),
                 ).fetchone()
-                has_new_spatial = (
-                    location["latitude"] is not None
-                    and location["longitude"] is not None
-                ) or bool(location["boundary_geojson"])
-                clear_stale_spatial = (
-                    not has_new_spatial
-                    and existing_location is not None
-                    and (existing_location["state"] or "").upper() != location["state"]
-                )
-                db.upsert_hoa_location(
+                if existing is not None:
+                    skipped.append({"prefix": prefix, "job_id": existing["job_id"], "reason": "already_enqueued"})
+                    continue
+                job_id = _new_job_id()
+                # Claim the GCS-side status now so duplicate worker pickups
+                # (or a parallel sync call) can't double-process. The worker
+                # accepts an already-'claimed' status as resumable.
+                claimed_ok = prepared_ingest.claim_ready_bundle(bucket, prefix)
+                if not claimed_ok:
+                    skipped.append({"prefix": prefix, "reason": "not_ready"})
+                    continue
+                db.enqueue_pending_ingest(
                     conn,
-                    resolved_hoa,
-                    metadata_type=location["metadata_type"],
-                    website_url=location["website_url"],
-                    street=location["street"],
-                    city=location["city"],
-                    state=location["state"],
-                    postal_code=location["postal_code"],
-                    country=location["country"],
-                    latitude=location["latitude"],
-                    longitude=location["longitude"],
-                    boundary_geojson=location["boundary_geojson"],
-                    source="gcs_prepared_ingest",
-                    location_quality=location["location_quality"],
-                    clear_coordinates=clear_stale_spatial,
-                    clear_boundary_geojson=clear_stale_spatial,
+                    job_id=job_id,
+                    bundle_uri=bundle_uri,
+                    state=state_n,
+                    source="ingest-ready-gcs",
                 )
+                enqueued.append({"prefix": prefix, "job_id": job_id})
+        return {
+            "state": state_n,
+            "bucket": bucket.name,
+            "dry_run": False,
+            "async": True,
+            "requested_limit": limit,
+            "found": len(prefixes),
+            "enqueued": len(enqueued),
+            "skipped": skipped,
+            "job_ids": [item["job_id"] for item in enqueued],
+            "results": enqueued,
+        }
 
-            stats = ingest_pdf_paths(
-                resolved_hoa,
-                saved_paths,
-                settings=settings,
-                show_progress=False,
-                metadata_by_path=metadata_by_path,
-            )
-            for path, meta in metadata_by_path.items():
-                if meta.get("pre_extracted_pages") is not None:
-                    rel = path.relative_to(settings.docs_root).as_posix()
-                    pages_used = int(meta.get("docai_pages") or 0)
-                    if pages_used:
-                        log_docai_usage(pages_used, document=rel)
-
-            status = "imported" if stats.failed == 0 else "failed"
-            result = {
-                "prefix": prefix,
-                "status": status,
-                "hoa": resolved_hoa,
-                "processed": stats.processed,
-                "indexed": stats.indexed,
-                "skipped": stats.skipped,
-                "failed": stats.failed,
-                "docai_pages": imported_docai_pages,
-            }
-            prepared_ingest.update_bundle_status(
-                bucket,
-                prefix,
-                status=status,
-                error=None if status == "imported" else "ingest_pdf_paths reported failures",
-                extra={"import_result": result},
-            )
-            results.append(result)
-        except prepared_ingest.PreparedIngestError as exc:
-            if not dry_run:
-                try:
-                    prepared_ingest.update_bundle_status(
-                        bucket, prefix, status="failed", error=str(exc)
-                    )
-                except Exception:
-                    logger.exception("Failed to update prepared-ingest status for %s", prefix)
-            results.append({"prefix": prefix, "status": "failed", "error": str(exc)})
-        except Exception as exc:
-            logger.exception("Prepared GCS ingest failed for %s", prefix)
-            if not dry_run:
-                try:
-                    prepared_ingest.update_bundle_status(
-                        bucket, prefix, status="failed", error=str(exc)
-                    )
-                except Exception:
-                    logger.exception("Failed to update prepared-ingest status for %s", prefix)
-            results.append({"prefix": prefix, "status": "failed", "error": str(exc)})
+    results: list[dict] = []
+    for prefix in prefixes:
+        result = _process_prepared_bundle(
+            prefix,
+            state_n=state_n,
+            bucket=bucket,
+            settings=settings,
+            claim=not dry_run,
+            dry_run=dry_run,
+        )
+        results.append(result)
 
     return {
         "state": state_n,
         "bucket": bucket.name,
         "dry_run": dry_run,
+        "async": False,
         "requested_limit": limit,
         "found": len(prefixes),
         "results": results,
     }
+
+
+# ---------------------------------------------------------------------------
+# Phase 2 — pending_ingest queue inspection / control
+# (see docs/scaling-proposal.md §Phase 2 + docs/phase2-cutover.md)
+# ---------------------------------------------------------------------------
+
+
+@app.get("/ingest/status/{job_id}")
+def ingest_status(request: Request, job_id: str) -> dict:
+    """Return the current state of an enqueued ingest job. Rate-limited.
+
+    Public read — the job_id itself is opaque enough that no auth is
+    required; callers only ever see job_ids returned from their own
+    /upload or /admin/ingest-ready-gcs call.
+    """
+    _check_rate_limit(request, limit=60)
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        row = db.get_pending_ingest(conn, job_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="job_id not found")
+    return {
+        "job_id": row["job_id"],
+        "status": row["status"],
+        "state": row["state"],
+        "attempts": int(row["attempts"]),
+        "enqueued_at": row["enqueued_at"],
+        "started_at": row["started_at"],
+        "completed_at": row["completed_at"],
+        "failed_at": row["failed_at"],
+        "error": row["error"],
+        "source": row["source"],
+        "bundle_uri": row["bundle_uri"],
+        "result": json.loads(row["result_json"]) if row["result_json"] else None,
+    }
+
+
+@app.get("/admin/ingest/queue-stats")
+def admin_ingest_queue_stats(request: Request) -> dict:
+    _require_admin(request)
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        counts = db.count_pending_ingest_by_status(conn)
+        by_state = conn.execute(
+            "SELECT state, status, COUNT(*) AS n FROM pending_ingest "
+            "GROUP BY state, status ORDER BY state, status"
+        ).fetchall()
+    return {
+        "counts": counts,
+        "by_state": [
+            {"state": row["state"], "status": row["status"], "n": int(row["n"])}
+            for row in by_state
+        ],
+    }
+
+
+@app.post("/admin/ingest/retry-dead")
+def admin_ingest_retry_dead(request: Request) -> dict:
+    """Flip all dead (max-attempts) jobs back to pending. Admin only.
+
+    Useful after fixing a deploy bug that mass-failed jobs. Bumps the worker's
+    chance to drain stuck rows without manual DB surgery.
+    """
+    _require_admin(request)
+    settings = load_settings()
+    with db.get_connection(settings.db_path) as conn:
+        n = db.reset_dead_pending_ingest(conn)
+    return {"reset_count": int(n)}
 
 
 class FixedCostRequest(BaseModel):
