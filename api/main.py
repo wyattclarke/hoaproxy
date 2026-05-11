@@ -6716,7 +6716,11 @@ def list_documents(hoa_name: str) -> List[DocumentSummary]:
 
 
 @app.get("/hoas/{hoa_name}/documents/file")
-def open_document_file(hoa_name: str, path: str) -> FileResponse:
+def open_document_file(request: Request, hoa_name: str, path: str) -> FileResponse:
+    # Scrape protection (docs/scrape-protection.md): cap raw PDF downloads
+    # at 60/hour/IP. Legitimate users click a few docs per session; this
+    # only bites at scraper-grade volumes.
+    _check_rate_limit(request, limit=60)
     settings = load_settings()
     resolved_hoa = _resolve_hoa_name(hoa_name)
     rel_doc = _safe_relative_document_path(path)
@@ -6740,7 +6744,16 @@ def open_document_file(hoa_name: str, path: str) -> FileResponse:
         ).fetchone()
     if owns is None:
         raise HTTPException(status_code=400, detail="Document does not belong to requested HOA")
-    return FileResponse(doc_path, media_type="application/pdf", filename=doc_path.name)
+    # Cache hint for Cloudflare (see docs/scrape-protection.md). PDFs are
+    # content-addressed by checksum so they never change for a given URL;
+    # 1-day TTL keeps load off Render without staleness.
+    headers = {"Cache-Control": "public, max-age=86400, immutable"}
+    return FileResponse(
+        doc_path,
+        media_type="application/pdf",
+        filename=doc_path.name,
+        headers=headers,
+    )
 
 
 @app.get("/hoas/{hoa_name}/documents/searchable", response_class=HTMLResponse)
