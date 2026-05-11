@@ -160,5 +160,24 @@ via `POST /admin/backup-full` before discovery launch.
 - 2026-05-10 21:59Z: **Driver C launched** — tri-state mgmt-co sweep, 220
   queries across 22 NY/NJ/CT property mgmt domains. Post-OCR state routing
   will distribute hits to correct NY/NJ/CT bank prefixes.
-- 2026-05-10 21:59Z: ACRIS PDF fetcher subagent still running (Driver E
-  blocked on this).
+- 2026-05-10 21:59Z: ACRIS PDF fetcher subagent stalled (watchdog killed at
+  600s of no progress). Recovered by spiking myself: used Playwright to
+  intercept network requests on the ACRIS viewer, **found GetImage URL
+  pattern** `/DS/DocumentSearch/GetImage?doc_id={id}&page={N}` with required
+  Referer header. Pages come back as TIFF (Group 4 fax). PIL handles
+  multi-page TIFF→PDF assembly. fetch_acris_pdf.py shipped and validated
+  end-to-end (1 doc banked successfully to `bronx/eleven-w46-realty/`).
+- 2026-05-10 22:07Z: **Driver E launched** with --apply --resume on full
+  1,811-record ACRIS seed.
+- 2026-05-10 22:31Z: **30-min checkpoint**:
+  - Bank: 97 manifests / 102 PDFs across bronx, new-york, putnam,
+    westchester, unknown-county, unresolved-name.
+  - Driver E: 73/1,811 docs banked (~5-7 hours to complete at current rate).
+  - Driver C: COMPLETE with 25 banked including 2 cross-state routes
+    (CT Fairfield "Greenwich Harbor View", NC "Association Organized As" —
+    OCR-derived). Tri-state Driver C design works.
+  - Driver A: Kings + Manhattan both in validate-leads stage (Serper
+    sweeps complete, DeepSeek validating leads).
+  - Some junk slugs from Driver C ("memo-boards", "units-they-are") —
+    will be repaired in Phase 5 OCR slug repair via smart_titlecase + the
+    canonical name regex.
