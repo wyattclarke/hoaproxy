@@ -44,6 +44,12 @@ Key values:
 - `GOOGLE_APPLICATION_CREDENTIALS` — path to your GCP service account key file (gitignored)
 - Tesseract is **not** in the runtime path. Scanned pages with no DocAI configured come back blank.
 
+**macOS dev (Tahoe / 26.x):** Apple's `Network.framework` is not fork-safe and crashes in `nw_path_*` / NAT64 evaluation when a Python parent that has already initialized SSL or done DNS work spawns a child (orchestrators do this via `subprocess.run([sys.executable, ...])` in `state_scrapers/*/scripts/run_state_ingestion.py` and the FL enrichers). Symptom: `EXC_BAD_ACCESS` with "crashed on child side of fork pre-exec". Mitigation — export in your shell profile and add to `settings.env`:
+```bash
+export OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES
+```
+This is a local-only workaround; production (Render/Linux) is unaffected. Do not paper over it by switching to `multiprocessing` with `fork` — the fix is to keep using `subprocess`/spawn semantics.
+
 ## Running & Testing
 ```bash
 # Run API server
@@ -94,6 +100,21 @@ When starting a fresh state-scraping session (covering one or more US states/DC)
 - the per-tier run shape (parallel autonomous batches for tiny states; phased operator-supervised for larger ones)
 - the `is_dirty()` name-quality gate at the bank, now backed by `hoaware/name_utils.py`
 - the mandatory Phase 10 retrospective at `state_scrapers/{state}/notes/retrospective.md` (see GA, RI, TN exemplars)
+
+## Audit + Backfill Pipeline
+
+For content-quality auditing, registry-stub backfills, and cleanup of polluted bulk imports, see **[`docs/audit-pipeline.md`](docs/audit-pipeline.md)**. Historical incident record at `state_scrapers/_orchestrator/quality_audit_2026_05_09/FINAL_REPORT.md`.
+
+**Hard rules that cost data the painful way — read before touching live HOA rows in bulk:**
+
+1. **Don't `/admin/delete-hoa` then `/admin/create-stub-hoas`** to refresh a row. The cascade strips `latitude`, `longitude`, `boundary_geojson`, `street`, `postal_code`, and `location_quality`. Use `/admin/clear-hoa-docs` instead — it deletes documents + chunks while preserving the entity and geometry.
+2. **`/admin/create-stub-hoas` bulk runs must pass `on_collision: "disambiguate"`.** The `"skip"` default exists as a safety guard for one-off uploads and silently drops cross-state name collisions.
+3. **Subdivisions / plats are NOT HOAs.** County GIS `*_subdivisions` and `*_plats` layers are mostly recorded land subdivisions without mandatory associations. Always run `scripts/audit/grade_entity_names.py --source-filter <source>` to sample-grade names BEFORE bulk backfilling a new source.
+4. **Never reuse an existing `hoa_locations.source` string.** Source strings are the primary key for `/admin/list-corruption-targets` and future scrubs. Pick a fresh one per source. The 2026-05-09–10 burned source list is in the FINAL_REPORT.
+5. **Both `/admin/backfill-locations` and `/admin/create-stub-hoas` COALESCE every column.** Passing `location_quality: "city_only"` against a row that already has `"address"` quality silently demotes it. Either omit the field (NULL) or pass a quality at least as good as what's there.
+6. **Before any bulk backfill, take a snapshot: `POST /admin/backup-full`.** The cron `/admin/backup` only dumps the precious-tables subset; it is NOT a full DB backup.
+
+To decide where to scrape next: `GET /admin/state-doc-coverage` returns per-state `{live, with_docs, without_docs, with_docs_pct}` in one SQL aggregation.
 
 ## Proxy Voting System
 See `docs/proxy-voting-plan.md` for full details.
