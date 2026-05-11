@@ -269,9 +269,18 @@ def import_ready(args: argparse.Namespace, run_dir: Path) -> dict[str, Any]:
         results = body.get("results") if isinstance(body, dict) else None
         if not isinstance(results, list) or not results:
             break
-        imported_now = sum(
-            1 for r in results if (r.get("status") or "").lower() == "imported"
-        )
+        # Phase 2 async (ASYNC_INGEST_ENABLED=1, live since 2026-05-11): the
+        # endpoint returns {async: true, enqueued: N, results: [{job_id,
+        # prefix}, ...]}. There is no per-result 'status'; jobs are drained
+        # by the co-located worker. Count the enqueue as the "import unit"
+        # (it's eventually consistent, but our loop exit condition is
+        # `found == 0` which still works the same in both modes).
+        if body.get("async"):
+            imported_now = int(body.get("enqueued") or 0)
+        else:
+            imported_now = sum(
+                1 for r in results if (r.get("status") or "").lower() == "imported"
+            )
         imported_total += imported_now
         if not imported_now and not body.get("found"):
             break
