@@ -141,3 +141,24 @@ via `POST /admin/backup-full` before discovery launch.
 - 2026-05-10 21:50Z: Spot-checked 30 random seed names — all look like real
   residential associations. Proceeding to backfill without `grade_entity_names`
   (which needs live rows to sample from, and NY has none yet).
+- 2026-05-10 21:53Z: Driver A scripts shipped (`benchmark/run_ny_registry_county_sweep.sh`,
+  `benchmark/run_ny_replenisher.sh`). Driver C tri-state mgmt-co scripts
+  shipped (`benchmark/run_ny_tristate_mgmt_host_sweep.sh` + 22-company JSON).
+  ACRIS seed builder shipped (`state_scrapers/ny/scripts/build_acris_seed.py`).
+- 2026-05-10 21:55Z: Putnam Driver A smoke test launched.
+- 2026-05-10 21:56Z: ACRIS full pull launched in background.
+- 2026-05-10 21:57Z: Putnam smoke RESULT — 190 queries → 9 validated → 7 clean
+  → 7 PDFs banked. 0 errors. Bank now has `v1/NY/putnam/{bluffs-offering-plan,
+  hill-dale,kentwood-lake,mahopac-point,roaring-brook-lake}/` + 1
+  unresolved-name. **Pipeline works end-to-end for NY.**
+- 2026-05-10 21:58Z: ACRIS pull DONE — 1,811 unique residential leads from
+  18,911 master DECL records (21% residential rate, 116 dups collapsed).
+- 2026-05-10 21:59Z: **Driver A replenisher launched** at N=2 parallel across
+  13 counties: `Kings, New York, Queens, Richmond, Westchester, Nassau,
+  Suffolk, Bronx, Rockland, Monroe, Albany, Erie, Onondaga`. Currently
+  running Kings + New York (Manhattan).
+- 2026-05-10 21:59Z: **Driver C launched** — tri-state mgmt-co sweep, 220
+  queries across 22 NY/NJ/CT property mgmt domains. Post-OCR state routing
+  will distribute hits to correct NY/NJ/CT bank prefixes.
+- 2026-05-10 21:59Z: ACRIS PDF fetcher subagent still running (Driver E
+  blocked on this).
