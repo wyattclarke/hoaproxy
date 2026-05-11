@@ -74,44 +74,53 @@ def _bundle_uri_to_prefix(bundle_uri: str) -> tuple[str, str]:
     return parsed.netloc, parsed.path.lstrip("/")
 
 
-def process_job(row, *, settings, process_prepared_bundle) -> dict:
+def process_job(row, *, settings, processors) -> dict:
     """Run one job. Caller handles claim/mark-done/mark-failed.
+
+    `processors` is a dict of URI-scheme → callable. Two schemes are
+    currently supported: `gs://` (prepared GCS bundles) and `local://`
+    (upload sidecars written by /upload's async path).
 
     Returns the inner per-prefix result dict (success or failure shape).
     Raises on hard failure so the caller can route to mark_pending_ingest_failed.
     """
+    from pathlib import Path
+
     bundle_uri = row["bundle_uri"]
     state_n = row["state"]
-    bucket_name, prefix = _bundle_uri_to_prefix(bundle_uri)
 
-    # The web service has already called claim_ready_bundle on this prefix
-    # before enqueueing, so the worker uses claim=False. If a previous worker
-    # crashed mid-flight, the GCS status is 'claimed'; _process_prepared_bundle
-    # tolerates that and re-tries the import.
-    result = process_prepared_bundle(
-        prefix,
-        state_n=state_n,
-        bucket_name=bucket_name,
-        settings=settings,
-        claim=False,
-        dry_run=False,
-    )
-    return result
+    if bundle_uri.startswith("gs://"):
+        bucket_name, prefix = _bundle_uri_to_prefix(bundle_uri)
+        return processors["gs"](
+            prefix,
+            state_n=state_n,
+            bucket_name=bucket_name,
+            settings=settings,
+            claim=False,
+            dry_run=False,
+        )
+    if bundle_uri.startswith("local://"):
+        sidecar_path = Path(bundle_uri[len("local://"):])
+        return processors["local"](sidecar_path, settings=settings)
+    raise ValueError(f"unsupported bundle_uri scheme: {bundle_uri!r}")
 
 
-def _import_processor():
-    """Lazy-import the shared bundle processor from api.main.
+def _import_processors():
+    """Lazy-import the shared processors from api.main.
 
     api.main imports a lot of FastAPI machinery, OpenAI client, etc. The
     worker pays that import cost once on boot and then loops.
     """
-    from api.main import _process_prepared_bundle  # noqa: WPS433
-    return _process_prepared_bundle
+    from api.main import _process_prepared_bundle, _process_local_upload_sidecar  # noqa: WPS433
+    return {
+        "gs": _process_prepared_bundle,
+        "local": _process_local_upload_sidecar,
+    }
 
 
 def run_loop(*, poll_interval: float = _POLL_INTERVAL_SEC) -> None:
     settings = load_settings()
-    process_prepared_bundle = _import_processor()
+    processors = _import_processors()
     last_heartbeat = 0.0
 
     logger.info(
@@ -161,7 +170,7 @@ def run_loop(*, poll_interval: float = _POLL_INTERVAL_SEC) -> None:
             result = process_job(
                 row,
                 settings=settings,
-                process_prepared_bundle=process_prepared_bundle,
+                processors=processors,
             )
         except Exception as exc:
             logger.exception("ingest_worker job failed job_id=%s", job_id)

@@ -685,6 +685,9 @@ class UploadResponse(BaseModel):
     failed: int = 0
     queued: bool = False
     location_saved: bool = False
+    # Phase 2 async-mode fields — only populated when ASYNC_INGEST_ENABLED=1.
+    job_id: str | None = None
+    status_url: str | None = None
 
 
 class AgentPrecheckRequest(BaseModel):
@@ -1309,6 +1312,123 @@ def _ingest_uploaded_files(
             )
         except Exception:
             logger.exception("Background ingest failed for HOA %s", hoa_name)
+
+
+# Phase 2 — when ASYNC_INGEST_ENABLED=1, /upload writes the agent-supplied
+# metadata + sidecars to a sidecar JSON in the HOA's docs dir so the worker
+# process (separate Python heap, same disk) can pick it up.
+_PENDING_UPLOAD_SIDECAR_DIR = ".pending_ingest"
+
+
+def _persist_upload_sidecar(
+    hoa_name: str,
+    saved_paths: list[Path],
+    metadata_by_path: dict[Path, dict],
+    *,
+    docs_root: Path,
+) -> tuple[str, str]:
+    """Write a {job_id}.json sidecar describing this upload.
+
+    Returns (job_id, sidecar_uri) where sidecar_uri is the `local://...`
+    URI stored in pending_ingest.bundle_uri for the worker to resolve.
+
+    Keeps the upload payload (PDFs already on disk, per-file metadata)
+    durable across the request/worker handoff. The worker reads this
+    JSON in lieu of re-receiving the multipart form.
+    """
+    job_id = _new_job_id()
+    sidecar_dir = docs_root / _PENDING_UPLOAD_SIDECAR_DIR
+    sidecar_dir.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "job_id": job_id,
+        "hoa_name": hoa_name,
+        "files": [
+            {
+                "path": str(path.resolve()),
+                "metadata": {
+                    "category": meta.get("category"),
+                    "text_extractable": meta.get("text_extractable"),
+                    "source_url": meta.get("source_url"),
+                    # pre_extracted_pages is a list of PageContent dataclasses
+                    # at this point; persist as plain dicts.
+                    "pre_extracted_pages": [
+                        {"number": p.number, "text": p.text}
+                        for p in (meta.get("pre_extracted_pages") or [])
+                    ] if meta.get("pre_extracted_pages") is not None else None,
+                    "docai_pages": int(meta.get("docai_pages") or 0),
+                },
+            }
+            for path, meta in metadata_by_path.items()
+        ],
+    }
+    sidecar_path = sidecar_dir / f"{job_id}.json"
+    sidecar_path.write_text(json.dumps(payload), encoding="utf-8")
+    return job_id, f"local://{sidecar_path.resolve()}"
+
+
+def _process_local_upload_sidecar(sidecar_path: Path, *, settings) -> dict:
+    """Worker side of the local-upload async path.
+
+    Reads the {job_id}.json sidecar written by /upload's async path and
+    runs `ingest_pdf_paths` on the saved PDFs. Returns the same shape as
+    `_process_prepared_bundle` so the worker's mark-done/mark-failed code
+    handles both URI schemes identically.
+    """
+    payload = json.loads(sidecar_path.read_text(encoding="utf-8"))
+    hoa_name = payload["hoa_name"]
+    saved_paths: list[Path] = []
+    metadata_by_path: dict[Path, dict] = {}
+    for entry in payload["files"]:
+        p = Path(entry["path"])
+        if not p.exists():
+            return {"status": "failed", "error": f"upload sidecar references missing file: {p}"}
+        saved_paths.append(p)
+        meta = entry["metadata"] or {}
+        if meta.get("pre_extracted_pages") is not None:
+            from hoaware.chunker import PageContent
+            meta = {
+                **meta,
+                "pre_extracted_pages": [
+                    PageContent(number=int(pg["number"]), text=pg["text"])
+                    for pg in meta["pre_extracted_pages"]
+                ],
+            }
+        metadata_by_path[p] = meta
+
+    try:
+        stats = ingest_pdf_paths(
+            hoa_name,
+            saved_paths,
+            settings=settings,
+            show_progress=False,
+            metadata_by_path=metadata_by_path,
+        )
+    except Exception as exc:
+        return {"status": "failed", "error": f"{type(exc).__name__}: {exc}"}
+
+    for path, meta in metadata_by_path.items():
+        pages_used = int(meta.get("docai_pages") or 0)
+        if pages_used:
+            try:
+                rel = path.relative_to(settings.docs_root).as_posix()
+            except ValueError:
+                rel = path.name
+            log_docai_usage(pages_used, document=rel)
+
+    # Clean up the sidecar so the .pending_ingest/ dir doesn't grow.
+    try:
+        sidecar_path.unlink()
+    except Exception:
+        logger.exception("failed to remove processed upload sidecar %s", sidecar_path)
+
+    return {
+        "status": "imported" if stats.failed == 0 else "failed",
+        "hoa": hoa_name,
+        "processed": stats.processed,
+        "indexed": stats.indexed,
+        "skipped": stats.skipped,
+        "failed": stats.failed,
+    }
 
 
 def _safe_relative_document_path(raw_path: str) -> str:
@@ -6776,6 +6896,31 @@ async def upload_documents(
     projected_ocr_pages = _projected_docai_pages(saved_paths, metadata_by_path)
     _check_daily_docai_budget(projected_ocr_pages)
 
+    # Phase 2 async path — enqueue, return 202-shape, let the worker drain.
+    if _async_ingest_enabled():
+        job_id, sidecar_uri = _persist_upload_sidecar(
+            resolved_hoa, saved_paths, metadata_by_path, docs_root=settings.docs_root
+        )
+        with db.get_connection(settings.db_path) as conn:
+            db.enqueue_pending_ingest(
+                conn,
+                job_id=job_id,
+                bundle_uri=sidecar_uri,
+                state=(state or "").strip().upper() or "??",
+                source="upload",
+            )
+        return UploadResponse(
+            hoa=resolved_hoa,
+            saved_files=saved_files,
+            indexed=0,
+            skipped=0,
+            failed=0,
+            queued=True,
+            location_saved=location_saved,
+            job_id=job_id,
+            status_url=f"/ingest/status/{job_id}",
+        )
+
     background_tasks.add_task(
         _ingest_uploaded_files, resolved_hoa, saved_paths, metadata_by_path
     )
@@ -6917,6 +7062,30 @@ async def upload_documents_anonymous(
 
     projected_ocr_pages = _projected_docai_pages(saved_paths, metadata_by_path)
     _check_daily_docai_budget(projected_ocr_pages)
+
+    if _async_ingest_enabled():
+        job_id, sidecar_uri = _persist_upload_sidecar(
+            resolved_hoa, saved_paths, metadata_by_path, docs_root=settings.docs_root
+        )
+        with db.get_connection(settings.db_path) as conn:
+            db.enqueue_pending_ingest(
+                conn,
+                job_id=job_id,
+                bundle_uri=sidecar_uri,
+                state=(state or "").strip().upper() or "??",
+                source="upload-anonymous",
+            )
+        return UploadResponse(
+            hoa=resolved_hoa,
+            saved_files=saved_files,
+            indexed=0,
+            skipped=0,
+            failed=0,
+            queued=True,
+            location_saved=location_saved,
+            job_id=job_id,
+            status_url=f"/ingest/status/{job_id}",
+        )
 
     background_tasks.add_task(
         _ingest_uploaded_files, resolved_hoa, saved_paths, metadata_by_path
