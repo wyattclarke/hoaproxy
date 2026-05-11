@@ -50,7 +50,9 @@ load_dotenv(ROOT / "settings.env", override=False)
 BASE_URL = "https://hoaproxy.org"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 DEFAULT_MODEL = "deepseek/deepseek-v4-flash"
-FALLBACK_MODEL = "moonshotai/kimi-k2.6"
+# OpenRouter API key is gateway-restricted to DEFAULT_MODEL. The historical
+# Kimi K2 fallback is no longer permitted, so retries re-hit the primary.
+FALLBACK_MODEL = DEFAULT_MODEL
 
 SYSTEM = (
     "You normalize HOA / condominium / property-owners-association names. "

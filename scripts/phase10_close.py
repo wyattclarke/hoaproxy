@@ -439,8 +439,8 @@ def parse_not_hoa_ids(ledger: Path, *, min_confidence: float = 0.85) -> list[int
       - doc_count >= 1 (entity must actually have docs to validate against)
       - skip_delete is not True (caller couldn't fetch doc text)
       - reason does not contain uncertainty markers ("no document",
-        "cannot verify", etc.) — DeepSeek/Kimi sometimes return
-        is_hoa=false with such canned responses even when text was given.
+        "cannot verify", etc.) — DeepSeek sometimes returns is_hoa=false
+        with such canned responses even when text was given.
     """
     ids: list[int] = []
     if not ledger.exists():

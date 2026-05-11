@@ -32,7 +32,10 @@ from hoaware.model_usage import CallTimer, assert_discovery_model_allowed, log_l
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 DEFAULT_MODEL = "deepseek/deepseek-v4-flash"
-FALLBACK_MODEL = "moonshotai/kimi-k2.6"
+# OpenRouter API key is gateway-restricted to DEFAULT_MODEL only; secondary-model
+# fallbacks (Kimi K2, Claude Haiku, etc.) are no longer permitted. Leave as None
+# so the fallback block in validate_leads stays inert unless explicitly overridden.
+FALLBACK_MODEL = None
 TIMEOUT_SECONDS = 60
 
 
@@ -450,7 +453,7 @@ def main() -> int:
     validate.add_argument("--state", default="KS")
     validate.add_argument("--county")
     validate.add_argument("--model", default=DEFAULT_MODEL)
-    validate.add_argument("--fallback-model", default=FALLBACK_MODEL, help="Bounded quality fallback model; never used to retry a whole failed batch.")
+    validate.add_argument("--fallback-model", default=FALLBACK_MODEL, help="Deprecated. OpenRouter key is gateway-restricted to the primary model; pass only for explicit experiments where the key has been temporarily widened.")
     validate.add_argument("--batch-size", type=int, default=20)
     validate.add_argument("--min-confidence", type=float, default=0.65)
     validate.add_argument("--quality-fallback-threshold", type=float, default=0.82)

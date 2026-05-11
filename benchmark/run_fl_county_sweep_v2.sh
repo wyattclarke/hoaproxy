@@ -131,7 +131,6 @@ OPENROUTER_TIMEOUT_SECONDS=80 python benchmark/openrouter_ks_planner.py validate
   "$LEADS" --output "$VAL" --audit "$VAL_AUDIT" \
   --state FL --county "$COUNTY" \
   --model deepseek/deepseek-v4-flash \
-  --fallback-model moonshotai/kimi-k2.6 \
   --batch-size 20 || true
 
 python3 - "$VAL" "$RESULTS/validated_clean.jsonl" "$COUNTY" <<'PY'

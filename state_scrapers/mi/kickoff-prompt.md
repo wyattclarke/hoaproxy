@@ -78,7 +78,7 @@ Per-tier cost ceiling for this run: --max-docai-cost-usd {MAX_DOCAI_USD} on prep
 - Continue autonomously. Turn boundaries are not blockers — see "Autonomy Failure Mode" in the playbook. Only send a final response when there is a real blocker, the explicit budget is exhausted, or the user asks for status.
 - Do not use Gemini. Do not use Qwen Flash variants for bulk classification. Both are blocklisted.
 - Prefer deterministic search → fetch → preflight → bank over model calls.
-- Primary classifier model: deepseek/deepseek-v4-flash. Quality fallback: moonshotai/kimi-k2.6 for the bounded subset of candidates DeepSeek rejects/cannot name/scores below threshold after deterministic gates. Do not retry whole failed DeepSeek batches on Kimi.
+- Only model allowed: deepseek/deepseek-v4-flash. The OpenRouter API key is locked to this model at the gateway; Kimi K2, Claude Haiku, and any other model will be rejected. Handle DeepSeek rejections/low-confidence by falling through to deterministic gates and the Phase 10 LLM rename — do NOT add a secondary-model fallback.
 - Never send to any model: secrets, cookies, logged-in pages, resident data, private portal content, emails, payment data, or internal/work data.
 - Respect robots.txt and practical per-host delays.
 - Log all model usage to data/model_usage.jsonl. Do not log prompts, completions, document text, cookies, or API keys.

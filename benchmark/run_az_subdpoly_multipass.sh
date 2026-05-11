@@ -78,7 +78,6 @@ for ((pass=START_PASS; pass<=TOTAL_PASSES; pass++)); do
         --audit "$pass_results/validated_audit.json" \
         --state AZ --county "$DISPLAY" \
         --model deepseek/deepseek-v4-flash \
-        --fallback-model moonshotai/kimi-k2.6 \
         --batch-size 20 || true
 
     python3 - "$pass_results/validated.jsonl" "$pass_results/validated_clean.jsonl" "$DISPLAY" <<'PY'

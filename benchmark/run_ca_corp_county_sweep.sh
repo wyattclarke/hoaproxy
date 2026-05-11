@@ -61,7 +61,6 @@ else
     "$LEADS" --output "$VAL" --audit "$VAL_AUDIT" \
     --state CA --county "$DISPLAY" \
     --model deepseek/deepseek-v4-flash \
-    --fallback-model moonshotai/kimi-k2.6 \
     --batch-size 20 || true
 fi
 

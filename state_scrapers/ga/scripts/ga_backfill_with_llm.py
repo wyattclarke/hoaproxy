@@ -7,8 +7,9 @@ infer a county:
 
   1. Re-run the heuristic (in case PDF text changed since last pass).
   2. If still unrouted AND a PDF exists, send a compact text snippet to
-     DeepSeek (`deepseek/deepseek-v4-flash`, fallback `moonshotai/kimi-k2.6`)
-     and ask for `(county, repaired_name)`.
+     DeepSeek (`deepseek/deepseek-v4-flash` — the only model allowed by the
+     OpenRouter API key; retries hit the same model) and ask for
+     `(county, repaired_name)`.
   3. Validate the model's county against the canonical 159-county GA list.
   4. If both come back valid, GCS-rewrite the manifest under
      `gs://hoaproxy-bank/v1/GA/<county>/<repaired_slug>/...` (server-side
@@ -63,7 +64,9 @@ from hoaware.model_usage import CallTimer, assert_discovery_model_allowed, log_l
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 DEFAULT_MODEL = "deepseek/deepseek-v4-flash"
-FALLBACK_MODEL = "moonshotai/kimi-k2.6"
+# OpenRouter API key is gateway-restricted to DEFAULT_MODEL. The historical
+# Kimi K2 fallback is no longer permitted, so retries re-hit the primary.
+FALLBACK_MODEL = DEFAULT_MODEL
 TIMEOUT_SECONDS = 60
 
 GA_COUNTY_SET = {c.lower(): c for c in GA_COUNTIES}

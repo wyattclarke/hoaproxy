@@ -297,9 +297,8 @@ def grade_hoa(
 
     prompt = f"HOA name: {name}\nState: {hoa.get('state')}\n\nDocument text:\n{combined}"
     verdict = call_openrouter(prompt, api_key=api_key, model=model)
-    # Auto-retry with claude-haiku if the primary model returned empty/bad-json
-    if verdict.get("verdict") == "error" and model != "anthropic/claude-haiku-4.5":
-        verdict = call_openrouter(prompt, api_key=api_key, model="anthropic/claude-haiku-4.5")
+    # No secondary-model retry: the OpenRouter API key is gateway-restricted to
+    # deepseek/deepseek-v4-flash. An "error" verdict here is logged as-is.
     out.update({
         "verdict": verdict.get("verdict") or "error",
         "category": verdict.get("category"),

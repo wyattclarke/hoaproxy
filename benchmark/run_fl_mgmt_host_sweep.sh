@@ -82,7 +82,6 @@ OPENROUTER_TIMEOUT_SECONDS=80 python benchmark/openrouter_ks_planner.py validate
   "$LEADS" --output "$VAL" --audit "$VAL_AUDIT" \
   --state FL \
   --model deepseek/deepseek-v4-flash \
-  --fallback-model moonshotai/kimi-k2.6 \
   --batch-size 20 || true
 
 # Local cleanup of validated rows: dedupe against ALL prior result globs;

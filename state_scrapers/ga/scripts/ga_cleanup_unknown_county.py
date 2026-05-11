@@ -74,7 +74,9 @@ from hoaware.model_usage import CallTimer, assert_discovery_model_allowed, log_l
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 DEFAULT_MODEL = "deepseek/deepseek-v4-flash"
-FALLBACK_MODEL = "moonshotai/kimi-k2.6"
+# OpenRouter API key is gateway-restricted to DEFAULT_MODEL. The historical
+# Kimi K2 fallback is no longer permitted, so retries re-hit the primary.
+FALLBACK_MODEL = DEFAULT_MODEL
 SERPER_ENDPOINT = "https://google.serper.dev/search"
 USER_AGENT = (
     os.environ.get("HOA_DISCOVERY_USER_AGENT")

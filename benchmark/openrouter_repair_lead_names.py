@@ -26,7 +26,9 @@ from hoaware.model_usage import CallTimer, assert_discovery_model_allowed, log_l
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 DEFAULT_MODEL = "deepseek/deepseek-v4-flash"
-DEFAULT_FALLBACK = "moonshotai/kimi-k2.6"
+# OpenRouter API key is gateway-restricted to DEFAULT_MODEL only; secondary-model
+# fallbacks (Kimi K2, Claude Haiku, etc.) are no longer permitted.
+DEFAULT_FALLBACK = None
 
 
 def _client() -> OpenAI:
