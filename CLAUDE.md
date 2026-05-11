@@ -77,6 +77,8 @@ Vanilla HTML/CSS/JS — no build step, no framework. Match existing style:
 - Daily DocAI spend is capped at `DAILY_DOCAI_BUDGET_USD` (default $20); `/upload` returns 429 over the cap.
 - VALID categories: `ccr, bylaws, articles, rules, amendment, resolution, minutes, financial, insurance`. PII categories (`membership_list, ballot, violation`) are refused at the API.
 
+**Phase 2 async cutover (2026-05-11):** `ASYNC_INGEST_ENABLED=1` is now live. `/upload` and `/admin/ingest-ready-gcs` enqueue into the `pending_ingest` SQLite queue and return `202`-shape `{queued: true, job_id, status_url}`. A co-located worker process (`hoaware.ingest_worker`, started by `scripts/start_web_with_worker.sh`) drains the queue with a separate Python heap. The 75s `/upload` pacing memo no longer applies. See `docs/phase2-cutover.md` for the runbook and `docs/scaling-proposal.md` for the design. Poll job status at `GET /ingest/status/{job_id}`; admin queue stats at `GET /admin/ingest/queue-stats`; dead-letter retry at `POST /admin/ingest/retry-dead`.
+
 **No batch-import / per-corpus / queue scripts.** If you're tempted to write one, you're working against the design.
 
 For the one-time prod cleanup still pending after the migration, see `docs/ops-cleanup.md`.
