@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import os
 from pathlib import Path
 from time import perf_counter
 from typing import Iterable
@@ -34,8 +35,8 @@ logger = logging.getLogger(__name__)
 #
 #  MAX_PAGES_FOR_OCR — absolute hard guard. Catches text-extractable archives we
 #  shouldn't even read with PyPDF.
-MAX_PAGES_FOR_OCR_SCANNED = 25
-MAX_PAGES_FOR_OCR = 200
+MAX_PAGES_FOR_OCR_SCANNED = int(os.environ.get("HOA_MAX_PAGES_FOR_OCR_SCANNED", "25"))
+MAX_PAGES_FOR_OCR = int(os.environ.get("HOA_MAX_PAGES_FOR_OCR", "200"))
 
 
 def _pypdf_pages(reader: PdfReader) -> tuple[list[PageContent], list[int]]:
