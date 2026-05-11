@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Driver C — NY/NJ/CT tri-state management-company host-expansion sweep.
 #
-# Reads data/ny_tristate_management_company_domains.json, generates site:<domain>
+# Reads state_scrapers/ny/leads/ny_tristate_management_company_domains.json, generates site:<domain>
 # queries with NY-aware governing-doc patterns, sweeps via Serper, validates,
 # cleans direct-PDF leads, and probes/banks. Post-OCR state detection routes
 # each hit to its correct NY/NJ/CT bank prefix.
@@ -11,7 +11,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-DOMAINS_JSON="$ROOT/data/ny_tristate_management_company_domains.json"
+DOMAINS_JSON="$ROOT/state_scrapers/ny/leads/ny_tristate_management_company_domains.json"
 RESULTS="$ROOT/benchmark/results/ny_tristate_mgmt_host"
 QUERIES="$RESULTS/queries.txt"
 RUN_ID="ny_tristate_mgmt_host_1"

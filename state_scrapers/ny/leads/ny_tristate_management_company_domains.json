@@ -1,0 +1,95 @@
+{
+  "_comment": "Top NY/NJ/CT tri-state property management companies, hand-curated from public web presence and known management portfolios. Domains verified reachable as of 2026-05-10. For Driver C (tri-state mgmt-co host expansion) — post-OCR state routing handles cross-state hits.",
+  "_methodology": "Picked from common NYC condo/coop mgmt companies + the dominant LI suburban and Westchester managers. Many cover all three states; site:<domain> queries will surface docs across NY/NJ/CT and the bank routes by OCR-detected state.",
+  "_state_scope": "NY+NJ+CT",
+  "_generated_at": "2026-05-10",
+
+  "FirstService Residential": {
+    "domain": "fsresidential.com",
+    "notes": "National; very large NY metro + LI footprint; some Westchester; some NJ/CT"
+  },
+  "AKAM Associates": {
+    "domain": "akam.com",
+    "notes": "Manhattan luxury condos + coops; also Long Island"
+  },
+  "Charles H. Greenthal & Co": {
+    "domain": "greenthal.com",
+    "notes": "Large NYC residential mgmt (coops + condos), 100+ buildings"
+  },
+  "Wallack Management": {
+    "domain": "wallackmanagement.com",
+    "notes": "Manhattan, Brooklyn, Queens; mostly coops"
+  },
+  "Cooper Square Realty / Andrews": {
+    "domain": "coopersquare.com",
+    "notes": "NYC condos/coops; also rebranded under Andrews Building Corp"
+  },
+  "Maxwell-Kates": {
+    "domain": "maxwellkates.com",
+    "notes": "NYC coops + condos; ~150 buildings"
+  },
+  "Halstead Management Company": {
+    "domain": "halsteadmanagement.com",
+    "notes": "NYC, formerly Halstead Property; now Compass-aligned"
+  },
+  "Brown Harris Stevens": {
+    "domain": "bhsresidential.com",
+    "notes": "Manhattan condos + coops mgmt arm; also Hamptons"
+  },
+  "Douglas Elliman Property Management": {
+    "domain": "elliman.com",
+    "notes": "DE PM arm; NYC + Long Island + Hamptons + Westchester + some CT"
+  },
+  "Solstice Residential Group": {
+    "domain": "solsticeresidential.com",
+    "notes": "NYC mid-market condos + coops"
+  },
+  "Lawrence Properties": {
+    "domain": "lawrenceproperties.com",
+    "notes": "Family-owned NYC; mostly coops"
+  },
+  "Stillman Management": {
+    "domain": "stillmanmanagement.com",
+    "notes": "Long Island + Queens condos/coops"
+  },
+  "Argo Real Estate": {
+    "domain": "argo.com",
+    "notes": "NYC mid-market mgmt"
+  },
+  "Veritas Property Management": {
+    "domain": "veritaspm.com",
+    "notes": "NYC condos + coops"
+  },
+  "Sequoia Property Management": {
+    "domain": "sequoiapm.com",
+    "notes": "NYC luxury condos"
+  },
+  "Tudor Realty Services": {
+    "domain": "tudorrealty.com",
+    "notes": "NYC coops"
+  },
+  "Garthchester Realty": {
+    "domain": "garthchester.com",
+    "notes": "Westchester County HOAs/coops"
+  },
+  "Wentworth Property Management": {
+    "domain": "wentworthpm.com",
+    "notes": "NJ/NY tri-state HOAs/condos"
+  },
+  "Taylor Management": {
+    "domain": "taylormgt.com",
+    "notes": "NJ-headquartered, covers NJ/NY/PA condos/HOAs"
+  },
+  "Westminster Property Management": {
+    "domain": "westminsterpropertymanagement.com",
+    "notes": "CT residential mgmt"
+  },
+  "Imagineers": {
+    "domain": "imagineersllc.com",
+    "notes": "CT condos + HOAs"
+  },
+  "Westchester Residential Opportunities": {
+    "domain": "wroinc.org",
+    "notes": "Westchester housing — likely advocacy not mgmt; verify"
+  }
+}
