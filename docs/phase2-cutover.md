@@ -112,22 +112,20 @@ echo "[$(date -u +%FT%TZ)] PAUSE for Phase 2 cutover at T+0" \
 
 ## Flip the flag (T+0)
 
-Use **PATCH** on the single env-var, not the full env list — see
-`reference_render_api.md` (the full PUT silently drops `sync: false`
-secrets like `OPENAI_API_KEY`).
+Use **`PUT /env-vars/{key}`** — the single-var endpoint, NOT the
+full-collection PUT that silently drops `sync: false` secrets (see
+`reference_render_api.md`). Render's API returns 405 on PATCH against
+a single env-var key.
 
 ```bash
-# Find the env-var ID once:
-RENDER_SVC=srv-d62kms68alac738h67b0
-ENV_VAR_ID=$(curl -s "https://api.render.com/v1/services/$RENDER_SVC/env-vars" \
-    -H "Authorization: Bearer $RENDER_API_KEY" \
-    | jq -r '.[] | select(.envVar.key=="ASYNC_INGEST_ENABLED") | .envVar.id')
+set -a; source settings.env 2>/dev/null; set +a   # loads RENDER_API_KEY + RENDER_SERVICE_ID
 
-# Flip to 1:
-curl -X PATCH "https://api.render.com/v1/services/$RENDER_SVC/env-vars/ASYNC_INGEST_ENABLED" \
+# Flip to 1 (cutover):
+curl -X PUT "https://api.render.com/v1/services/$RENDER_SERVICE_ID/env-vars/ASYNC_INGEST_ENABLED" \
     -H "Authorization: Bearer $RENDER_API_KEY" \
     -H "Content-Type: application/json" \
     -d '{"value": "1"}'
+# 200 OK -> {"key":"ASYNC_INGEST_ENABLED","value":"1"}
 ```
 
 Render redeploys in ~2 min. Watch the service log for:
@@ -228,8 +226,9 @@ curl -X POST "https://hoaproxy.org/admin/ingest/retry-dead" \
 If `done` count stops growing or the web service shows new errors:
 
 ```bash
-curl -X PATCH "https://api.render.com/v1/services/$RENDER_SVC/env-vars/ASYNC_INGEST_ENABLED" \
+curl -X PUT "https://api.render.com/v1/services/$RENDER_SERVICE_ID/env-vars/ASYNC_INGEST_ENABLED" \
     -H "Authorization: Bearer $RENDER_API_KEY" \
+    -H "Content-Type: application/json" \
     -d '{"value": "0"}'
 ```
 
@@ -239,8 +238,8 @@ pending rows in the background until the queue empties — no row is
 lost.
 
 For an emergency stop of the worker only (e.g. it's eating RAM and you
-don't want to redeploy yet), set `INGEST_WORKER_ENABLED=0` via PATCH
-and the next container restart will start uvicorn alone.
+don't want to redeploy yet), set `INGEST_WORKER_ENABLED=0` via the
+single-var PUT and the next container restart will start uvicorn alone.
 
 ## Done criteria
 
