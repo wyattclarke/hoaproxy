@@ -206,14 +206,20 @@ except Exception:
         response=$(curl -sS -X POST "$BASE_URL/admin/ingest-ready-gcs?state=AZ&limit=50" \
             -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
             --max-time 900 --connect-timeout 30 || echo '{"error":"curl_failed"}')
-        log "  import loop $i: $(echo "$response" | python3 -c 'import json,sys; r=json.loads(sys.stdin.read()); print(f"found={r.get(\"found\")} results={len(r.get(\"results\") or [])}")' 2>/dev/null || echo "[parse error]")"
-        # Count imported in this loop
+        log "  import loop $i: $(echo "$response" | python3 -c 'import json,sys; r=json.loads(sys.stdin.read()); print(f"async={r.get(\"async\")} found={r.get(\"found\")} enqueued={r.get(\"enqueued\")} results={len(r.get(\"results\") or [])}")' 2>/dev/null || echo "[parse error]")"
+        # Phase 2 async: results are job_ids (no 'imported' status until worker drains).
+        # Pre-cutover sync: results have status='imported'.
+        # Count both correctly.
         imported_now=$(echo "$response" | python3 -c "
 import json, sys
 try:
     r = json.loads(sys.stdin.read())
-    results = r.get('results') or []
-    print(sum(1 for x in results if (x.get('status') or '').lower() == 'imported'))
+    if r.get('async'):
+        # Async: count enqueued (jobs sent to worker, will drain shortly).
+        print(int(r.get('enqueued') or 0))
+    else:
+        results = r.get('results') or []
+        print(sum(1 for x in results if (x.get('status') or '').lower() == 'imported'))
 except Exception:
     print(0)
 " 2>/dev/null || echo 0)
