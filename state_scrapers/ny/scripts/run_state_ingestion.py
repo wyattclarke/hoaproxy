@@ -112,36 +112,56 @@ def cmd_prepare(args: argparse.Namespace) -> int:
 
 
 def cmd_import(args: argparse.Namespace) -> int:
-    """Phase 7-8: drain prepared bundles into live via /admin/ingest-ready-gcs."""
+    """Phase 7-8: drain prepared bundles into live via /admin/ingest-ready-gcs.
+
+    The endpoint is async — each call returns ``found`` (matched bundles) and
+    ``enqueued`` (jobs queued for ingest). We loop until ``found == 0``.
+    """
     token = _admin_token()
     calls = 0
-    imported = 0
+    total_enqueued = 0
     while calls < args.max_calls:
-        r = requests.post(
-            f"{LIVE_BASE_URL}/admin/ingest-ready-gcs",
-            headers={
-                "Authorization": f"Bearer {token}",
-                "Content-Type": "application/json",
-            },
-            params={"state": STATE, "limit": INGEST_LIMIT_PER_CALL},
-            timeout=600,
-        )
+        try:
+            r = requests.post(
+                f"{LIVE_BASE_URL}/admin/ingest-ready-gcs",
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Content-Type": "application/json",
+                },
+                params={"state": STATE, "limit": INGEST_LIMIT_PER_CALL},
+                timeout=600,
+            )
+        except requests.exceptions.RequestException as e:
+            print(f"[import] call={calls} request error: {e}", flush=True)
+            time.sleep(UPLOAD_PACE_SECONDS)
+            calls += 1
+            continue
         if r.status_code != 200:
             print(f"[import] call={calls} HTTP {r.status_code}: {r.text[:200]}",
                   flush=True)
+            # 5xx: brief backoff and retry; 4xx: bail.
+            if 500 <= r.status_code < 600:
+                time.sleep(UPLOAD_PACE_SECONDS)
+                calls += 1
+                continue
             break
         body = r.json()
-        imported_this = int(body.get("imported", 0))
-        remaining = body.get("remaining", "?")
-        print(f"[import] call={calls} imported={imported_this} remaining={remaining}",
-              flush=True)
-        imported += imported_this
+        found = int(body.get("found", 0))
+        enqueued = int(body.get("enqueued", 0))
+        skipped = body.get("skipped", []) or []
+        print(
+            f"[import] call={calls} found={found} enqueued={enqueued} "
+            f"skipped={len(skipped)}",
+            flush=True,
+        )
+        total_enqueued += enqueued
         calls += 1
-        if imported_this == 0:
+        if found == 0:
             print("[import] no more bundles; done", flush=True)
             break
         time.sleep(UPLOAD_PACE_SECONDS)
-    print(f"[import] total imported={imported} across {calls} calls", flush=True)
+    print(f"[import] total enqueued={total_enqueued} across {calls} calls",
+          flush=True)
     return 0
 
 
