@@ -11,7 +11,7 @@
 #   bash deploy/cutover-dns.sh         # apply the flip
 #   bash deploy/cutover-dns.sh --rollback  # revert to Render CNAMEs
 
-set -euo pipefail
+set -eo pipefail
 
 cd "$(dirname "$0")/.."
 set -a
