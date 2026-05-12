@@ -71,19 +71,9 @@ INGEST_LIMIT_PER_CALL = 10  # CLAUDE.md memory: 502s above this
 
 
 def _admin_token() -> str:
-    """Fetch the production admin token via Render env-vars API."""
-    api_key = os.environ.get("RENDER_API_KEY")
-    sid = os.environ.get("RENDER_SERVICE_ID")
-    if api_key and sid:
-        r = requests.get(
-            f"https://api.render.com/v1/services/{sid}/env-vars",
-            headers={"Authorization": f"Bearer {api_key}"},
-            timeout=30,
-        )
-        for env in r.json():
-            e = env.get("envVar", env)
-            if e.get("key") == "JWT_SECRET" and e.get("value"):
-                return e["value"]
+    """Return the admin bearer. After the Hetzner migration the JWT_SECRET
+    in ``settings.env`` is the canonical admin credential; the older
+    Render env-vars lookup is no longer needed."""
     token = os.environ.get("HOAPROXY_ADMIN_BEARER") or os.environ.get("JWT_SECRET")
     if not token:
         raise SystemExit("no admin token (set HOAPROXY_ADMIN_BEARER or JWT_SECRET)")
