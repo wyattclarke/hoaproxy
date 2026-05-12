@@ -9,8 +9,8 @@ wall-clock at first checkpoint).
 
 ## TL;DR
 
-- **Outcome**: 13,475 NY entities live on hoaproxy.org, **1,200 with documents**
-  (8.91% coverage), up from 12,282 / 2 with docs at run start. **+1,198 new
+- **Outcome**: 13,598 NY entities live on hoaproxy.org, **1,323 with documents**
+  (9.73% coverage), up from 12,282 / 2 with docs at run start. **+1,321 new
   HOAs got their first document** during this pass.
 - **Bank coverage**: 1,925 banked manifests across 14 county slugs (NYC 5
   boroughs + Westchester + Nassau + Suffolk + Rockland + Putnam + Monroe +
@@ -161,11 +161,11 @@ Comparable to FL ($0.022/live HOA) and CT ($0.022/live HOA).
   "registry_seed": 12369,
   "bank_manifests": 1925,
   "bank_pdfs": 2027,
-  "ingest_ready_bundles": 1609,
-  "live_profiles": 13475,
-  "live_with_docs": 1200,
+  "ingest_ready_bundles": 1611,
+  "live_profiles": 13598,
+  "live_with_docs": 1323,
   "live_without_docs": 12275,
-  "with_docs_pct": 8.91,
+  "with_docs_pct": 9.73,
   "by_county_bank_distribution": {
     "kings": 693,
     "queens": 613,
