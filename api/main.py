@@ -2286,6 +2286,13 @@ _INDEX_STATES_TTL = 300
 
 
 def _get_index_state_counts() -> list[dict]:
+    """State-pill counts for the homepage.
+
+    Counts only HOAs that have at least one document on file — stubs without
+    documents are excluded so the homepage advertises browseable content. Full
+    counts (including stubs) remain available on `/hoa/{state}/` and via the
+    `/hoas/states` API for scraper/audit tooling.
+    """
     now = time.time()
     cached_ts = _INDEX_STATES_CACHE["ts"]
     if isinstance(cached_ts, (int, float)) and now - cached_ts < _INDEX_STATES_TTL:
@@ -2294,7 +2301,7 @@ def _get_index_state_counts() -> list[dict]:
             return cached
     settings = load_settings()
     with db.get_connection(settings.db_path) as conn:
-        rows = db.list_hoa_states(conn)
+        rows = db.list_hoa_states(conn, with_docs=True)
     _INDEX_STATES_CACHE["ts"] = now
     _INDEX_STATES_CACHE["states"] = rows
     return rows
@@ -5046,102 +5053,129 @@ def admin_clear_hoa_docs(request: Request, body: dict):
 
 @app.post("/admin/snapshot-hoa-docs-to-gcs")
 def admin_snapshot_hoa_docs_to_gcs(request: Request, body: dict | None = None):
-    """One-shot mirror of HOA_DOCS_ROOT to gs://hoaproxy-backups/hoa_docs/.
+    """Mirror HOA_DOCS_ROOT into gs://{bucket}/hoa_docs/ via a detached worker.
 
-    Used during the Render → Hetzner migration to capture the binary doc tree
-    that lives only on Render's persistent disk. The restore script on the new
-    host downloads from the same prefix.
+    The actual upload runs in a separate process so Render's ~5-minute HTTP
+    frontend timeout doesn't kill it. The endpoint returns immediately with
+    a stamp; tail progress with /admin/snapshot-hoa-docs-log?stamp=....
 
     Body (all optional):
       {
-        "prefix": "",                 # only upload paths starting with this (relative to docs_root)
-        "dry_run": false,
-        "max_files": null,            # cap for testing; null = no cap
-        "skip_existing": true         # skip blobs already present in GCS with the same size
+        "prefix": "",   # only walk this sub-path relative to HOA_DOCS_ROOT
+        "dry_run": false  # if true, return what would happen without spawning
       }
 
-    Returns {uploaded, skipped, errors, total_bytes, elapsed_sec, sample}.
-    Idempotent — safe to re-run; only new/changed files are uploaded.
+    Returns {status, stamp, log_path, pid, bucket, prefix}.
+    Idempotent — the worker skips files already in GCS at the same size.
+    Safe to call multiple times; each call starts a new worker (a previous
+    worker may still be running). For dry-run sizing, set dry_run=true and
+    the endpoint returns inline counts without spawning anything.
     """
     _require_admin(request)
-    import time as _time
+    import shutil as _shutil
+    import subprocess as _sp
+    import sys as _sys
+    from datetime import datetime, timezone
     from pathlib import Path as _Path
 
     body = body or {}
     prefix = (body.get("prefix") or "").strip().lstrip("/")
     dry_run = bool(body.get("dry_run", False))
-    max_files = body.get("max_files")
-    skip_existing = bool(body.get("skip_existing", True))
-
-    try:
-        from google.cloud import storage as _gcs  # type: ignore
-    except ImportError:
-        raise HTTPException(status_code=500, detail="google-cloud-storage not installed")
 
     docs_root = _Path(os.environ.get("HOA_DOCS_ROOT", "hoa_docs")).resolve()
     if not docs_root.exists():
         raise HTTPException(status_code=500, detail=f"HOA_DOCS_ROOT does not exist: {docs_root}")
 
     bucket_name = os.environ.get("HOA_BACKUP_GCS_BUCKET", "hoaproxy-backups")
-    client = _gcs.Client()
-    bucket = client.bucket(bucket_name)
 
-    started = _time.time()
-    uploaded = 0
-    skipped = 0
-    errors = 0
-    total_bytes = 0
-    sample: List[dict] = []
-
-    existing_sizes: dict[str, int] = {}
-    if skip_existing:
-        try:
-            for blob in client.list_blobs(bucket, prefix=f"hoa_docs/{prefix}" if prefix else "hoa_docs/"):
-                existing_sizes[blob.name] = blob.size or 0
-        except Exception as exc:
-            return {"error": f"failed to list existing blobs: {exc}"}
-
-    walk_root = docs_root / prefix if prefix else docs_root
-    if not walk_root.exists():
-        return {"uploaded": 0, "skipped": 0, "errors": 0, "total_bytes": 0,
-                "elapsed_sec": 0.0, "note": f"prefix {prefix!r} not present under docs_root"}
-
-    for path in walk_root.rglob("*"):
-        if not path.is_file():
-            continue
-        if max_files is not None and (uploaded + skipped) >= int(max_files):
-            break
-
-        try:
-            rel = path.relative_to(docs_root).as_posix()
-            blob_name = f"hoa_docs/{rel}"
-            size = path.stat().st_size
-
-            if skip_existing and existing_sizes.get(blob_name, -1) == size:
-                skipped += 1
+    # Dry-run: walk + count without spawning.
+    if dry_run:
+        walk_root = docs_root / prefix if prefix else docs_root
+        count = 0
+        total_bytes = 0
+        for path in walk_root.rglob("*"):
+            if not path.is_file():
                 continue
+            count += 1
+            try:
+                total_bytes += path.stat().st_size
+            except OSError:
+                pass
+            if count >= 100000:
+                break
+        return {
+            "dry_run": True,
+            "bucket": bucket_name,
+            "prefix": f"hoa_docs/{prefix}" if prefix else "hoa_docs/",
+            "files_walked": count,
+            "approx_bytes": total_bytes,
+            "note": "dry_run capped at 100k files; actual run uses the worker",
+        }
 
-            if not dry_run:
-                blob = bucket.blob(blob_name)
-                blob.upload_from_filename(str(path))
-            uploaded += 1
-            total_bytes += size
-            if len(sample) < 5:
-                sample.append({"path": rel, "bytes": size})
-        except Exception as exc:
-            errors += 1
-            logger.warning(f"snapshot upload failed for {path}: {exc}")
+    settings = load_settings()
+    db_dir = os.path.dirname(settings.db_path) or "."
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    log_path = os.path.join(db_dir, f"_snapshot-{stamp}.log")
+
+    helper = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "scripts", "snapshot_hoa_docs_worker.py")
+    )
+
+    cmd: list[str] = []
+    nice_path = _shutil.which("nice")
+    ionice_path = _shutil.which("ionice")
+    if nice_path:
+        cmd.extend([nice_path, "-n", "19"])
+    if ionice_path:
+        cmd.extend([ionice_path, "-c", "3"])
+    cmd.extend([_sys.executable, helper, str(docs_root), bucket_name, log_path])
+    if prefix:
+        cmd.append(prefix)
+
+    log_fh = open(log_path, "wb")
+    try:
+        proc = _sp.Popen(
+            cmd,
+            stdout=log_fh,
+            stderr=_sp.STDOUT,
+            start_new_session=True,
+            close_fds=True,
+        )
+    finally:
+        log_fh.close()
 
     return {
-        "dry_run": dry_run,
+        "status": "started",
+        "stamp": stamp,
+        "pid": proc.pid,
         "bucket": bucket_name,
         "prefix": f"hoa_docs/{prefix}" if prefix else "hoa_docs/",
-        "uploaded": uploaded,
-        "skipped": skipped,
-        "errors": errors,
-        "total_bytes": total_bytes,
-        "elapsed_sec": round(_time.time() - started, 1),
-        "sample": sample,
+        "log_path": log_path,
+        "note": "running in detached child process; tail with "
+                f"GET /admin/snapshot-hoa-docs-log?stamp={stamp}",
+    }
+
+
+@app.get("/admin/snapshot-hoa-docs-log")
+def admin_snapshot_hoa_docs_log(request: Request, stamp: str, tail_kb: int = 16):
+    """Return the tail of a /admin/snapshot-hoa-docs-to-gcs worker log."""
+    _require_admin(request)
+    settings = load_settings()
+    db_dir = os.path.dirname(settings.db_path) or "."
+    log_path = os.path.join(db_dir, f"_snapshot-{stamp}.log")
+    if not os.path.exists(log_path):
+        raise HTTPException(status_code=404, detail=f"no such snapshot log: {log_path}")
+    size = os.path.getsize(log_path)
+    read = min(size, max(1, int(tail_kb)) * 1024)
+    with open(log_path, "rb") as f:
+        if size > read:
+            f.seek(size - read)
+        data = f.read()
+    return {
+        "stamp": stamp,
+        "log_path": log_path,
+        "size": size,
+        "tail": data.decode("utf-8", errors="replace"),
     }
 
 
@@ -6602,12 +6636,20 @@ def list_hoa_summary(
     state: str | None = None,
     limit: int = 50,
     offset: int = 0,
+    with_docs: bool = False,
 ) -> HoaSummaryPage:
     _check_rate_limit(request, limit=30)
     limit = min(limit, 500)
     settings = load_settings()
     with db.get_connection(settings.db_path) as conn:
-        page = db.list_hoa_summaries(conn, q=q, state=state, limit=limit, offset=offset)
+        page = db.list_hoa_summaries(
+            conn,
+            q=q,
+            state=state,
+            limit=limit,
+            offset=offset,
+            with_docs=with_docs,
+        )
     return HoaSummaryPage(
         results=[HoaSummary(**row) for row in page["results"]],
         total=page["total"],
@@ -6620,11 +6662,14 @@ class HoaStateCount(BaseModel):
 
 
 @app.get("/hoas/states", response_model=List[HoaStateCount])
-def list_hoa_states(request: Request) -> List[HoaStateCount]:
+def list_hoa_states(request: Request, with_docs: bool = False) -> List[HoaStateCount]:
     _check_rate_limit(request, limit=30)
     settings = load_settings()
     with db.get_connection(settings.db_path) as conn:
-        return [HoaStateCount(**row) for row in db.list_hoa_states(conn)]
+        return [
+            HoaStateCount(**row)
+            for row in db.list_hoa_states(conn, with_docs=with_docs)
+        ]
 
 
 @app.get("/hoas/map-points", response_model=List[HoaMapPoint])
