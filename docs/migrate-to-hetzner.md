@@ -53,14 +53,19 @@ new host has something to pull from.
    ```
    The endpoint is idempotent — re-run if the connection drops mid-way.
 
-3. **Take a fresh full DB snapshot to GCS** (`POST /admin/backup` already does this):
+3. **Take a fresh full DB snapshot to GCS** — use `/admin/backup-full`, NOT
+   `/admin/backup` (the latter only dumps the precious-tables SQL subset):
    ```bash
-   curl -s -X POST "https://hoaproxy.org/admin/backup" \
+   curl -s -X POST "https://hoaproxy.org/admin/backup-full" \
      -H "Authorization: Bearer $JWT_SECRET"
    ```
-   Confirm a new `gs://hoaproxy-backups/db/hoa_index-<ts>.db` blob exists:
+   The response includes `stamp` and `log_path`. Detached worker runs in
+   the background on Render — poll for completion either by tailing the
+   log or by checking the GCS blob:
    ```bash
-   gsutil ls -l "gs://hoaproxy-backups/db/" | tail -3
+   curl -s "https://hoaproxy.org/admin/backup-full-log?stamp=<STAMP>" \
+     -H "Authorization: Bearer $JWT_SECRET"
+   gsutil ls -l "gs://hoaproxy-backups/db/hoa_index-<STAMP>.db"
    ```
 
 ---
