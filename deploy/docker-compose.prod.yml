@@ -1,0 +1,44 @@
+# Production docker-compose for the Hetzner host. Build the image from the
+# repo on the host (no registry needed) and mount data from the host filesystem.
+# See docs/migrate-to-hetzner.md for the full runbook.
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: hoaproxy:local
+    container_name: hoaproxy-app
+    restart: unless-stopped
+    # Bind to localhost only — Caddy proxies from :443 → :8000 on the host.
+    ports:
+      - "127.0.0.1:8000:8000"
+    env_file:
+      - /etc/hoaproxy/hoaproxy.env
+    environment:
+      - PORT=8000
+      - HOA_DOCS_ROOT=/app/hoa_docs
+      - HOA_DB_PATH=/app/data/hoa_index.db
+      - HOA_BANK_GCS_BUCKET=hoaproxy-bank
+    volumes:
+      # DB lives on the local NVMe (host /var/lib/hoaproxy/data).
+      - /var/lib/hoaproxy/data:/app/data
+      # hoa_docs lives on the attached cloud volume (host /var/lib/hoaproxy/hoa_docs).
+      - /var/lib/hoaproxy/hoa_docs:/app/hoa_docs
+      # GCP service-account key (read-only). Used by google.cloud.storage
+      # for backups and by DocAI client when enabled.
+      - /etc/hoaproxy/gcp-sa.json:/app/gcp-sa.json:ro
+    # Healthcheck — Docker restarts the container if /healthz doesn't return 200.
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    # Logging — caps at ~200 MB per container so we don't fill disk on a
+    # crash loop.
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "4"

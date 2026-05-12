@@ -1,0 +1,4 @@
+# /etc/cron.d/hoaproxy-backup — daily backup at 03:17 UTC
+SHELL=/bin/bash
+PATH=/usr/local/bin:/usr/bin:/bin
+17 3 * * * hoaproxy /home/hoaproxy/hoaproxy/deploy/backup.sh >> /var/log/hoaproxy/backup.log 2>&1

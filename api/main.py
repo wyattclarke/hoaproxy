@@ -5044,6 +5044,107 @@ def admin_clear_hoa_docs(request: Request, body: dict):
     }
 
 
+@app.post("/admin/snapshot-hoa-docs-to-gcs")
+def admin_snapshot_hoa_docs_to_gcs(request: Request, body: dict | None = None):
+    """One-shot mirror of HOA_DOCS_ROOT to gs://hoaproxy-backups/hoa_docs/.
+
+    Used during the Render → Hetzner migration to capture the binary doc tree
+    that lives only on Render's persistent disk. The restore script on the new
+    host downloads from the same prefix.
+
+    Body (all optional):
+      {
+        "prefix": "",                 # only upload paths starting with this (relative to docs_root)
+        "dry_run": false,
+        "max_files": null,            # cap for testing; null = no cap
+        "skip_existing": true         # skip blobs already present in GCS with the same size
+      }
+
+    Returns {uploaded, skipped, errors, total_bytes, elapsed_sec, sample}.
+    Idempotent — safe to re-run; only new/changed files are uploaded.
+    """
+    _require_admin(request)
+    import time as _time
+    from pathlib import Path as _Path
+
+    body = body or {}
+    prefix = (body.get("prefix") or "").strip().lstrip("/")
+    dry_run = bool(body.get("dry_run", False))
+    max_files = body.get("max_files")
+    skip_existing = bool(body.get("skip_existing", True))
+
+    try:
+        from google.cloud import storage as _gcs  # type: ignore
+    except ImportError:
+        raise HTTPException(status_code=500, detail="google-cloud-storage not installed")
+
+    docs_root = _Path(os.environ.get("HOA_DOCS_ROOT", "hoa_docs")).resolve()
+    if not docs_root.exists():
+        raise HTTPException(status_code=500, detail=f"HOA_DOCS_ROOT does not exist: {docs_root}")
+
+    bucket_name = os.environ.get("HOA_BACKUP_GCS_BUCKET", "hoaproxy-backups")
+    client = _gcs.Client()
+    bucket = client.bucket(bucket_name)
+
+    started = _time.time()
+    uploaded = 0
+    skipped = 0
+    errors = 0
+    total_bytes = 0
+    sample: List[dict] = []
+
+    existing_sizes: dict[str, int] = {}
+    if skip_existing:
+        try:
+            for blob in client.list_blobs(bucket, prefix=f"hoa_docs/{prefix}" if prefix else "hoa_docs/"):
+                existing_sizes[blob.name] = blob.size or 0
+        except Exception as exc:
+            return {"error": f"failed to list existing blobs: {exc}"}
+
+    walk_root = docs_root / prefix if prefix else docs_root
+    if not walk_root.exists():
+        return {"uploaded": 0, "skipped": 0, "errors": 0, "total_bytes": 0,
+                "elapsed_sec": 0.0, "note": f"prefix {prefix!r} not present under docs_root"}
+
+    for path in walk_root.rglob("*"):
+        if not path.is_file():
+            continue
+        if max_files is not None and (uploaded + skipped) >= int(max_files):
+            break
+
+        try:
+            rel = path.relative_to(docs_root).as_posix()
+            blob_name = f"hoa_docs/{rel}"
+            size = path.stat().st_size
+
+            if skip_existing and existing_sizes.get(blob_name, -1) == size:
+                skipped += 1
+                continue
+
+            if not dry_run:
+                blob = bucket.blob(blob_name)
+                blob.upload_from_filename(str(path))
+            uploaded += 1
+            total_bytes += size
+            if len(sample) < 5:
+                sample.append({"path": rel, "bytes": size})
+        except Exception as exc:
+            errors += 1
+            logger.warning(f"snapshot upload failed for {path}: {exc}")
+
+    return {
+        "dry_run": dry_run,
+        "bucket": bucket_name,
+        "prefix": f"hoa_docs/{prefix}" if prefix else "hoa_docs/",
+        "uploaded": uploaded,
+        "skipped": skipped,
+        "errors": errors,
+        "total_bytes": total_bytes,
+        "elapsed_sec": round(_time.time() - started, 1),
+        "sample": sample,
+    }
+
+
 @app.post("/admin/create-stub-hoas")
 def admin_create_stub_hoas(request: Request, body: dict):
     """Bulk-create or upsert HOAs *without* requiring documents. Used for
