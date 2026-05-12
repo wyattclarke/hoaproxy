@@ -72,58 +72,102 @@ def main() -> int:
                 print(f"[{_ts()}]   listed {len(existing):,} existing blobs", flush=True)
         print(f"[{_ts()}] existing blob count: {len(existing):,}", flush=True)
 
-        # 2. Walk + upload.
+        # 2. Walk + upload in parallel.
         walk_root = docs_root / prefix if prefix else docs_root
         if not walk_root.exists():
             print(f"[{_ts()}] walk root {walk_root} does not exist; nothing to do", flush=True)
             return 0
 
-        uploaded = 0
-        skipped = 0
-        errors = 0
-        total_bytes = 0
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        import threading
+
+        counters = {"uploaded": 0, "skipped": 0, "errors": 0, "total_bytes": 0}
+        counters_lock = threading.Lock()
+
+        # MAX_WORKERS: 16 threads gives us ~50–80 MiB/s on Render's 1 CPU plan.
+        # Higher hits diminishing returns (GIL + per-thread socket cost).
+        max_workers = int(os.environ.get("SNAPSHOT_PARALLEL", "16"))
+
+        def _upload_one(path: Path) -> tuple[str, int]:
+            rel = path.relative_to(docs_root).as_posix()
+            blob_name = f"hoa_docs/{rel}"
+            size = path.stat().st_size
+            if existing.get(blob_name, -1) == size:
+                return ("skipped", size)
+            bucket.blob(blob_name).upload_from_filename(str(path), timeout=600)
+            return ("uploaded", size)
+
         last_beat = time.monotonic()
-        files_since_beat = 0
 
-        for path in walk_root.rglob("*"):
-            if not path.is_file():
-                continue
-            try:
-                rel = path.relative_to(docs_root).as_posix()
-                blob_name = f"hoa_docs/{rel}"
-                size = path.stat().st_size
+        def _beat() -> None:
+            nonlocal last_beat
+            elapsed = time.monotonic() - started
+            with counters_lock:
+                up, sk, er, tb = (counters["uploaded"], counters["skipped"],
+                                  counters["errors"], counters["total_bytes"])
+            rate_mibs = (tb / max(elapsed, 1)) / (1024 * 1024)
+            print(
+                f"[{_ts()}] heartbeat uploaded={up:,} skipped={sk:,} errors={er} "
+                f"bytes={tb:,} elapsed={elapsed:.0f}s rate={rate_mibs:.2f}MiB/s "
+                f"workers={max_workers}",
+                flush=True,
+            )
+            last_beat = time.monotonic()
 
-                if existing.get(blob_name, -1) == size:
-                    skipped += 1
-                else:
-                    bucket.blob(blob_name).upload_from_filename(str(path), timeout=600)
-                    uploaded += 1
-                    total_bytes += size
+        files_iter = (p for p in walk_root.rglob("*") if p.is_file())
 
-                files_since_beat += 1
-                now = time.monotonic()
-                if files_since_beat >= 500 or (now - last_beat) >= 30:
-                    elapsed = now - started
-                    rate_mibs = (total_bytes / max(elapsed, 1)) / (1024 * 1024)
-                    print(
-                        f"[{_ts()}] heartbeat uploaded={uploaded:,} skipped={skipped:,} "
-                        f"errors={errors} bytes={total_bytes:,} "
-                        f"elapsed={elapsed:.0f}s rate={rate_mibs:.2f}MiB/s",
-                        flush=True,
-                    )
-                    last_beat = now
-                    files_since_beat = 0
-            except Exception as exc:
-                errors += 1
-                print(f"[{_ts()}] upload-error path={path} err={exc}", flush=True)
-                if errors > 100:
-                    print(f"[{_ts()}] too many errors; aborting", flush=True)
-                    return 1
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            in_flight: dict = {}
+            target_qd = max_workers * 4  # keep ~64 ops queued
+
+            def _drain_completed(timeout: float | None = None) -> None:
+                done = []
+                for fut in list(in_flight.keys()):
+                    if fut.done():
+                        done.append(fut)
+                if not done and timeout is not None:
+                    for fut in as_completed(list(in_flight.keys()), timeout=timeout):
+                        done.append(fut)
+                        break
+                for fut in done:
+                    path = in_flight.pop(fut)
+                    try:
+                        action, size = fut.result()
+                        with counters_lock:
+                            counters[action] += 1
+                            if action == "uploaded":
+                                counters["total_bytes"] += size
+                    except Exception as exc:
+                        with counters_lock:
+                            counters["errors"] += 1
+                        print(f"[{_ts()}] upload-error path={path} err={exc}", flush=True)
+
+            for path in files_iter:
+                fut = pool.submit(_upload_one, path)
+                in_flight[fut] = path
+                # Bounded queue: don't outpace workers
+                if len(in_flight) >= target_qd:
+                    _drain_completed(timeout=5.0)
+                if (time.monotonic() - last_beat) >= 30:
+                    _beat()
+                with counters_lock:
+                    if counters["errors"] > 100:
+                        print(f"[{_ts()}] too many errors; aborting", flush=True)
+                        return 1
+
+            # Drain remaining
+            while in_flight:
+                _drain_completed(timeout=5.0)
+                if (time.monotonic() - last_beat) >= 30:
+                    _beat()
 
         elapsed = time.monotonic() - started
+        with counters_lock:
+            up, sk, er, tb = (counters["uploaded"], counters["skipped"],
+                              counters["errors"], counters["total_bytes"])
         print(
-            f"[{_ts()}] snapshot-hoa-docs DONE uploaded={uploaded:,} skipped={skipped:,} "
-            f"errors={errors} bytes={total_bytes:,} elapsed={elapsed:.0f}s",
+            f"[{_ts()}] snapshot-hoa-docs DONE uploaded={up:,} skipped={sk:,} "
+            f"errors={er} bytes={tb:,} elapsed={elapsed:.0f}s",
             flush=True,
         )
         return 0
