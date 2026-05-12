@@ -26,10 +26,58 @@ log = logging.getLogger(__name__)
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+import requests.exceptions as _requests_exc
 from google.api_core import exceptions as gcs_exceptions
 from google.cloud import storage as gcs
 
 from hoaware import db
+
+# Errors we treat as transient and retry on. The google-cloud-storage library
+# already retries HTTP 5xx with its built-in policy, but socket-level
+# ReadTimeout / ConnectionError leak through verbatim and crash prepare ~every
+# 2 hours. Retry those, plus the api_core wrappers, with bounded exponential
+# backoff.
+_GCS_TRANSIENT_ERRORS: tuple[type[BaseException], ...] = (
+    _requests_exc.ConnectionError,
+    _requests_exc.ReadTimeout,
+    _requests_exc.Timeout,
+    _requests_exc.ChunkedEncodingError,
+    ConnectionResetError,
+    gcs_exceptions.ServiceUnavailable,
+    gcs_exceptions.GatewayTimeout,
+    gcs_exceptions.InternalServerError,
+    gcs_exceptions.TooManyRequests,
+    gcs_exceptions.RetryError,
+)
+_GCS_RETRY_DELAYS = (2.0, 4.0, 8.0, 16.0, 32.0)
+
+
+def _with_gcs_retry(op_name: str, fn, *args, **kwargs):
+    """Call fn(*args, **kwargs); on transient GCS errors, retry up to 5 times
+    with exponential backoff (2s, 4s, 8s, 16s, 32s) and re-raise after.
+
+    op_name should identify the call site (e.g. the gs:// URI) so retries are
+    forensically traceable.
+    """
+    last_exc: BaseException | None = None
+    for attempt, delay in enumerate([0.0, *_GCS_RETRY_DELAYS]):
+        if delay:
+            log.warning(
+                "gcs_transient_retry op=%s attempt=%d sleep=%.1fs last=%s",
+                op_name,
+                attempt,
+                delay,
+                type(last_exc).__name__ if last_exc else "n/a",
+            )
+            time.sleep(delay)
+        try:
+            return fn(*args, **kwargs)
+        except _GCS_TRANSIENT_ERRORS as exc:
+            last_exc = exc
+            continue
+    assert last_exc is not None
+    log.error("gcs_transient_giveup op=%s err=%s", op_name, last_exc)
+    raise last_exc
 from hoaware.bank import DEFAULT_BUCKET as DEFAULT_BANK_BUCKET
 from hoaware.bank import _inspect_pdf, slugify
 from hoaware.config import load_settings
@@ -97,7 +145,12 @@ def _manifest_parts(blob_name: str) -> tuple[str, str, str]:
 
 
 def _load_json_blob(bucket, blob_name: str) -> dict[str, Any]:
-    return json.loads(bucket.blob(blob_name).download_as_bytes())
+    uri = f"gs://{bucket.name}/{blob_name}"
+    payload = _with_gcs_retry(
+        f"download_as_bytes:{uri}",
+        bucket.blob(blob_name).download_as_bytes,
+    )
+    return json.loads(payload)
 
 
 def _load_json_file(path: Path) -> dict[str, Any]:
@@ -317,10 +370,28 @@ def _live_checksums() -> set[str]:
     return {str(row["checksum"]) for row in rows}
 
 
+def _iter_blobs_with_retry(bucket, prefix: str):
+    """Yield blobs under prefix, retrying transient errors page-by-page.
+
+    google.cloud.storage's list_blobs returns a lazy iterator that fetches one
+    HTTP page at a time; any of those page fetches can raise the same
+    socket-level errors as upload. Wrap each .__next__() call in our retry
+    helper so a transient hiccup does not crash the whole listing.
+    """
+    op = f"list_blobs:gs://{bucket.name}/{prefix}"
+    it = iter(_with_gcs_retry(op, bucket.list_blobs, prefix=prefix))
+    while True:
+        try:
+            blob = _with_gcs_retry(op, next, it)
+        except StopIteration:
+            return
+        yield blob
+
+
 def _prepared_shas(bucket, state: str) -> set[str]:
     out: set[str] = set()
     prefix = f"{VERSION_PREFIX}/{state}/"
-    for blob in bucket.list_blobs(prefix=prefix):
+    for blob in _iter_blobs_with_retry(bucket, prefix):
         name = blob.name
         if "/docs/" not in name or not name.endswith(".pdf"):
             continue
@@ -474,21 +545,31 @@ def _write_prepared_bundle(
     because the bundle already exists and overwrite=False.
     """
     status_blob = prepared_bucket.blob(status_blob_name(prefix))
-    if status_blob.exists() and not overwrite:
+    status_uri = f"gs://{prepared_bucket.name}/{status_blob_name(prefix)}"
+    if _with_gcs_retry(f"exists:{status_uri}", status_blob.exists) and not overwrite:
         return False
 
     for sha, pdf_bytes in pdfs_by_sha.items():
-        prepared_bucket.blob(docs_blob_name(prefix, sha)).upload_from_string(
+        docs_name = docs_blob_name(prefix, sha)
+        text_name = text_blob_name(prefix, sha)
+        _with_gcs_retry(
+            f"upload_pdf:gs://{prepared_bucket.name}/{docs_name}",
+            prepared_bucket.blob(docs_name).upload_from_string,
             pdf_bytes,
             content_type="application/pdf",
         )
-        prepared_bucket.blob(text_blob_name(prefix, sha)).upload_from_string(
+        _with_gcs_retry(
+            f"upload_text:gs://{prepared_bucket.name}/{text_name}",
+            prepared_bucket.blob(text_name).upload_from_string,
             _json_dump(sidecars_by_sha[sha]),
             content_type="application/json",
         )
 
     validate_bundle(bundle_payload, expected_state=bundle_payload["state"])
-    prepared_bucket.blob(bundle_blob_name(prefix)).upload_from_string(
+    bundle_name = bundle_blob_name(prefix)
+    _with_gcs_retry(
+        f"upload_bundle:gs://{prepared_bucket.name}/{bundle_name}",
+        prepared_bucket.blob(bundle_name).upload_from_string,
         _json_dump(bundle_payload),
         content_type="application/json",
     )
@@ -500,7 +581,9 @@ def _write_prepared_bundle(
         "error": None,
     }
     kwargs = {} if overwrite else {"if_generation_match": 0}
-    prepared_bucket.blob(status_blob_name(prefix)).upload_from_string(
+    _with_gcs_retry(
+        f"upload_status:{status_uri}",
+        prepared_bucket.blob(status_blob_name(prefix)).upload_from_string,
         _json_dump(status_payload),
         content_type="application/json",
         **kwargs,
@@ -526,7 +609,7 @@ def prepare(args: argparse.Namespace) -> int:
     processed = 0
     written = 0
     total_projected_docai_cost = 0.0
-    for blob in bank_bucket.list_blobs(prefix=manifest_prefix):
+    for blob in _iter_blobs_with_retry(bank_bucket, manifest_prefix):
         if processed >= args.limit:
             break
         if not blob.name.endswith("/manifest.json"):
@@ -617,7 +700,10 @@ def prepare(args: argparse.Namespace) -> int:
                 except Exception:
                     precheck = {}
 
-                pdf_bytes = bank_bucket.blob(raw_uri).download_as_bytes()
+                pdf_bytes = _with_gcs_retry(
+                    f"download_pdf:gs://{bank_bucket.name}/{raw_uri}",
+                    bank_bucket.blob(raw_uri).download_as_bytes,
+                )
                 actual_sha = hashlib.sha256(pdf_bytes).hexdigest()
                 if actual_sha != sha256:
                     raise RuntimeError(f"sha mismatch: expected {sha256}, got {actual_sha}")
