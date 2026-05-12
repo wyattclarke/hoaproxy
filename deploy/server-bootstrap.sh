@@ -120,7 +120,11 @@ fi
 step "10. data directories"
 mkdir -p "${DATA_DIR}/data" "${DATA_DIR}/hoa_docs" "${ENV_DIR}" /var/log/caddy
 chown -R "${USER_NAME}:${USER_NAME}" "${DATA_DIR}"
-chmod 700 "${ENV_DIR}"
+# /etc/hoaproxy/ must be traversable by the hoaproxy group so the app user
+# can read hoaproxy.env + gcp-sa.json. 750 root:hoaproxy is the tightest
+# permission that still lets the docker-compose stack read its secrets.
+chgrp "${USER_NAME}" "${ENV_DIR}"
+chmod 750 "${ENV_DIR}"
 
 # 11. Hetzner Cloud Volume for hoa_docs
 step "11. mount Hetzner Cloud Volume for hoa_docs (if present)"
