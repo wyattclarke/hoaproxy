@@ -2857,12 +2857,21 @@ def participation_page(hoa_name: str) -> FileResponse:
 # ---------------------------------------------------------------------------
 
 @app.get("/hoa/{state}/{city}/{slug}", include_in_schema=False)
-def hoa_profile_page(state: str, city: str, slug: str) -> HTMLResponse:
+def hoa_profile_page(state: str, city: str, slug: str):
     """Serve an HOA profile page with server-rendered SEO content."""
+    from fastapi.responses import RedirectResponse
     settings = load_settings()
     with db.get_connection(settings.db_path) as conn:
         result = db.resolve_hoa_by_hierarchical_slug(conn, state, city, slug)
         if result is None:
+            # Past canonical URL? 301 forward to the current one so SEO carries.
+            alias = db.resolve_hoa_alias_to_canonical(conn, state, city, slug)
+            if alias is not None:
+                new_url = db.build_hoa_path(
+                    alias["hoa_name"], alias["city"], alias["state"]
+                )
+                if new_url != f"/hoa/{state}/{city}/{slug}":
+                    return RedirectResponse(url=new_url, status_code=301)
             raise HTTPException(status_code=404, detail="HOA not found")
         overview = db.get_hoa_overview(conn, result["hoa_id"])
     return _render_hoa_page(
@@ -4798,6 +4807,21 @@ def admin_rename_hoa(request: Request, body: dict):
             try:
                 if target is None or int(target["id"]) == source_id:
                     if not dry_run:
+                        # Snapshot the current canonical URL as an alias so
+                        # Google's existing index for /hoa/{state}/{city}/{old_slug}
+                        # 301s to the new canonical URL after rename.
+                        loc = conn.execute(
+                            "SELECT city, state FROM hoa_locations WHERE hoa_id = ?",
+                            (source_id,),
+                        ).fetchone()
+                        if loc is not None:
+                            db.record_hoa_slug_alias(
+                                conn,
+                                hoa_id=source_id,
+                                state=loc["state"],
+                                city=loc["city"],
+                                name=old_name,
+                            )
                         conn.execute("UPDATE hoas SET name = ? WHERE id = ?", (new_name, source_id))
                     results.append({
                         "hoa_id": source_id,

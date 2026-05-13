@@ -82,6 +82,22 @@ CREATE TABLE IF NOT EXISTS hoa_locations (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Past canonical URL triples (state, city_slug, name_slug) for HOAs whose
+-- name or location changed. The /hoa/{state}/{city}/{slug} handler 301s
+-- to the current canonical URL on alias hit, so Google's existing index
+-- entries keep their ranking signals after a rename.
+CREATE TABLE IF NOT EXISTS hoa_slug_aliases (
+    state TEXT NOT NULL,
+    city_slug TEXT NOT NULL,
+    name_slug TEXT NOT NULL,
+    hoa_id INTEGER NOT NULL REFERENCES hoas(id) ON DELETE CASCADE,
+    superseded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (state, city_slug, name_slug)
+);
+
+CREATE INDEX IF NOT EXISTS idx_hoa_slug_aliases_hoa
+    ON hoa_slug_aliases(hoa_id);
+
 CREATE TABLE IF NOT EXISTS legal_sources (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     jurisdiction TEXT NOT NULL,
@@ -1310,6 +1326,71 @@ def get_hoa_overview(conn: sqlite3.Connection, hoa_id: int) -> dict:
     }
 
 
+def record_hoa_slug_alias(
+    conn: sqlite3.Connection,
+    *,
+    hoa_id: int,
+    state: str | None,
+    city: str | None,
+    name: str,
+) -> None:
+    """Record the current canonical (state, city_slug, name_slug) triple as
+    an alias for ``hoa_id``. Call BEFORE applying a rename / city / state
+    change so the old URL keeps 301-redirecting to the future canonical URL.
+
+    No-op when state or city is missing — flat URLs ``/hoa/{slug}`` already
+    use ``resolve_hoa_by_slug`` which name-matches dynamically. INSERT OR
+    IGNORE so re-recording the same triple is safe.
+    """
+    if not state or not city or not name:
+        return
+    state_lc = state.lower()
+    city_slug = slugify_city(city)
+    name_slug = slugify_name(name)
+    if not city_slug or not name_slug:
+        return
+    conn.execute(
+        """
+        INSERT OR IGNORE INTO hoa_slug_aliases (state, city_slug, name_slug, hoa_id)
+        VALUES (?, ?, ?, ?)
+        """,
+        (state_lc, city_slug, name_slug, hoa_id),
+    )
+
+
+def resolve_hoa_alias_to_canonical(
+    conn: sqlite3.Connection,
+    state: str,
+    city_slug: str,
+    name_slug: str,
+) -> dict | None:
+    """Look up an old (state, city_slug, name_slug) triple and return the
+    HOA's *current* canonical info so the caller can 301-redirect.
+
+    Returns ``{hoa_id, hoa_name, city, state}`` or None.
+    """
+    row = conn.execute(
+        """
+        SELECT a.hoa_id, h.name AS hoa_name, l.city, l.state
+        FROM hoa_slug_aliases a
+        JOIN hoas h ON h.id = a.hoa_id
+        LEFT JOIN hoa_locations l ON l.hoa_id = a.hoa_id
+        WHERE a.state = ? AND a.city_slug = ? AND a.name_slug = ?
+        ORDER BY a.superseded_at DESC
+        LIMIT 1
+        """,
+        (state.lower(), city_slug, name_slug),
+    ).fetchone()
+    if row is None:
+        return None
+    return {
+        "hoa_id": int(row["hoa_id"]),
+        "hoa_name": str(row["hoa_name"]),
+        "city": str(row["city"]) if row["city"] else None,
+        "state": str(row["state"]) if row["state"] else None,
+    }
+
+
 def resolve_hoa_by_hierarchical_slug(
     conn: sqlite3.Connection,
     state: str,
@@ -1558,9 +1639,27 @@ def upsert_hoa_location(
 ) -> None:
     hoa_id = get_or_create_hoa(conn, hoa_name)
     existing = conn.execute(
-        "SELECT id FROM hoa_locations WHERE hoa_id = ?",
+        "SELECT id, city, state FROM hoa_locations WHERE hoa_id = ?",
         (hoa_id,),
     ).fetchone()
+
+    # If the canonical URL's state or city is about to change to a different
+    # non-NULL value, snapshot the *old* triple as an alias so Google's
+    # existing index for the old URL keeps 301'ing forward.
+    if existing is not None:
+        old_state, old_city = existing["state"], existing["city"]
+        url_changing = (
+            (state and old_state and state.lower() != str(old_state).lower())
+            or (city and old_city and slugify_city(city) != slugify_city(str(old_city)))
+        )
+        if url_changing:
+            record_hoa_slug_alias(
+                conn,
+                hoa_id=hoa_id,
+                state=old_state,
+                city=old_city,
+                name=hoa_name,
+            )
 
     if existing is None:
         conn.execute(
