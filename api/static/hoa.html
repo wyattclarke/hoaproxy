@@ -631,7 +631,8 @@
 
       function pendingUploadMessage(count) {
         const noun = count === 1 ? "document" : "documents";
-        return `Upload received. We're extracting the text and checking that your ${noun} belong here. This can take a few minutes, and the ${noun} will appear in the browser as soon as processing finishes.`;
+        const directObj = count === 1 ? "a document" : "documents";
+        return `Thank you for adding ${directObj} to HOAproxy! Please expect a few minutes' delay for your uploaded ${noun} to be vetted and processed.`;
       }
 
       function pendingUploadStorageKey(hoaName) {
