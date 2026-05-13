@@ -5596,6 +5596,52 @@ def admin_delete_hoa(request: Request, body: dict):
     }
 
 
+@app.post("/admin/purge-slug-aliases")
+def admin_purge_slug_aliases(request: Request, body: dict | None = None):
+    """Wipe the hoa_slug_aliases table.
+
+    Use this right BEFORE submitting your sitemap to Google. Aliases
+    recorded by /admin/rename-hoa and upsert_hoa_location pre-submission
+    are noise — Google never saw the old URLs, so there's nothing to
+    301-forward from. After submission, leave aliases alone — they're
+    what preserves SEO across future renames.
+
+    Body (optional):
+      {"older_than_ts": "2026-05-13 04:00:00", "dry_run": false}
+
+    If ``older_than_ts`` is omitted, every row is purged. ``dry_run``
+    reports the count without deleting.
+    """
+    _require_admin(request)
+    settings = load_settings()
+    body = body or {}
+    cutoff = (body.get("older_than_ts") or "").strip() or None
+    dry_run = bool(body.get("dry_run", False))
+
+    with db.get_connection(settings.db_path) as conn:
+        if cutoff:
+            row = conn.execute(
+                "SELECT COUNT(*) FROM hoa_slug_aliases WHERE superseded_at < ?",
+                (cutoff,),
+            ).fetchone()
+        else:
+            row = conn.execute("SELECT COUNT(*) FROM hoa_slug_aliases").fetchone()
+        count = int(row[0]) if row else 0
+        if not dry_run:
+            if cutoff:
+                conn.execute(
+                    "DELETE FROM hoa_slug_aliases WHERE superseded_at < ?", (cutoff,)
+                )
+            else:
+                conn.execute("DELETE FROM hoa_slug_aliases")
+            conn.commit()
+    return {
+        "dry_run": dry_run,
+        "older_than_ts": cutoff,
+        ("purged" if not dry_run else "would_purge"): count,
+    }
+
+
 @app.post("/admin/clear-hoa-docs")
 def admin_clear_hoa_docs(request: Request, body: dict):
     """Delete one or more HOAs' documents and chunks while preserving the
