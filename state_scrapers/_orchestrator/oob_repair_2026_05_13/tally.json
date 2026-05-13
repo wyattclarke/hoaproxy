@@ -1,0 +1,423 @@
+{
+  "run_date": "2026-05-13T02:42:00.976751+00:00",
+  "bbox_pad_deg": 0.05,
+  "states": {
+    "AK": {
+      "live": 31,
+      "with_docs": 28,
+      "oob_total": 2,
+      "oob_polygon": 2,
+      "oob_repairable": 0,
+      "eligible": false
+    },
+    "AL": {
+      "live": 84,
+      "with_docs": 81,
+      "oob_total": 6,
+      "oob_polygon": 3,
+      "oob_repairable": 3,
+      "eligible": false
+    },
+    "AR": {
+      "live": 35,
+      "with_docs": 32,
+      "oob_total": 2,
+      "oob_polygon": 2,
+      "oob_repairable": 0,
+      "eligible": false
+    },
+    "AZ": {
+      "live": 1739,
+      "with_docs": 672,
+      "oob_total": 0,
+      "oob_polygon": 0,
+      "oob_repairable": 0,
+      "eligible": false
+    },
+    "CA": {
+      "live": 26023,
+      "with_docs": 888,
+      "oob_total": 73,
+      "oob_polygon": 13,
+      "oob_repairable": 60,
+      "eligible": true
+    },
+    "CO": {
+      "live": 8452,
+      "with_docs": 432,
+      "oob_total": 1,
+      "oob_polygon": 0,
+      "oob_repairable": 1,
+      "eligible": true
+    },
+    "CT": {
+      "live": 3501,
+      "with_docs": 99,
+      "oob_total": 0,
+      "oob_polygon": 0,
+      "oob_repairable": 0,
+      "eligible": false
+    },
+    "DC": {
+      "live": 3220,
+      "with_docs": 11,
+      "oob_total": 0,
+      "oob_polygon": 0,
+      "oob_repairable": 0,
+      "eligible": false
+    },
+    "DE": {
+      "live": 109,
+      "with_docs": 104,
+      "oob_total": 6,
+      "oob_polygon": 6,
+      "oob_repairable": 0,
+      "eligible": false
+    },
+    "FL": {
+      "live": 37316,
+      "with_docs": 1791,
+      "oob_total": 6,
+      "oob_polygon": 0,
+      "oob_repairable": 6,
+      "eligible": true
+    },
+    "GA": {
+      "live": 916,
+      "with_docs": 676,
+      "oob_total": 0,
+      "oob_polygon": 0,
+      "oob_repairable": 0,
+      "eligible": false
+    },
+    "HI": {
+      "live": 1510,
+      "with_docs": 77,
+      "oob_total": 0,
+      "oob_polygon": 0,
+      "oob_repairable": 0,
+      "eligible": false
+    },
+    "IA": {
+      "live": 43,
+      "with_docs": 41,
+      "oob_total": 2,
+      "oob_polygon": 0,
+      "oob_repairable": 2,
+      "eligible": false
+    },
+    "ID": {
+      "live": 36,
+      "with_docs": 35,
+      "oob_total": 2,
+      "oob_polygon": 1,
+      "oob_repairable": 1,
+      "eligible": false
+    },
+    "IL": {
+      "live": 1581,
+      "with_docs": 301,
+      "oob_total": 0,
+      "oob_polygon": 0,
+      "oob_repairable": 0,
+      "eligible": false
+    },
+    "IN": {
+      "live": 240,
+      "with_docs": 240,
+      "oob_total": 0,
+      "oob_polygon": 0,
+      "oob_repairable": 0,
+      "eligible": false
+    },
+    "KS": {
+      "live": 337,
+      "with_docs": 326,
+      "oob_total": 1,
+      "oob_polygon": 0,
+      "oob_repairable": 1,
+      "eligible": true
+    },
+    "KY": {
+      "live": 40,
+      "with_docs": 39,
+      "oob_total": 2,
+      "oob_polygon": 0,
+      "oob_repairable": 2,
+      "eligible": false
+    },
+    "LA": {
+      "live": 32,
+      "with_docs": 30,
+      "oob_total": 1,
+      "oob_polygon": 0,
+      "oob_repairable": 1,
+      "eligible": false
+    },
+    "MA": {
+      "live": 4754,
+      "with_docs": 35,
+      "oob_total": 0,
+      "oob_polygon": 0,
+      "oob_repairable": 0,
+      "eligible": false
+    },
+    "MD": {
+      "live": 129,
+      "with_docs": 71,
+      "oob_total": 0,
+      "oob_polygon": 0,
+      "oob_repairable": 0,
+      "eligible": false
+    },
+    "ME": {
+      "live": 21,
+      "with_docs": 19,
+      "oob_total": 0,
+      "oob_polygon": 0,
+      "oob_repairable": 0,
+      "eligible": false
+    },
+    "MI": {
+      "live": 330,
+      "with_docs": 105,
+      "oob_total": 0,
+      "oob_polygon": 0,
+      "oob_repairable": 0,
+      "eligible": false
+    },
+    "MN": {
+      "live": 135,
+      "with_docs": 35,
+      "oob_total": 1,
+      "oob_polygon": 1,
+      "oob_repairable": 0,
+      "eligible": false
+    },
+    "MO": {
+      "live": 173,
+      "with_docs": 123,
+      "oob_total": 1,
+      "oob_polygon": 0,
+      "oob_repairable": 1,
+      "eligible": true
+    },
+    "MS": {
+      "live": 38,
+      "with_docs": 30,
+      "oob_total": 2,
+      "oob_polygon": 0,
+      "oob_repairable": 2,
+      "eligible": false
+    },
+    "MT": {
+      "live": 139,
+      "with_docs": 99,
+      "oob_total": 1,
+      "oob_polygon": 1,
+      "oob_repairable": 0,
+      "eligible": false
+    },
+    "NC": {
+      "live": 917,
+      "with_docs": 901,
+      "oob_total": 1,
+      "oob_polygon": 0,
+      "oob_repairable": 1,
+      "eligible": true
+    },
+    "ND": {
+      "live": 20,
+      "with_docs": 20,
+      "oob_total": 0,
+      "oob_polygon": 0,
+      "oob_repairable": 0,
+      "eligible": false
+    },
+    "NE": {
+      "live": 104,
+      "with_docs": 89,
+      "oob_total": 0,
+      "oob_polygon": 0,
+      "oob_repairable": 0,
+      "eligible": false
+    },
+    "NH": {
+      "live": 30,
+      "with_docs": 30,
+      "oob_total": 0,
+      "oob_polygon": 0,
+      "oob_repairable": 0,
+      "eligible": false
+    },
+    "NJ": {
+      "live": 60,
+      "with_docs": 60,
+      "oob_total": 0,
+      "oob_polygon": 0,
+      "oob_repairable": 0,
+      "eligible": false
+    },
+    "NM": {
+      "live": 60,
+      "with_docs": 55,
+      "oob_total": 0,
+      "oob_polygon": 0,
+      "oob_repairable": 0,
+      "eligible": false
+    },
+    "NV": {
+      "live": 28,
+      "with_docs": 26,
+      "oob_total": 0,
+      "oob_polygon": 0,
+      "oob_repairable": 0,
+      "eligible": false
+    },
+    "NY": {
+      "live": 13754,
+      "with_docs": 1523,
+      "oob_total": 0,
+      "oob_polygon": 0,
+      "oob_repairable": 0,
+      "eligible": false
+    },
+    "OH": {
+      "live": 3848,
+      "with_docs": 163,
+      "oob_total": 1,
+      "oob_polygon": 0,
+      "oob_repairable": 1,
+      "eligible": true
+    },
+    "OK": {
+      "live": 116,
+      "with_docs": 98,
+      "oob_total": 3,
+      "oob_polygon": 3,
+      "oob_repairable": 0,
+      "eligible": false
+    },
+    "OR": {
+      "live": 4398,
+      "with_docs": 126,
+      "oob_total": 1,
+      "oob_polygon": 0,
+      "oob_repairable": 1,
+      "eligible": true
+    },
+    "PA": {
+      "live": 62,
+      "with_docs": 62,
+      "oob_total": 0,
+      "oob_polygon": 0,
+      "oob_repairable": 0,
+      "eligible": false
+    },
+    "RI": {
+      "live": 704,
+      "with_docs": 33,
+      "oob_total": 0,
+      "oob_polygon": 0,
+      "oob_repairable": 0,
+      "eligible": false
+    },
+    "SC": {
+      "live": 181,
+      "with_docs": 180,
+      "oob_total": 0,
+      "oob_polygon": 0,
+      "oob_repairable": 0,
+      "eligible": false
+    },
+    "SD": {
+      "live": 12,
+      "with_docs": 11,
+      "oob_total": 0,
+      "oob_polygon": 0,
+      "oob_repairable": 0,
+      "eligible": false
+    },
+    "TN": {
+      "live": 657,
+      "with_docs": 641,
+      "oob_total": 2,
+      "oob_polygon": 1,
+      "oob_repairable": 1,
+      "eligible": true
+    },
+    "TX": {
+      "live": 16292,
+      "with_docs": 778,
+      "oob_total": 0,
+      "oob_polygon": 0,
+      "oob_repairable": 0,
+      "eligible": false
+    },
+    "UT": {
+      "live": 71,
+      "with_docs": 65,
+      "oob_total": 0,
+      "oob_polygon": 0,
+      "oob_repairable": 0,
+      "eligible": false
+    },
+    "VA": {
+      "live": 327,
+      "with_docs": 178,
+      "oob_total": 0,
+      "oob_polygon": 0,
+      "oob_repairable": 0,
+      "eligible": false
+    },
+    "VT": {
+      "live": 16,
+      "with_docs": 15,
+      "oob_total": 0,
+      "oob_polygon": 0,
+      "oob_repairable": 0,
+      "eligible": false
+    },
+    "WA": {
+      "live": 2687,
+      "with_docs": 136,
+      "oob_total": 0,
+      "oob_polygon": 0,
+      "oob_repairable": 0,
+      "eligible": false
+    },
+    "WI": {
+      "live": 113,
+      "with_docs": 113,
+      "oob_total": 0,
+      "oob_polygon": 0,
+      "oob_repairable": 0,
+      "eligible": false
+    },
+    "WV": {
+      "live": 16,
+      "with_docs": 15,
+      "oob_total": 0,
+      "oob_polygon": 0,
+      "oob_repairable": 0,
+      "eligible": false
+    },
+    "WY": {
+      "live": 82,
+      "with_docs": 76,
+      "oob_total": 1,
+      "oob_polygon": 0,
+      "oob_repairable": 1,
+      "eligible": false
+    }
+  },
+  "totals": {
+    "oob_total": 118,
+    "oob_polygon": 33,
+    "oob_repairable": 85,
+    "states_eligible": 9,
+    "states_skipped_small": 13
+  },
+  "projected_here_calls_low": 85,
+  "projected_here_calls_high": 255
+}

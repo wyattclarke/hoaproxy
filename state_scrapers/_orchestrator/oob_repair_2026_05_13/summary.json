@@ -1,0 +1,70 @@
+{
+  "run_date": "2026-05-13T02:51:12.431719+00:00",
+  "totals": {
+    "repaired": 0,
+    "demoted": 73,
+    "skipped_polygon": 14,
+    "errors": 0
+  },
+  "per_state": {
+    "CA": {
+      "repaired": 0,
+      "demoted": 60,
+      "skipped_polygon": 13
+    },
+    "FL": {
+      "repaired": 0,
+      "demoted": 6,
+      "skipped_polygon": 0
+    },
+    "CO": {
+      "repaired": 0,
+      "demoted": 1,
+      "skipped_polygon": 0
+    },
+    "KS": {
+      "repaired": 0,
+      "demoted": 1,
+      "skipped_polygon": 0
+    },
+    "MO": {
+      "repaired": 0,
+      "demoted": 1,
+      "skipped_polygon": 0
+    },
+    "NC": {
+      "repaired": 0,
+      "demoted": 1,
+      "skipped_polygon": 0
+    },
+    "OH": {
+      "repaired": 0,
+      "demoted": 1,
+      "skipped_polygon": 0
+    },
+    "OR": {
+      "repaired": 0,
+      "demoted": 1,
+      "skipped_polygon": 0
+    },
+    "TN": {
+      "repaired": 0,
+      "demoted": 1,
+      "skipped_polygon": 1
+    }
+  },
+  "here_calls": 0,
+  "max_here_calls": 500,
+  "stop_reason": null,
+  "states_processed": [
+    "CA",
+    "FL",
+    "CO",
+    "KS",
+    "MO",
+    "NC",
+    "OH",
+    "OR",
+    "TN"
+  ]
+}
