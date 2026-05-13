@@ -548,8 +548,10 @@ def _titlecase_token(token: str, *, anchor: bool) -> str:
     if not token:
         return token
     # Pull off trailing punctuation cluster (.,;:!?")  — but keep apostrophes
-    # inside the word ("OWNERS'", "O'BRIEN").
-    m = re.match(r"^([A-Za-z'`]+)([.,;:!?\"\)\]]*)$", token)
+    # inside the word ("OWNERS'", "O'BRIEN"). Accept both straight (') and
+    # curly (’ U+2019 / ‘ U+2018) apostrophes; scraped registry data often
+    # contains the curly form.
+    m = re.match(r"^([A-Za-z'`‘’]+)([.,;:!?\"\)\]]*)$", token)
     if not m:
         # Mixed alphanumeric ("NO.24", "06831") — leave as-is.
         return token

@@ -1,0 +1,31 @@
+{
+  "run_date": "2026-05-13T10:22:48.960399+00:00",
+  "elapsed_sec": 3248.0,
+  "candidates": 52068,
+  "totals": {
+    "renamed": 51002,
+    "merged": 991,
+    "noop": 73,
+    "errors": 2,
+    "batches": 2083,
+    "failed_batches": 0
+  },
+  "per_state_counts": {
+    "CA": 9520,
+    "FL": 36245,
+    "OR": 4221,
+    "AZ": 585,
+    "TX": 127,
+    "NY": 1334,
+    "VA": 1,
+    "MI": 4,
+    "NJ": 24,
+    "GA": 2,
+    "PA": 1,
+    "ME": 1,
+    "MD": 1,
+    "CT": 1,
+    "NC": 1
+  },
+  "min_upper_ratio": 0.7
+}
