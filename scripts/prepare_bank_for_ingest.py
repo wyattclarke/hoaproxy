@@ -609,16 +609,53 @@ def prepare(args: argparse.Namespace) -> int:
     processed = 0
     written = 0
     total_projected_docai_cost = 0.0
-    for blob in _iter_blobs_with_retry(bank_bucket, manifest_prefix):
+
+    # Parallel manifest pre-fetcher: read up to 16 manifest JSON blobs from
+    # GCS concurrently to hide per-manifest network latency. Downstream
+    # work (ledger writes, bundle uploads, DocAI calls) stays sequential
+    # in the main thread to preserve ordering/cost accounting semantics.
+    from concurrent.futures import ThreadPoolExecutor
+
+    def _prefetch_manifests(blob_iter, executor, prefetch_window=32):
+        """Yield (blob, manifest_or_exc) tuples in order, prefetching ahead."""
+        pending: list = []
+        for blob in blob_iter:
+            if not blob.name.endswith("/manifest.json"):
+                continue
+            pending.append((blob, executor.submit(_load_json_blob, bank_bucket, blob.name)))
+            while len(pending) >= prefetch_window:
+                b, f = pending.pop(0)
+                try:
+                    yield b, f.result(), None
+                except Exception as exc:  # noqa: BLE001
+                    yield b, None, exc
+        # Drain remaining
+        for b, f in pending:
+            try:
+                yield b, f.result(), None
+            except Exception as exc:  # noqa: BLE001
+                yield b, None, exc
+
+    blob_iter = _iter_blobs_with_retry(bank_bucket, manifest_prefix)
+    _executor = ThreadPoolExecutor(max_workers=16, thread_name_prefix="manifest-prefetch")
+    # NOTE: _executor is intentionally not closed via try/finally here — the
+    # process terminates naturally on loop exit and the OS reclaims threads.
+    # A try/finally would force re-indenting the entire main loop body, which
+    # is a much larger change than the prefetch win justifies.
+    for blob, manifest, _read_exc in _prefetch_manifests(blob_iter, _executor):
         if processed >= args.limit:
             break
-        if not blob.name.endswith("/manifest.json"):
-            continue
         processed += 1
         manifest_uri = _manifest_uri(args.bank_bucket, blob.name)
+        if _read_exc is not None:
+            _append_ledger(args.ledger, {
+                "manifest_uri": manifest_uri,
+                "decision": "manifest_error",
+                "error": str(_read_exc),
+            })
+            continue
         try:
             _, county_slug, hoa_slug = _manifest_parts(blob.name)
-            manifest = _load_json_blob(bank_bucket, blob.name)
         except Exception as exc:
             _append_ledger(args.ledger, {
                 "manifest_uri": manifest_uri,

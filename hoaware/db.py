@@ -1049,6 +1049,7 @@ def list_hoa_summaries(
     state: str | None = None,
     limit: int = 50,
     offset: int = 0,
+    with_docs: bool = False,
 ) -> dict:
     params: list[Any] = []
     where_clauses: list[str] = []
@@ -1060,6 +1061,8 @@ def list_hoa_summaries(
     if state:
         where_clauses.append("l.state = ?")
         params.append(state)
+    if with_docs:
+        where_clauses.append("COALESCE(ds.doc_count, 0) > 0")
 
     where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
 
@@ -1131,18 +1134,38 @@ def list_hoa_summaries(
     return {"results": results, "total": total}
 
 
-def list_hoa_states(conn: sqlite3.Connection) -> list[dict]:
-    cur = conn.execute(
-        """
-        SELECT l.state, COUNT(DISTINCT h.id) AS count
-        FROM hoas h
-        JOIN hoa_locations l ON l.hoa_id = h.id
-        LEFT JOIN documents d ON d.hoa_id = h.id
-        WHERE l.state IS NOT NULL
-        GROUP BY l.state
-        ORDER BY l.state
-        """
-    )
+def list_hoa_states(
+    conn: sqlite3.Connection, with_docs: bool = False
+) -> list[dict]:
+    """Return ``[{state, count}, ...]``.
+
+    When ``with_docs=True``, count only HOAs that have at least one document
+    on file; states with zero doc-bearing HOAs are omitted from the result.
+    """
+    if with_docs:
+        cur = conn.execute(
+            """
+            SELECT l.state, COUNT(DISTINCT h.id) AS count
+            FROM hoas h
+            JOIN hoa_locations l ON l.hoa_id = h.id
+            JOIN documents d ON d.hoa_id = h.id
+            WHERE l.state IS NOT NULL
+            GROUP BY l.state
+            ORDER BY l.state
+            """
+        )
+    else:
+        cur = conn.execute(
+            """
+            SELECT l.state, COUNT(DISTINCT h.id) AS count
+            FROM hoas h
+            JOIN hoa_locations l ON l.hoa_id = h.id
+            LEFT JOIN documents d ON d.hoa_id = h.id
+            WHERE l.state IS NOT NULL
+            GROUP BY l.state
+            ORDER BY l.state
+            """
+        )
     return [{"state": str(row[0]), "count": int(row[1])} for row in cur.fetchall()]
 
 

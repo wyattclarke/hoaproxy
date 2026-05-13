@@ -7099,8 +7099,8 @@ async def upload_documents_anonymous(
     request: Request,
     background_tasks: BackgroundTasks,
     hoa: str = Form(...),
-    email: str = Form(...),
     files: List[UploadFile] = File(...),
+    email: str | None = Form(default=None),
     website_url: str | None = Form(default=None),
     street: str | None = Form(default=None),
     city: str | None = Form(default=None),
@@ -7114,10 +7114,14 @@ async def upload_documents_anonymous(
     source_urls: List[str] | None = Form(default=None),
     extracted_texts: List[str] | None = Form(default=None),
 ) -> UploadResponse:
-    """Accept HOA uploads without authentication. Rate-limited to 3/hour per IP."""
+    """Accept HOA uploads without authentication. Rate-limited to 3/hour per IP.
+
+    Email is optional. If supplied we log it for follow-up; we don't gate the
+    upload on it. PII/junk filtering still runs during background ingest, so
+    sensitive content never makes it onto the live HOA page.
+    """
     _check_rate_limit(request, limit=3)
-    if not email or "@" not in email:
-        raise HTTPException(status_code=400, detail="A valid email address is required")
+    email = (email or "").strip() or None
     settings = load_settings()
     resolved_hoa = _resolve_hoa_name(hoa)
     if not settings.openai_api_key:
@@ -7209,7 +7213,7 @@ async def upload_documents_anonymous(
         location_saved = True
 
     logger.info("anonymous_upload hoa=%s email=%s files=%d ip=%s",
-                resolved_hoa, email, len(saved_files),
+                resolved_hoa, email or "(none)", len(saved_files),
                 request.client.host if request.client else "unknown")
 
     for path, sidecar in zip(saved_paths, sidecars):

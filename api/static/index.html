@@ -853,6 +853,153 @@
       @media (max-width: 899px) {
         .mobile-map-toggle.visible { display: block; }
       }
+
+      /* ── ADD-HOA MODAL ── */
+      .add-hoa-modal {
+        position: fixed;
+        inset: 0;
+        z-index: 2000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+      }
+      .add-hoa-modal[hidden] { display: none; }
+      .add-hoa-modal-backdrop {
+        position: absolute;
+        inset: 0;
+        background: rgba(18, 35, 58, 0.55);
+        backdrop-filter: blur(2px);
+        animation: addHoaFadeIn 180ms ease-out;
+      }
+      .add-hoa-modal-card {
+        position: relative;
+        width: 100%;
+        max-width: 480px;
+        background: #fff;
+        border-radius: 18px;
+        padding: 28px 26px 24px;
+        box-shadow: 0 24px 64px rgba(13, 73, 190, 0.28),
+                    0 4px 16px rgba(18, 35, 58, 0.18);
+        animation: addHoaSlideUp 220ms cubic-bezier(0.2, 0.9, 0.3, 1);
+      }
+      @keyframes addHoaFadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+      @keyframes addHoaSlideUp {
+        from { opacity: 0; transform: translateY(16px) scale(0.98); }
+        to { opacity: 1; transform: translateY(0) scale(1); }
+      }
+      .add-hoa-modal-close {
+        position: absolute;
+        top: 10px;
+        right: 12px;
+        width: 32px;
+        height: 32px;
+        border: none;
+        background: transparent;
+        font-size: 1.6rem;
+        line-height: 1;
+        color: var(--muted);
+        cursor: pointer;
+        border-radius: 8px;
+      }
+      .add-hoa-modal-close:hover { background: #f0f4fb; color: var(--ink); }
+      .add-hoa-modal-eyebrow {
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 0.78rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--accent);
+        margin-bottom: 8px;
+      }
+      .add-hoa-modal-title {
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 1.45rem;
+        line-height: 1.2;
+        color: var(--ink);
+        margin-bottom: 12px;
+      }
+      .add-hoa-modal-sub {
+        font-size: 0.96rem;
+        line-height: 1.55;
+        color: var(--ink);
+        margin-bottom: 16px;
+      }
+      .add-hoa-modal-sub strong { color: var(--accent-strong); }
+      .add-hoa-modal-list {
+        list-style: none;
+        padding: 0;
+        margin: 0 0 22px;
+        display: grid;
+        gap: 8px;
+      }
+      .add-hoa-modal-list li {
+        position: relative;
+        padding-left: 24px;
+        font-size: 0.92rem;
+        line-height: 1.45;
+        color: var(--muted);
+      }
+      .add-hoa-modal-list li::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 6px;
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: var(--accent);
+        opacity: 0.18;
+      }
+      .add-hoa-modal-list li::after {
+        content: "";
+        position: absolute;
+        left: 4px;
+        top: 9px;
+        width: 6px;
+        height: 3px;
+        border-left: 2px solid var(--accent);
+        border-bottom: 2px solid var(--accent);
+        transform: rotate(-45deg);
+      }
+      .add-hoa-modal-actions {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .add-hoa-modal-cta {
+        display: inline-block;
+        text-align: center;
+        text-decoration: none;
+        padding: 13px 20px;
+        font-family: "Manrope", sans-serif;
+        font-weight: 700;
+        font-size: 1rem;
+        border-radius: 10px;
+      }
+      .add-hoa-modal-dismiss {
+        background: transparent;
+        border: none;
+        color: var(--muted);
+        font-family: "Manrope", sans-serif;
+        font-size: 0.88rem;
+        padding: 8px;
+        cursor: pointer;
+      }
+      .add-hoa-modal-dismiss:hover { color: var(--ink); }
+
+      @media (min-width: 600px) {
+        .add-hoa-modal-actions {
+          flex-direction: row-reverse;
+          align-items: center;
+          justify-content: flex-start;
+        }
+        .add-hoa-modal-cta { flex: 0 0 auto; }
+        .add-hoa-modal-dismiss { padding: 8px 12px; }
+      }
     </style>
   </head>
   <body>
@@ -964,6 +1111,30 @@
 
     <button class="mobile-map-toggle" id="mobileMapToggle">View map</button>
 
+    <!-- ADD-HOA MODAL (shown when search returns no matches) -->
+    <div id="addHoaModal" class="add-hoa-modal" hidden role="dialog" aria-modal="true" aria-labelledby="addHoaModalTitle">
+      <div class="add-hoa-modal-backdrop" data-modal-close></div>
+      <div class="add-hoa-modal-card">
+        <button class="add-hoa-modal-close" type="button" aria-label="Close" data-modal-close>&times;</button>
+        <div class="add-hoa-modal-eyebrow">Don't see your HOA?</div>
+        <h2 id="addHoaModalTitle" class="add-hoa-modal-title">Add it in about 2 minutes.</h2>
+        <p class="add-hoa-modal-sub">
+          We searched for <strong id="addHoaModalQuery">your community</strong> and didn't find a match.
+          Upload your CC&amp;Rs, bylaws, or rules — anyone in your community can then search them with AI,
+          assign proxy votes, and submit proposals.
+        </p>
+        <ul class="add-hoa-modal-list">
+          <li>No account or sign-up — drop in a PDF and you're done</li>
+          <li>One document is enough to get started (CC&amp;Rs, bylaws, or rules)</li>
+          <li>Independent — not your board, not your management company</li>
+        </ul>
+        <div class="add-hoa-modal-actions">
+          <a id="addHoaModalCta" class="btn primary add-hoa-modal-cta" href="/add-hoa">Add Your HOA &rarr;</a>
+          <button class="add-hoa-modal-dismiss" type="button" data-modal-close>Maybe later</button>
+        </div>
+      </div>
+    </div>
+
     <!-- FOOTER -->
     <footer class="site-footer">
       <nav class="footer-links">
@@ -1028,6 +1199,54 @@
       const multiOutput = document.getElementById("multiOutput");
       const multiSources = document.getElementById("multiSources");
       const howSection = document.getElementById("howSection");
+      const addHoaModal = document.getElementById("addHoaModal");
+      const addHoaModalQuery = document.getElementById("addHoaModalQuery");
+      const addHoaModalCta = document.getElementById("addHoaModalCta");
+
+      let _addHoaModalShownThisSession = false;
+      let _addHoaModalTimer = null;
+
+      function openAddHoaModal(query) {
+        if (!addHoaModal) return;
+        if (_addHoaModalShownThisSession) return;
+        try {
+          if (sessionStorage.getItem("hp_add_hoa_modal_dismissed") === "1") return;
+        } catch (_) {}
+        _addHoaModalShownThisSession = true;
+
+        const cleanQuery = String(query || "").trim();
+        addHoaModalQuery.textContent = cleanQuery ? `"${cleanQuery}"` : "your community";
+
+        const params = cleanQuery ? `?hoa=${encodeURIComponent(cleanQuery)}` : "";
+        addHoaModalCta.href = `/add-hoa${params}`;
+        addHoaModalCta.textContent = "Add Your HOA →";
+
+        addHoaModal.hidden = false;
+        document.body.style.overflow = "hidden";
+        setTimeout(() => { try { addHoaModalCta.focus(); } catch (_) {} }, 50);
+      }
+
+      function closeAddHoaModal() {
+        if (!addHoaModal || addHoaModal.hidden) return;
+        addHoaModal.hidden = true;
+        document.body.style.overflow = "";
+        try { sessionStorage.setItem("hp_add_hoa_modal_dismissed", "1"); } catch (_) {}
+      }
+
+      function scheduleAddHoaModal(query) {
+        clearTimeout(_addHoaModalTimer);
+        _addHoaModalTimer = setTimeout(() => openAddHoaModal(query), 700);
+      }
+
+      if (addHoaModal) {
+        addHoaModal.addEventListener("click", (e) => {
+          const t = e.target;
+          if (t && t.closest && t.closest("[data-modal-close]")) closeAddHoaModal();
+        });
+        document.addEventListener("keydown", (e) => {
+          if (e.key === "Escape" && !addHoaModal.hidden) closeAddHoaModal();
+        });
+      }
 
       function setStatus(message, kind = "") {
         homeStatus.className = `status ${kind}`.trim();
@@ -1337,6 +1556,10 @@
         if (state.stateFilter) params.set("state", state.stateFilter);
         params.set("limit", String(PAGE_SIZE));
         params.set("offset", String(state.offset));
+        // Homepage directory only surfaces HOAs with at least one document on
+        // file. Stub HOAs remain reachable via /hoa/{state}/ and their own
+        // profile pages.
+        params.set("with_docs", "true");
         const mapParams = new URLSearchParams();
         if (state.searchQuery) mapParams.set("q", state.searchQuery);
         if (state.stateFilter) mapParams.set("state", state.stateFilter);
@@ -1398,7 +1621,7 @@
         // the list and render pills as <button> elements (no crawlable
         // links, but functional UI).
         try {
-          const states = await fetchJson("/hoas/states");
+          const states = await fetchJson("/hoas/states?with_docs=true");
           const allPill = `<button class="state-pill${state.stateFilter === null ? " active" : ""}" data-state="">All</button>`;
           const statePills = states.map(({ state: s, count }) =>
             `<button class="state-pill${state.stateFilter === s ? " active" : ""}" data-state="${escapeHtml(s)}">${escapeHtml(s)} <span class="state-pill-count">${count}</span></button>`
@@ -1418,14 +1641,13 @@
       }
 
       function _addHoaCta() {
-        const loggedIn = typeof Auth !== "undefined" && Auth.isLoggedIn();
-        const href = loggedIn ? "/add-hoa" : "/register?next=/add-hoa";
-        const btnLabel = loggedIn ? "Add Your HOA →" : "Create a free account + add your HOA";
+        const q = (state.searchQuery || "").trim();
+        const href = q ? `/add-hoa?hoa=${encodeURIComponent(q)}` : "/add-hoa";
         return (
           `<div class="intent-item" style="background:#f0f6ff;border-color:#b3d0ff;padding:14px 14px 12px">` +
           `<div style="font-weight:700;font-size:0.95rem;margin-bottom:5px">Your HOA isn't here yet.</div>` +
-          `<div style="font-size:0.84rem;color:var(--muted);line-height:1.5;margin-bottom:10px">Upload your CC&Rs, bylaws, and rules — your neighbors can search them with AI, assign proxy votes, and submit proposals. Takes about 2 minutes.</div>` +
-          `<a href="${href}" class="btn primary" style="font-size:0.84rem;padding:6px 14px">${btnLabel}</a>` +
+          `<div style="font-size:0.84rem;color:var(--muted);line-height:1.5;margin-bottom:10px">Drop in your CC&Rs, bylaws, or rules — no account needed. Anyone in your community can then search them with AI, assign proxy votes, and submit proposals.</div>` +
+          `<a href="${href}" class="btn primary" style="font-size:0.84rem;padding:6px 14px">Add Your HOA →</a>` +
           `</div>`
         );
       }
@@ -1554,12 +1776,25 @@
             addressSuggestions.innerHTML = "";
           } else {
             addressWorkflow.hidden = true;
+            // Address resolved but no HOAs found near it — surface the modal.
+            if (hasAddress) {
+              const addrLabel = (payload.address_lookup && payload.address_lookup.display_name) || "";
+              const addUrl = `/add-hoa?hoa=${encodeURIComponent(payload.query || searchInput.value)}`;
+              setLookupStatus(
+                `No HOAs on file near ${escapeHtml(addrLabel) || "that address"}. ` +
+                `<a href="${addUrl}" style="color:var(--accent);font-weight:600">Add your HOA</a> — it only takes a minute.`,
+                "error",
+                true
+              );
+              scheduleAddHoaModal(payload.query || searchInput.value);
+            }
           }
         }
 
         if (!hasHoaMatches && !hasAddress) {
           const addUrl = `/add-hoa?hoa=${encodeURIComponent(payload.query || searchInput.value)}`;
           setLookupStatus(`We don't have that HOA yet. <a href="${addUrl}" style="color:var(--accent);font-weight:600">Add your HOA</a> — it only takes a minute.`, "error", true);
+          scheduleAddHoaModal(payload.query || searchInput.value);
           return;
         }
         if (!hasSuggestions && hasHoaMatches) {

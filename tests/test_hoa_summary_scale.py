@@ -18,9 +18,17 @@ from api.main import app
 from hoaware import db
 
 
-def _seed(conn, name: str, city: str | None = None, state: str | None = None) -> int:
+def _seed(
+    conn,
+    name: str,
+    city: str | None = None,
+    state: str | None = None,
+    *,
+    with_doc: bool = True,
+) -> int:
     hoa_id = db.get_or_create_hoa(conn, name)
-    db.upsert_document(conn, hoa_id, f"{name}/doc.pdf", checksum=f"sum-{name}", byte_size=100, page_count=1)
+    if with_doc:
+        db.upsert_document(conn, hoa_id, f"{name}/doc.pdf", checksum=f"sum-{name}", byte_size=100, page_count=1)
     if city or state:
         db.upsert_hoa_location(conn, name, city=city, state=state)
     return hoa_id
@@ -147,6 +155,30 @@ class TestHoaSummaryScale(unittest.TestCase):
         data = r.json()
         states = [d["state"] for d in data]
         self.assertEqual(len(states), len(set(states)))
+
+    # --- with_docs filter (homepage opt-in) ---
+
+    def test_summary_with_docs_excludes_stubs(self) -> None:
+        with db.get_connection(self.db_path) as conn:
+            _seed(conn, "Stub HOA", city="Charlotte", state="NC", with_doc=False)
+        r_all = self.client.get("/hoas/summary?state=NC")
+        r_docs = self.client.get("/hoas/summary?state=NC&with_docs=true")
+        self.assertEqual(r_all.json()["total"], 3)
+        self.assertEqual(r_docs.json()["total"], 2)
+        names = {x["hoa"] for x in r_docs.json()["results"]}
+        self.assertEqual(names, {"Alpha HOA", "Beta HOA"})
+
+    def test_states_with_docs_excludes_doc_free_states(self) -> None:
+        with db.get_connection(self.db_path) as conn:
+            _seed(conn, "Stub-Only HOA", city="Dover", state="DE", with_doc=False)
+        r_all = self.client.get("/hoas/states")
+        r_docs = self.client.get("/hoas/states?with_docs=true")
+        all_states = {d["state"] for d in r_all.json()}
+        docs_states = {d["state"] for d in r_docs.json()}
+        self.assertIn("DE", all_states)
+        self.assertNotIn("DE", docs_states)
+        self.assertIn("NC", docs_states)
+        self.assertIn("GA", docs_states)
 
     # --- /hoas/resolve/{slug} ---
 

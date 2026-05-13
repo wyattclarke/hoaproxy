@@ -32,9 +32,7 @@
         --danger: #b62929;
       }
 
-      * {
-        box-sizing: border-box;
-      }
+      * { box-sizing: border-box; }
 
       body {
         margin: 0;
@@ -47,291 +45,298 @@
           linear-gradient(180deg, #f7faff 0%, var(--bg) 50%, #edf3fe 100%);
       }
 
-      .shell {
-        width: min(920px, 94vw);
-        margin: 34px auto 50px;
-      }
+      .shell { width: min(680px, 94vw); margin: 34px auto 60px; }
 
       .card {
         border: 1px solid var(--line);
         border-radius: 20px;
-        background: rgba(255, 255, 255, 0.95);
-        padding: 20px;
+        background: rgba(255, 255, 255, 0.96);
+        padding: 28px 24px;
         box-shadow: 0 16px 40px rgba(15, 35, 66, 0.12);
       }
 
       h1 {
-        margin: 0;
+        margin: 0 0 6px;
         font-family: "Space Grotesk", "Manrope", sans-serif;
-        font-size: clamp(1.6rem, 3.6vw, 2.3rem);
+        font-size: clamp(1.7rem, 3.6vw, 2.3rem);
       }
 
-      .brand {
-        display: inline-flex;
-        align-items: baseline;
-        gap: 0.12em;
-      }
+      .brand { display: inline-flex; align-items: baseline; gap: 0.05em; }
+      .brand-link { color: inherit; text-decoration: none; }
+      .brand-hoa { color: #0f2f6d; letter-spacing: 0.03em; font-weight: 700; font-family: "Space Grotesk", sans-serif; font-size: 1.45rem; }
+      .brand-proxy { color: #1a66ff; font-weight: 700; font-family: "Space Grotesk", sans-serif; font-size: 1.45rem; }
 
-      .brand-wrap {
-        margin: 0;
+      .lede {
+        margin: 6px 0 22px;
+        color: var(--muted);
+        line-height: 1.55;
+        font-size: 1rem;
       }
+      .lede strong { color: var(--ink); }
 
-      .brand-link {
-        color: inherit;
-        text-decoration: none;
+      .field { margin-top: 14px; }
+      label {
+        display: block;
+        margin: 0 0 6px;
+        font-size: 0.92rem;
+        font-weight: 700;
       }
-
-      .brand-link:hover {
-        text-decoration: none;
-      }
-
-      .brand-mark {
-        position: relative;
-        width: 0.9em;
-        height: 0.9em;
-        margin-right: 0.12em;
-        transform: translateY(0.03em);
-      }
-
-      .brand-mark::before {
-        content: "";
-        position: absolute;
-        left: 0.08em;
-        top: 0.08em;
-        width: 0.72em;
-        height: 0.52em;
-        border-radius: 0.08em;
-        background: linear-gradient(180deg, #cfe0ff, #a9c5f6);
-        border: 1px solid #89aee8;
-      }
-
-      .brand-mark::after {
-        content: "";
-        position: absolute;
-        left: 0;
-        top: 0;
-        width: 0;
-        height: 0;
-        border-left: 0.44em solid transparent;
-        border-right: 0.44em solid transparent;
-        border-bottom: 0.34em solid #1e5fcf;
-      }
-
-      .brand-hoa {
-        color: #0f2f6d;
-        letter-spacing: 0.03em;
-      }
-
-      .brand-proxy {
-        color: #1a66ff;
-      }
-
-      .subtitle {
-        margin: 8px 0 0;
+      .field-hint {
+        margin-top: 6px;
+        font-size: 0.82rem;
         color: var(--muted);
       }
 
-      .actions {
-        margin-top: 14px;
-      }
-
-      .link-btn {
-        display: inline-block;
-        border: 1px solid var(--line);
-        border-radius: 10px;
-        background: #f9fbff;
-        color: #213d68;
-        padding: 9px 12px;
-        text-decoration: none;
-        font-weight: 700;
-      }
-
-      .form-grid {
-        margin-top: 14px;
-        display: grid;
-        gap: 10px;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-      }
-
-      .full {
-        grid-column: 1 / -1;
-      }
-
-      label {
-        display: block;
-        margin: 6px 0 4px;
-        font-size: 0.88rem;
-        font-weight: 700;
-      }
-
-      input,
-      textarea,
-      button {
+      input[type=text], input[type=email], input[type=url], textarea {
         width: 100%;
         border: 1px solid var(--line);
-        border-radius: 10px;
-        padding: 10px 12px;
+        border-radius: 12px;
+        padding: 13px 14px;
+        font: inherit;
+        background: #fff;
+      }
+      input[type=file] {
+        width: 100%;
+        border: 1px dashed #b9cdee;
+        border-radius: 12px;
+        padding: 14px;
+        background: #f6f9ff;
         font: inherit;
       }
-
-      input:focus,
-      textarea:focus,
-      button:focus {
+      input:focus, textarea:focus {
         outline: none;
         border-color: #8ab3ff;
         box-shadow: 0 0 0 4px rgba(23, 95, 238, 0.14);
       }
 
-      button {
-        border-color: var(--accent);
+      .drop-zone {
+        border: 2px dashed #b9cdee;
+        border-radius: 14px;
+        padding: 24px 16px;
+        text-align: center;
+        background: #f6f9ff;
+        color: var(--muted);
+        cursor: pointer;
+        transition: background 120ms ease, border-color 120ms ease;
+      }
+      .drop-zone:hover { background: #eef4ff; border-color: #8ab3ff; }
+      .drop-zone.drag { background: #e3edff; border-color: var(--accent); color: var(--ink); }
+      .drop-zone .dz-line1 {
+        font-size: 1rem;
+        font-weight: 700;
+        color: var(--ink);
+        margin-bottom: 4px;
+      }
+      .drop-zone .dz-line2 { font-size: 0.86rem; }
+      .file-list {
+        margin-top: 10px;
+        display: grid;
+        gap: 6px;
+      }
+      .file-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px 12px;
+        border: 1px solid var(--line);
+        background: #fff;
+        border-radius: 10px;
+        font-size: 0.9rem;
+      }
+      .file-row .fname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 10px; }
+      .file-row .fsize { color: var(--muted); font-size: 0.82rem; flex-shrink: 0; }
+
+      .primary-btn {
+        margin-top: 22px;
+        width: 100%;
+        border: 1px solid var(--accent);
         background: linear-gradient(180deg, var(--accent), var(--accent-strong));
         color: #fff;
+        font: inherit;
         font-weight: 800;
+        font-size: 1.05rem;
+        padding: 15px 18px;
+        border-radius: 12px;
+        cursor: pointer;
+      }
+      .primary-btn:disabled { opacity: 0.6; cursor: progress; }
+
+      .secondary-btn {
+        border: 1px solid var(--line);
+        background: #f8fbff;
+        color: #1f3a64;
+        font: inherit;
+        font-weight: 700;
+        padding: 10px 14px;
+        border-radius: 10px;
         cursor: pointer;
       }
 
-      button.secondary {
-        border-color: var(--line);
-        background: #f8fbff;
-        color: #1f3a64;
+      .details-toggle {
+        margin-top: 22px;
+        border-top: 1px solid var(--line);
+        padding-top: 16px;
+      }
+      details > summary {
+        list-style: none;
+        cursor: pointer;
+        font-weight: 700;
+        color: var(--accent);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 0;
+      }
+      details > summary::-webkit-details-marker { display: none; }
+      details > summary::before {
+        content: "+";
+        display: inline-block;
+        width: 22px;
+        height: 22px;
+        line-height: 20px;
+        text-align: center;
+        border-radius: 50%;
+        background: #e3edff;
+        color: var(--accent);
         font-weight: 700;
       }
-
-      .map-actions {
-        display: flex;
-        gap: 8px;
-        flex-wrap: wrap;
-      }
-
-      .map-actions button {
-        width: auto;
-      }
-
-      #map {
-        height: 300px;
-        border: 1px solid var(--line);
-        border-radius: 12px;
-      }
-
-      .hint {
-        margin-top: 6px;
-        font-size: 0.84rem;
+      details[open] > summary::before { content: "−"; }
+      .details-sub {
+        font-size: 0.86rem;
         color: var(--muted);
+        margin: 4px 0 12px 30px;
+        line-height: 1.5;
       }
+      .details-body { padding-top: 6px; }
+
+      .opt-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+      @media (max-width: 540px) { .opt-row { grid-template-columns: 1fr; } }
+
+      .map-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+      .map-actions .secondary-btn { padding: 7px 12px; font-size: 0.86rem; }
+      #map { height: 280px; border: 1px solid var(--line); border-radius: 12px; margin-top: 10px; }
 
       .status {
-        margin-top: 10px;
+        margin-top: 14px;
         min-height: 1.2em;
         color: var(--muted);
+        line-height: 1.5;
       }
-
-      .status.ok {
-        color: var(--ok);
-      }
-
-      .status.error {
-        color: var(--danger);
-      }
-
+      .status.ok { color: var(--ok); }
+      .status.error { color: var(--danger); }
       .status.pending {
         color: #345173;
         background: #eef5ff;
         border: 1px solid #cfe0ff;
         border-radius: 10px;
-        padding: 10px 12px;
-        line-height: 1.45;
+        padding: 12px 14px;
       }
 
-      @media (max-width: 760px) {
-        .form-grid {
-          grid-template-columns: 1fr;
-        }
+      .anon-note {
+        font-size: 0.83rem;
+        color: var(--muted);
+        text-align: center;
+        margin-top: 14px;
+        line-height: 1.5;
       }
+      .anon-note a { color: var(--accent); }
     </style>
   </head>
   <body>
     <main class="shell">
       <section class="card">
-        <nav style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:16px">
+        <nav style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:18px">
           <a class="brand brand-link" href="/"><span class="brand-hoa">HOA</span><span class="brand-proxy">proxy</span></a>
           <div class="nav" id="navContainer"></div>
         </nav>
-        <h1 style="font-size:clamp(1.4rem,3.2vw,2rem);margin-bottom:8px">Add Your HOA</h1>
-        <p class="subtitle">Upload your HOA's governing documents — CC&Rs, bylaws, rules — and make them searchable for your whole community. Takes about 2 minutes.</p>
 
-        <div class="form-grid">
-          <div class="full">
-            <label for="hoaName" class="req">HOA Name</label>
-            <input id="hoaName" placeholder="Example: Grove at Fallon Park" />
-          </div>
+        <h1>Add your HOA</h1>
+        <p class="lede">
+          Got your HOA's <strong>CC&amp;Rs, bylaws, or rules</strong> as a PDF? Drop them in below.
+          Anyone in your community will be able to search them with AI.
+          <strong>No account needed.</strong>
+        </p>
 
-          <div class="full">
-            <label for="files" class="req">PDF Documents</label>
-            <input id="files" type="file" accept=".pdf,application/pdf" multiple />
-            <div class="hint">Max 25 MB per file.</div>
-          </div>
-
-          <div class="full" id="emailRow" hidden>
-            <label for="uploaderEmail">Your email (to verify this upload)</label>
-            <input id="uploaderEmail" type="email" placeholder="you@example.com" />
-            <div class="hint">We'll send a verification link. Your HOA will appear on the site once verified.</div>
-          </div>
-
-          <div class="full">
-            <label for="website">HOA Website (usually login page)</label>
-            <input id="website" placeholder="https://examplehoa.com" />
-          </div>
-
-          <div>
-            <label for="street">Street</label>
-            <input id="street" placeholder="123 Main St" />
-          </div>
-          <div>
-            <label for="city">City</label>
-            <input id="city" placeholder="Raleigh" />
-          </div>
-          <div>
-            <label for="state">State</label>
-            <input id="state" placeholder="NC" maxlength="2" />
-          </div>
-          <div>
-            <label for="postal">ZIP</label>
-            <input id="postal" placeholder="27601" />
-          </div>
-          <div>
-            <label for="lat">Latitude</label>
-            <input id="lat" placeholder="35.7796" />
-          </div>
-          <div>
-            <label for="lon">Longitude</label>
-            <input id="lon" placeholder="-78.6382" />
-          </div>
-
-          <div class="full">
-            <label>HOA Boundary Polygon (optional)</label>
-            <div class="map-actions">
-              <button id="drawBoundaryBtn" class="secondary" type="button">Draw Boundary</button>
-              <button id="finishBoundaryBtn" class="secondary" type="button">Finish Polygon</button>
-              <button id="clearBoundaryBtn" class="secondary" type="button">Clear Boundary</button>
-            </div>
-            <input id="boundaryGeojson" type="hidden" />
-            <div id="boundaryHint" class="hint">Click Draw Boundary, then click the map to add boundary vertices.</div>
-          </div>
-
-          <div class="full">
-            <div id="map"></div>
-            <div class="hint">Tip: in normal mode, click map to autofill latitude/longitude.</div>
-          </div>
-
-          <div class="full">
-            <button id="submitBtn" type="button">Create HOA and Upload</button>
-            <div class="hint">
-              After upload, your PDFs may take a few minutes to appear while HOAproxy extracts text and checks the documents.
-            </div>
-          </div>
+        <div class="field">
+          <label for="hoaName">HOA name</label>
+          <input id="hoaName" type="text" placeholder="e.g. Grove at Fallon Park" autocomplete="off" />
         </div>
 
+        <div class="field">
+          <label for="files">Governing documents (PDF)</label>
+          <div id="dropZone" class="drop-zone" role="button" tabindex="0">
+            <div class="dz-line1">Drop PDFs here, or click to choose</div>
+            <div class="dz-line2">Max 25 MB per file. You can add more than one.</div>
+            <input id="files" type="file" accept=".pdf,application/pdf" multiple hidden />
+          </div>
+          <div id="fileList" class="file-list"></div>
+        </div>
+
+        <button id="submitBtn" class="primary-btn" type="button">Add this HOA</button>
+
+        <details class="details-toggle">
+          <summary>Add more details (optional)</summary>
+          <div class="details-sub">
+            These help us put your HOA on the map and make it easier to find by address.
+            None of them are required — skip anything you don't have handy.
+          </div>
+          <div class="details-body">
+            <div class="field">
+              <label for="website">HOA website</label>
+              <input id="website" type="url" placeholder="https://examplehoa.com" autocomplete="off" />
+            </div>
+
+            <div class="field">
+              <label for="street">Street</label>
+              <input id="street" type="text" placeholder="123 Main St" autocomplete="off" />
+            </div>
+
+            <div class="opt-row">
+              <div class="field">
+                <label for="city">City</label>
+                <input id="city" type="text" autocomplete="off" />
+              </div>
+              <div class="field">
+                <label for="state">State</label>
+                <input id="state" type="text" maxlength="2" placeholder="NC" autocomplete="off" />
+              </div>
+            </div>
+
+            <div class="opt-row">
+              <div class="field">
+                <label for="postal">ZIP</label>
+                <input id="postal" type="text" autocomplete="off" />
+              </div>
+              <div class="field">
+                <label for="emailOptional">Your email (optional)</label>
+                <input id="emailOptional" type="email" placeholder="you@example.com" autocomplete="off" />
+                <div class="field-hint">Only if you'd like us to follow up.</div>
+              </div>
+            </div>
+
+            <input id="lat" type="hidden" />
+            <input id="lon" type="hidden" />
+            <input id="boundaryGeojson" type="hidden" />
+
+            <div class="field">
+              <label>Pick a location on the map</label>
+              <div class="field-hint">Click the map to drop a pin. Or draw a boundary polygon.</div>
+              <div class="map-actions">
+                <button id="drawBoundaryBtn" class="secondary-btn" type="button">Draw boundary</button>
+                <button id="finishBoundaryBtn" class="secondary-btn" type="button">Finish polygon</button>
+                <button id="clearBoundaryBtn" class="secondary-btn" type="button">Clear</button>
+              </div>
+              <div id="map"></div>
+              <div id="boundaryHint" class="field-hint" style="margin-top:8px"></div>
+            </div>
+          </div>
+        </details>
+
         <div id="status" class="status"></div>
+
+        <p class="anon-note">
+          Uploads are filtered for personal info before going live. You don't need an account — but if you'd rather sign up first, <a href="/register?next=/add-hoa">create one here</a>.
+        </p>
       </section>
     </main>
 
@@ -343,129 +348,178 @@
     <script src="/static/js/auth.js"></script>
     <script>
       Auth.renderNav(document.getElementById("navContainer"));
-      // Show email field for anonymous users
-      if (!Auth.isLoggedIn()) {
-        document.getElementById("emailRow").hidden = false;
-      }
-      // Pre-fill HOA name from URL param
+
+      // Pre-fill HOA name from URL param (e.g. coming from search miss)
       (function() {
-        var params = new URLSearchParams(window.location.search);
-        var hoa = params.get("hoa");
+        const params = new URLSearchParams(window.location.search);
+        const hoa = params.get("hoa");
         if (hoa) document.getElementById("hoaName").value = hoa;
       })();
     </script>
     <script>
       const hoaName = document.getElementById("hoaName");
-      const files = document.getElementById("files");
+      const filesInput = document.getElementById("files");
+      const dropZone = document.getElementById("dropZone");
+      const fileListEl = document.getElementById("fileList");
+      const submitBtn = document.getElementById("submitBtn");
+      const statusEl = document.getElementById("status");
+
       const website = document.getElementById("website");
       const street = document.getElementById("street");
-      const city = document.getElementById("city");
-      const state = document.getElementById("state");
+      const cityEl = document.getElementById("city");
+      const stateEl = document.getElementById("state");
       const postal = document.getElementById("postal");
+      const emailOptional = document.getElementById("emailOptional");
       const lat = document.getElementById("lat");
       const lon = document.getElementById("lon");
       const boundaryGeojson = document.getElementById("boundaryGeojson");
+
       const boundaryHint = document.getElementById("boundaryHint");
       const drawBoundaryBtn = document.getElementById("drawBoundaryBtn");
       const finishBoundaryBtn = document.getElementById("finishBoundaryBtn");
       const clearBoundaryBtn = document.getElementById("clearBoundaryBtn");
-      const submitBtn = document.getElementById("submitBtn");
-      const statusEl = document.getElementById("status");
+
+      // Internal list of files (lets us add via drag-drop and via the picker)
+      const selectedFiles = [];
+      const MAX_FILE_MB = 25;
 
       function setStatus(msg, kind = "") {
         statusEl.className = `status ${kind}`.trim();
-        statusEl.textContent = msg || "";
+        if (typeof msg === "string") statusEl.textContent = msg || "";
+        else statusEl.replaceChildren(...(msg ? [msg] : []));
       }
 
-      function pendingUploadStorageKey(hoaName) {
-        return `hoaproxy.pendingUploads.${hoaName}`;
+      function formatBytes(bytes) {
+        if (bytes < 1024) return `${bytes} B`;
+        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+        return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
       }
 
-      function savePendingUploads(hoa, uploadedFiles) {
-        if (!hoa || !uploadedFiles.length) return;
-        localStorage.setItem(
-          pendingUploadStorageKey(hoa),
-          JSON.stringify({ files: uploadedFiles.map(String), createdAt: Date.now() })
-        );
+      function renderFileList() {
+        fileListEl.innerHTML = "";
+        selectedFiles.forEach((file, idx) => {
+          const row = document.createElement("div");
+          row.className = "file-row";
+          const fname = document.createElement("span");
+          fname.className = "fname";
+          fname.textContent = file.name;
+          const right = document.createElement("span");
+          right.style.display = "flex";
+          right.style.alignItems = "center";
+          right.style.gap = "10px";
+          const fsize = document.createElement("span");
+          fsize.className = "fsize";
+          fsize.textContent = formatBytes(file.size);
+          const remove = document.createElement("button");
+          remove.type = "button";
+          remove.className = "secondary-btn";
+          remove.style.padding = "4px 10px";
+          remove.style.fontSize = "0.8rem";
+          remove.textContent = "Remove";
+          remove.addEventListener("click", () => {
+            selectedFiles.splice(idx, 1);
+            renderFileList();
+          });
+          right.appendChild(fsize);
+          right.appendChild(remove);
+          row.appendChild(fname);
+          row.appendChild(right);
+          fileListEl.appendChild(row);
+        });
       }
 
-      function hasLocation() {
-        return Boolean(
-          lat.value.trim() ||
-            lon.value.trim() ||
-            city.value.trim() ||
-            state.value.trim() ||
-            street.value.trim() ||
-            postal.value.trim() ||
-            boundaryGeojson.value.trim()
-        );
+      function addFiles(newFiles) {
+        for (const f of newFiles) {
+          if (!f) continue;
+          if (!/\.pdf$/i.test(f.name) && f.type !== "application/pdf") {
+            setStatus(`"${f.name}" isn't a PDF — skipped.`, "error");
+            continue;
+          }
+          if (f.size > MAX_FILE_MB * 1024 * 1024) {
+            setStatus(`"${f.name}" is over ${MAX_FILE_MB} MB — skipped.`, "error");
+            continue;
+          }
+          // De-dupe by name + size
+          if (selectedFiles.some((s) => s.name === f.name && s.size === f.size)) continue;
+          selectedFiles.push(f);
+        }
+        renderFileList();
       }
+
+      // Drop zone wiring
+      dropZone.addEventListener("click", () => filesInput.click());
+      dropZone.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          filesInput.click();
+        }
+      });
+      filesInput.addEventListener("change", () => {
+        addFiles(filesInput.files);
+        filesInput.value = "";
+      });
+      ["dragenter", "dragover"].forEach((evt) =>
+        dropZone.addEventListener(evt, (e) => {
+          e.preventDefault();
+          dropZone.classList.add("drag");
+        })
+      );
+      ["dragleave", "drop"].forEach((evt) =>
+        dropZone.addEventListener(evt, (e) => {
+          e.preventDefault();
+          dropZone.classList.remove("drag");
+        })
+      );
+      dropZone.addEventListener("drop", (e) => {
+        if (e.dataTransfer && e.dataTransfer.files) addFiles(e.dataTransfer.files);
+      });
 
       async function createHoa() {
         const hoa = hoaName.value.trim();
         if (!hoa) {
-          setStatus("Enter HOA name.", "error");
+          setStatus("Enter the HOA name.", "error");
+          hoaName.focus();
           return;
         }
-        if (!files.files.length) {
-          setStatus("Choose at least one PDF file.", "error");
+        if (!selectedFiles.length) {
+          setStatus("Add at least one PDF.", "error");
           return;
-        }
-        const MAX_FILE_MB = 25;
-        for (const file of files.files) {
-          if (file.size > MAX_FILE_MB * 1024 * 1024) {
-            setStatus(`"${file.name}" exceeds the ${MAX_FILE_MB} MB limit.`, "error");
-            return;
-          }
-        }
-        if (!hasLocation()) {
-          setStatus("Add location info (address, coordinates, and/or boundary polygon).", "error");
-          return;
-        }
-
-        const isAnonymous = !Auth.isLoggedIn();
-        const uploaderEmail = document.getElementById("uploaderEmail");
-        if (isAnonymous) {
-          const email = uploaderEmail ? uploaderEmail.value.trim() : "";
-          if (!email || !email.includes("@")) {
-            setStatus("Enter a valid email so we can verify your upload.", "error");
-            return;
-          }
         }
 
         submitBtn.disabled = true;
-        setStatus("Uploading your PDFs. Once they arrive, we'll extract the text and check the documents before they appear on the HOA page.", "pending");
+        setStatus(
+          "Uploading. Once received, we extract text and run filters — your community page will show the docs in a few minutes.",
+          "pending"
+        );
 
         try {
           const form = new FormData();
           form.append("hoa", hoa);
-          const selectedFiles = [...files.files].map((file) => file.name);
-          for (const file of files.files) {
-            form.append("files", file);
-          }
-          if (street.value.trim()) form.append("street", street.value.trim());
+          for (const file of selectedFiles) form.append("files", file);
+
+          // Optional details — only append if present
           if (website.value.trim()) form.append("website_url", website.value.trim());
-          if (city.value.trim()) form.append("city", city.value.trim());
-          if (state.value.trim()) form.append("state", state.value.trim());
+          if (street.value.trim()) form.append("street", street.value.trim());
+          if (cityEl.value.trim()) form.append("city", cityEl.value.trim());
+          if (stateEl.value.trim()) form.append("state", stateEl.value.trim());
           if (postal.value.trim()) form.append("postal_code", postal.value.trim());
           if (lat.value.trim()) form.append("latitude", lat.value.trim());
           if (lon.value.trim()) form.append("longitude", lon.value.trim());
           if (boundaryGeojson.value.trim()) form.append("boundary_geojson", boundaryGeojson.value.trim());
 
           const token = Auth.getToken();
-          let endpoint = "/upload";
           const headers = {};
+          let endpoint = "/upload";
           if (token) {
             headers["Authorization"] = `Bearer ${token}`;
           } else {
             endpoint = "/upload/anonymous";
-            form.append("email", uploaderEmail.value.trim());
+            if (emailOptional && emailOptional.value.trim()) {
+              form.append("email", emailOptional.value.trim());
+            }
           }
-          const res = await fetch(endpoint, {
-            method: "POST",
-            headers: headers,
-            body: form,
-          });
+
+          const res = await fetch(endpoint, { method: "POST", headers, body: form });
           if (!res.ok) {
             let detail = `${res.status} ${res.statusText}`;
             try {
@@ -475,17 +529,18 @@
             throw new Error(detail);
           }
           const body = await res.json();
-          if (window.gtag) gtag("event", "hoa_created", { hoa_name: hoa, method: isAnonymous ? "anonymous" : "authenticated" });
-          if (isAnonymous) {
-            setStatus("Upload received. Check your email to verify it; after verification, processing can take a few minutes before the documents appear.", "pending");
-          } else {
-            savePendingUploads(body.hoa || hoa, body.saved_files && body.saved_files.length ? body.saved_files : selectedFiles);
-            setStatus("Upload received. We'll show the documents on the HOA page as soon as text extraction and checks finish. Redirecting...", "pending");
-            const redirect = `/hoa/${encodeURIComponent(hoa)}`;
-            setTimeout(() => {
-              window.location.href = redirect;
-            }, 1200);
+          if (window.gtag) {
+            gtag("event", "hoa_created", {
+              hoa_name: hoa,
+              method: token ? "authenticated" : "anonymous",
+            });
           }
+          setStatus(
+            "Got it. Documents are queued — your HOA page will populate in a few minutes. Redirecting...",
+            "ok"
+          );
+          const dest = `/hoa/${encodeURIComponent(body.hoa || hoa)}`;
+          setTimeout(() => { window.location.href = dest; }, 1400);
         } catch (err) {
           setStatus(String(err.message || err), "error");
         } finally {
@@ -494,9 +549,17 @@
       }
 
       submitBtn.addEventListener("click", createHoa);
+      hoaName.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); createHoa(); }
+      });
 
-      if (window.L) {
-        const map = L.map("map", { zoomControl: true }).setView([35.78, -78.64], 7);
+      // ── Map + boundary drawing (only initialized when the disclosure is opened
+      // so it doesn't slow down the initial render or trip Leaflet on a hidden div)
+      let mapInitialized = false;
+      function initMap() {
+        if (mapInitialized || !window.L) return;
+        mapInitialized = true;
+        const map = L.map("map", { zoomControl: true }).setView([39.5, -98.0], 4);
         L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
           maxZoom: 19,
           attribution: "&copy; OpenStreetMap contributors",
@@ -508,94 +571,73 @@
         let boundaryPoints = [];
 
         function renderBoundary() {
-          if (boundaryPolyline) {
-            boundaryPolyline.remove();
-            boundaryPolyline = null;
-          }
-          if (boundaryPolygon) {
-            boundaryPolygon.remove();
-            boundaryPolygon = null;
-          }
+          if (boundaryPolyline) { boundaryPolyline.remove(); boundaryPolyline = null; }
+          if (boundaryPolygon) { boundaryPolygon.remove(); boundaryPolygon = null; }
           if (!boundaryPoints.length) return;
           if (drawingBoundary || boundaryPoints.length < 3) {
             boundaryPolyline = L.polyline(boundaryPoints, {
-              color: "#1a66ff",
-              weight: 3,
-              dashArray: "7 5",
+              color: "#1a66ff", weight: 3, dashArray: "7 5",
             }).addTo(map);
             return;
           }
           boundaryPolygon = L.polygon(boundaryPoints, {
-            color: "#1a66ff",
-            weight: 2,
-            fillColor: "#3c7bff",
-            fillOpacity: 0.18,
+            color: "#1a66ff", weight: 2, fillColor: "#3c7bff", fillOpacity: 0.18,
           }).addTo(map);
           map.fitBounds(boundaryPolygon.getBounds(), { padding: [20, 20], maxZoom: 15 });
         }
 
         function writeBoundaryGeojson() {
-          if (drawingBoundary || boundaryPoints.length < 3) {
-            boundaryGeojson.value = "";
-            return;
-          }
-          const coordinates = boundaryPoints.map(([pointLat, pointLon]) => [
-            Number(pointLon.toFixed(6)),
-            Number(pointLat.toFixed(6)),
+          if (drawingBoundary || boundaryPoints.length < 3) { boundaryGeojson.value = ""; return; }
+          const coordinates = boundaryPoints.map(([pLat, pLon]) => [
+            Number(pLon.toFixed(6)), Number(pLat.toFixed(6)),
           ]);
           const first = coordinates[0];
           const last = coordinates[coordinates.length - 1];
-          if (first[0] !== last[0] || first[1] !== last[1]) {
-            coordinates.push([first[0], first[1]]);
-          }
-          boundaryGeojson.value = JSON.stringify({
-            type: "Polygon",
-            coordinates: [coordinates],
-          });
+          if (first[0] !== last[0] || first[1] !== last[1]) coordinates.push([first[0], first[1]]);
+          boundaryGeojson.value = JSON.stringify({ type: "Polygon", coordinates: [coordinates] });
         }
 
         drawBoundaryBtn.addEventListener("click", () => {
           drawingBoundary = true;
-          boundaryHint.textContent = "Boundary draw mode on: click map to add vertices, then click Finish Polygon.";
-          setStatus("Boundary drawing started.");
-          renderBoundary();
-          writeBoundaryGeojson();
+          boundaryHint.textContent = "Click the map to add boundary vertices, then press Finish polygon.";
+          renderBoundary(); writeBoundaryGeojson();
         });
-
         finishBoundaryBtn.addEventListener("click", () => {
           if (boundaryPoints.length < 3) {
-            setStatus("Boundary needs at least 3 points.", "error");
+            boundaryHint.textContent = "Boundary needs at least 3 points.";
             return;
           }
           drawingBoundary = false;
-          renderBoundary();
-          writeBoundaryGeojson();
-          boundaryHint.textContent = `Boundary saved with ${boundaryPoints.length} vertices.`;
-          setStatus("Boundary polygon captured from map.", "ok");
+          renderBoundary(); writeBoundaryGeojson();
+          boundaryHint.textContent = `Boundary captured (${boundaryPoints.length} vertices).`;
         });
-
         clearBoundaryBtn.addEventListener("click", () => {
-          drawingBoundary = false;
-          boundaryPoints = [];
-          boundaryGeojson.value = "";
-          boundaryHint.textContent = "Boundary cleared. Click Draw Boundary to start again.";
+          drawingBoundary = false; boundaryPoints = []; boundaryGeojson.value = "";
+          boundaryHint.textContent = "Boundary cleared.";
           renderBoundary();
-          setStatus("Boundary cleared.");
         });
-
         map.on("click", (e) => {
           if (drawingBoundary) {
             boundaryPoints.push([e.latlng.lat, e.latlng.lng]);
-            renderBoundary();
-            writeBoundaryGeojson();
-            setStatus(`Boundary point ${boundaryPoints.length} added.`);
+            renderBoundary(); writeBoundaryGeojson();
+            boundaryHint.textContent = `${boundaryPoints.length} vertex point${boundaryPoints.length === 1 ? "" : "es"} added.`;
             return;
           }
           lat.value = e.latlng.lat.toFixed(6);
           lon.value = e.latlng.lng.toFixed(6);
           if (marker) marker.remove();
           marker = L.marker([e.latlng.lat, e.latlng.lng]).addTo(map);
-          setStatus("Coordinates picked from map.");
+          boundaryHint.textContent = "Location pin set.";
+        });
+
+        // Force a resize after the disclosure animation settles
+        setTimeout(() => map.invalidateSize(), 80);
+      }
+
+      const detailsEl = document.querySelector("details.details-toggle");
+      if (detailsEl) {
+        detailsEl.addEventListener("toggle", () => {
+          if (detailsEl.open) initMap();
         });
       }
     </script>
