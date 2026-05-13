@@ -2148,36 +2148,54 @@ def robots_txt() -> FileResponse:
     return FileResponse(STATIC_DIR / "robots.txt", media_type="text/plain")
 
 
-_sitemap_cache: dict[str, Any] = {"xml": "", "ts": 0.0}
+# Cached sitemap output. `index` holds the sitemap-index XML; `states` maps
+# 2-letter state code (lowercase) -> child sitemap XML; `static` is the small
+# sitemap of non-HOA pages. All entries share the same TTL stamped via `ts`.
+# The full HOA dataset (>130k URLs) overflows Google's 50k-per-sitemap limit
+# in a single file, hence the per-state split.
+_sitemap_cache: dict[str, Any] = {
+    "ts": 0.0,
+    "index": "",
+    "static": "",
+    "states": {},
+}
 _SITEMAP_TTL = 3600  # 1 hour
 
+# US states + DC. Anything else in `hoa_locations.state` is data corruption
+# (registry-stub backfills with junk values like "IC", "LL") and is filtered
+# out of the sitemap so Googlebot never sees it.
+_VALID_STATE_CODES: frozenset[str] = frozenset({
+    "al", "ak", "az", "ar", "ca", "co", "ct", "de", "fl", "ga", "hi", "id",
+    "il", "in", "ia", "ks", "ky", "la", "me", "md", "ma", "mi", "mn", "ms",
+    "mo", "mt", "ne", "nv", "nh", "nj", "nm", "ny", "nc", "nd", "oh", "ok",
+    "or", "pa", "ri", "sc", "sd", "tn", "tx", "ut", "vt", "va", "wa", "wv",
+    "wi", "wy", "dc",
+})
 
-@app.get("/sitemap.xml", include_in_schema=False)
-def sitemap_xml() -> Response:
-    """Dynamically generate sitemap covering all HOA pages."""
-    now = time.time()
-    if _sitemap_cache["xml"] and now - _sitemap_cache["ts"] < _SITEMAP_TTL:
-        return Response(
-            content=_sitemap_cache["xml"],
-            media_type="application/xml",
-            headers={"Cache-Control": f"public, max-age={_SITEMAP_TTL}"},
-        )
 
+def _to_iso_date(value: object) -> str | None:
+    """Sitemap lastmod accepts YYYY-MM-DD; trim time component if present."""
+    if not value:
+        return None
+    s = str(value).strip()
+    return s.split(" ")[0].split("T")[0] if s else None
+
+
+def _build_all_sitemaps() -> None:
+    """Recompute the static sitemap, every per-state sitemap, and the index.
+
+    Single DB pass; per-state buckets keyed by lowercase state code. HOAs
+    with `doc_count == 0` are excluded — they're `noindex`'d on render so
+    listing them in the sitemap would just waste crawl budget. HOAs with
+    invalid state codes are dropped silently.
+    """
     settings = load_settings()
     with db.get_connection(settings.db_path) as conn:
         hoas = db.list_hoas_for_sitemap(conn)
 
-    urls: list[str] = []
     today = datetime.now(timezone.utc).date().isoformat()
 
-    def _to_iso_date(value: object) -> str | None:
-        """Sitemap lastmod accepts YYYY-MM-DD; trim time component if present."""
-        if not value:
-            return None
-        s = str(value).strip()
-        return s.split(" ")[0].split("T")[0] if s else None
-
-    # Static pages
+    # --- static sitemap (home + about + auth/legal pages) ---------------
     static_pages = [
         ("/", "weekly", "1.0"),
         ("/about", "monthly", "0.8"),
@@ -2187,76 +2205,135 @@ def sitemap_xml() -> Response:
         ("/terms", "monthly", "0.4"),
         ("/privacy", "monthly", "0.4"),
     ]
-    for path, freq, priority in static_pages:
-        urls.append(
-            f"  <url><loc>https://hoaproxy.org{path}</loc>"
-            f"<lastmod>{today}</lastmod>"
-            f"<changefreq>{freq}</changefreq><priority>{priority}</priority></url>"
-        )
+    static_urls = [
+        f"  <url><loc>https://hoaproxy.org{path}</loc>"
+        f"<lastmod>{today}</lastmod>"
+        f"<changefreq>{freq}</changefreq><priority>{priority}</priority></url>"
+        for path, freq, priority in static_pages
+    ]
+    static_xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+        + "\n".join(static_urls)
+        + "\n</urlset>"
+    )
 
-    # Aggregate per-state and per-city stats including newest lastmod
-    states: dict[str, dict] = {}
-    cities: dict[tuple[str, str, str], dict] = {}
+    # --- per-state buckets ---------------------------------------------
+    # state -> {"state_lastmod": str|None, "cities": {city_slug: {"display": str, "lastmod": str|None}},
+    #           "hoa_urls": [str]}
+    buckets: dict[str, dict] = {}
     for h in hoas:
-        s = (h["state"] or "").strip().lower()
-        c = (h["city"] or "").strip()
-        if not s or not c:
+        s = (h.get("state") or "").strip().lower()
+        c = (h.get("city") or "").strip()
+        if s not in _VALID_STATE_CODES or not c:
             continue
-        last = _to_iso_date(h.get("last_ingested"))
-        st = states.setdefault(s, {"count": 0, "last": None})
-        st["count"] += 1
-        if last and (st["last"] is None or last > st["last"]):
-            st["last"] = last
-        key = (s, db.slugify_city(c), c)
-        ct = cities.setdefault(key, {"count": 0, "last": None})
-        ct["count"] += 1
-        if last and (ct["last"] is None or last > ct["last"]):
-            ct["last"] = last
-
-    # State index pages
-    for s in sorted(states):
-        last = states[s]["last"] or today
-        urls.append(
-            f"  <url><loc>https://hoaproxy.org/hoa/{s}/</loc>"
-            f"<lastmod>{last}</lastmod>"
-            f"<changefreq>weekly</changefreq><priority>0.7</priority></url>"
-        )
-
-    # City index pages
-    for key in sorted(cities):
-        s, cs, _cd = key
-        last = cities[key]["last"] or today
-        urls.append(
-            f"  <url><loc>https://hoaproxy.org/hoa/{s}/{cs}/</loc>"
-            f"<lastmod>{last}</lastmod>"
-            f"<changefreq>weekly</changefreq><priority>0.6</priority></url>"
-        )
-
-    # Individual HOA pages
-    for h in hoas:
-        s = (h["state"] or "").strip().lower()
-        c = (h["city"] or "").strip()
-        if not s or not c:
+        # Skip docless HOAs — they're noindex'd on render so listing them
+        # in the sitemap would dilute crawl budget for indexable pages.
+        if int(h.get("doc_count") or 0) <= 0:
             continue
-        cs = db.slugify_city(c)
-        ns = db.slugify_name(h["hoa_name"])
         last = _to_iso_date(h.get("last_ingested")) or today
-        urls.append(
+        bucket = buckets.setdefault(s, {"state_lastmod": None, "cities": {}, "hoa_urls": []})
+        if bucket["state_lastmod"] is None or last > bucket["state_lastmod"]:
+            bucket["state_lastmod"] = last
+        cs = db.slugify_city(c)
+        city_entry = bucket["cities"].setdefault(cs, {"display": c, "lastmod": None})
+        if city_entry["lastmod"] is None or last > city_entry["lastmod"]:
+            city_entry["lastmod"] = last
+        ns = db.slugify_name(h["hoa_name"])
+        bucket["hoa_urls"].append(
             f"  <url><loc>https://hoaproxy.org/hoa/{s}/{cs}/{ns}</loc>"
             f"<lastmod>{last}</lastmod>"
             f"<changefreq>weekly</changefreq><priority>0.5</priority></url>"
         )
 
-    xml = (
+    # --- per-state child sitemaps --------------------------------------
+    state_xmls: dict[str, str] = {}
+    for s, bucket in buckets.items():
+        urls = []
+        # State index page
+        urls.append(
+            f"  <url><loc>https://hoaproxy.org/hoa/{s}/</loc>"
+            f"<lastmod>{bucket['state_lastmod'] or today}</lastmod>"
+            f"<changefreq>weekly</changefreq><priority>0.7</priority></url>"
+        )
+        # City index pages, sorted by slug for stable output
+        for cs in sorted(bucket["cities"]):
+            entry = bucket["cities"][cs]
+            urls.append(
+                f"  <url><loc>https://hoaproxy.org/hoa/{s}/{cs}/</loc>"
+                f"<lastmod>{entry['lastmod'] or today}</lastmod>"
+                f"<changefreq>weekly</changefreq><priority>0.6</priority></url>"
+            )
+        urls.extend(bucket["hoa_urls"])
+        state_xmls[s] = (
+            '<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+            + "\n".join(urls)
+            + "\n</urlset>"
+        )
+
+    # --- sitemap index (the file Googlebot fetches first) --------------
+    index_entries = [
+        f"  <sitemap><loc>https://hoaproxy.org/sitemap-static.xml</loc>"
+        f"<lastmod>{today}</lastmod></sitemap>"
+    ]
+    for s in sorted(state_xmls):
+        last = buckets[s]["state_lastmod"] or today
+        index_entries.append(
+            f"  <sitemap><loc>https://hoaproxy.org/sitemap-{s}.xml</loc>"
+            f"<lastmod>{last}</lastmod></sitemap>"
+        )
+    index_xml = (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
-        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
-        + "\n".join(urls)
-        + "\n</urlset>"
+        '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+        + "\n".join(index_entries)
+        + "\n</sitemapindex>"
     )
 
-    _sitemap_cache["xml"] = xml
-    _sitemap_cache["ts"] = now
+    _sitemap_cache["index"] = index_xml
+    _sitemap_cache["static"] = static_xml
+    _sitemap_cache["states"] = state_xmls
+    _sitemap_cache["ts"] = time.time()
 
+
+def _ensure_sitemap_cache() -> None:
+    if not _sitemap_cache["index"] or time.time() - _sitemap_cache["ts"] >= _SITEMAP_TTL:
+        _build_all_sitemaps()
+
+
+@app.get("/sitemap.xml", include_in_schema=False)
+def sitemap_xml() -> Response:
+    """Sitemap index — points to one child sitemap per state plus a static one.
+
+    Splitting per-state keeps each child well below Google's 50,000-URL cap.
+    """
+    _ensure_sitemap_cache()
+    return Response(
+        content=_sitemap_cache["index"],
+        media_type="application/xml",
+        headers={"Cache-Control": f"public, max-age={_SITEMAP_TTL}"},
+    )
+
+
+@app.get("/sitemap-static.xml", include_in_schema=False)
+def sitemap_static_xml() -> Response:
+    _ensure_sitemap_cache()
+    return Response(
+        content=_sitemap_cache["static"],
+        media_type="application/xml",
+        headers={"Cache-Control": f"public, max-age={_SITEMAP_TTL}"},
+    )
+
+
+@app.get("/sitemap-{state}.xml", include_in_schema=False)
+def sitemap_state_xml(state: str) -> Response:
+    state_lower = state.lower()
+    if state_lower not in _VALID_STATE_CODES:
+        raise HTTPException(status_code=404, detail="Unknown state sitemap")
+    _ensure_sitemap_cache()
+    xml = _sitemap_cache["states"].get(state_lower)
+    if not xml:
+        raise HTTPException(status_code=404, detail="No sitemap for this state")
     return Response(
         content=xml,
         media_type="application/xml",
@@ -2483,16 +2560,27 @@ def _render_hoa_page(
     canonical = f"https://hoaproxy.org{canonical_path}"
 
     # --- <title> ---
+    # No trailing brand suffix: SERP titles often render brand-on-the-end as the
+    # first thing truncated past ~60 chars, so we drop it and rely on the
+    # `og:site_name` and breadcrumb structured data for brand attribution.
     title = html_escape(hoa_name)
     if city and state_upper:
         title += f" | {html_escape(city)}, {html_escape(state_upper)}"
-    title += " | HOAproxy"
 
     # --- meta description ---
-    desc = f"View governing documents, CC&Rs, bylaws and rules for {html_escape(hoa_name)}"
-    if city and state_upper:
-        desc += f" in {html_escape(city)}, {html_escape(state_upper)}"
-    desc += f". {doc_count} document{'s' if doc_count != 1 else ''} available."
+    # For docless HOAs we frame the page as an invitation rather than a
+    # zero-quantity announcement. The page is `noindex,follow` (see below) so
+    # this copy is for users who land via the city index, not for SERPs.
+    if doc_count > 0:
+        desc = f"View governing documents, CC&Rs, bylaws and rules for {html_escape(hoa_name)}"
+        if city and state_upper:
+            desc += f" in {html_escape(city)}, {html_escape(state_upper)}"
+        desc += f". {doc_count} document{'s' if doc_count != 1 else ''} available."
+    else:
+        desc = f"Help your neighbors at {html_escape(hoa_name)}"
+        if city and state_upper:
+            desc += f" in {html_escape(city)}, {html_escape(state_upper)}"
+        desc += " find the CC&Rs, bylaws, and rules that govern the community — upload them on HOAproxy and make them searchable."
 
     # --- SSR data for client JS ---
     ssr_json = json.dumps(
@@ -2564,9 +2652,14 @@ def _render_hoa_page(
     elif doc_count > 0:
         sent_docs = f"HOAproxy has {doc_count} document{'s' if doc_count != 1 else ''} on file for {html_escape(hoa_name)}."
     else:
+        # Invitation framing — no zero-quantity admission, no "yet" filler.
+        # `noindex,follow` keeps this page out of SERPs so it doesn't read as
+        # a thin doorway page; the audience here is neighbors who arrived via
+        # the city index and the kind of word-of-mouth share that drives uploads.
         sent_docs = (
-            f"HOAproxy doesn't have any governing documents on file for {html_escape(hoa_name)} yet. "
-            f"Members can upload CC&Rs, bylaws, rules, and amendments below."
+            f"No governing documents have been uploaded to HOAproxy yet for {html_escape(hoa_name)}. "
+            f"If you're a homeowner or board member, you can add the CC&Rs, bylaws, rules, "
+            f"and amendments below — once uploaded, the full text becomes searchable for everyone in the community."
         )
 
     # Sentence 4: last updated
@@ -2581,8 +2674,8 @@ def _render_hoa_page(
         ans1 += ". You can browse and search the full text of each document on this page."
     else:
         ans1 = (
-            f"HOAproxy doesn't have any governing documents on file for {hoa_name} yet. "
-            "Homeowners and board members can upload CC&Rs, bylaws, rules, and amendments using the upload form on this page."
+            f"No governing documents have been uploaded to HOAproxy yet for {hoa_name}. "
+            "Homeowners and board members can add CC&Rs, bylaws, rules, and amendments using the upload form on this page; once uploaded, the full text becomes searchable for everyone in the community."
         )
     faq_items.append((f"What governing documents does {hoa_name} have on file?", ans1))
 
@@ -2655,10 +2748,21 @@ def _render_hoa_page(
         title=title, desc=desc, canonical=canonical, social_title=social_title,
     ).replace("\n", "\n    ")
 
+    # `noindex,follow` on docless pages — keeps them out of SERPs (where they'd
+    # read as thin doorway pages) but lets PageRank flow through internal links
+    # so neighbors who arrive via the city index can still upload documents.
+    # Pages with at least one document are fully indexable.
+    robots_meta = (
+        '<meta name="robots" content="noindex,follow">\n    '
+        if doc_count <= 0
+        else ""
+    )
+
     # Inject meta description + canonical + OG + JSON-LD blocks before ga-measurement-id meta
     injected_head = (
         f'<meta name="description" content="{desc}">\n'
-        f'    <link rel="canonical" href="{html_escape(canonical)}">\n'
+        f'    {robots_meta}'
+        f'<link rel="canonical" href="{html_escape(canonical)}">\n'
         f'    {og_block}\n'
         f'    <script type="application/ld+json">{org_ld_json}</script>\n'
         f'    <script type="application/ld+json">{breadcrumb_ld_json}</script>\n'
@@ -2963,6 +3067,400 @@ _STATE_INTROS: dict[str, str] = {
         "and proxy voting. Each Virginia association also has its own CC&Rs, bylaws, rules, and amendments — "
         "HOAproxy aggregates those documents and makes the full text searchable across every Virginia HOA on "
         "the platform."
+    ),
+    "fl": (
+        "Florida community associations are governed by three parallel statutes: the Homeowners' Association Act "
+        "(Florida Statutes Chapter 720), the Condominium Act (Chapter 718), and the Cooperative Act (Chapter 719). "
+        "Florida law gives owners detailed rights around access to official records, open board and member "
+        "meetings, election procedures, and limited-proxy voting. Each Florida association also adopts its own "
+        "declaration of covenants, bylaws, articles of incorporation, and rules — HOAproxy collects those "
+        "documents in one place and makes the full text searchable, so Florida homeowners and prospective "
+        "buyers can find the rules that actually apply to a community without filing a Chapter 718 or 720 "
+        "records request."
+    ),
+    "ny": (
+        "New York community associations are governed by a patchwork of statutes: the Condominium Act "
+        "(Real Property Law Article 9-B) for condominiums, the Cooperative Corporations Law for housing "
+        "co-ops, and the Not-for-Profit Corporation Law for HOAs and homeowner-association corporations. "
+        "Owners have rights around access to records, board meetings, elections, and proxy voting that vary "
+        "by entity type. On top of state law, every New York association has its own declaration, bylaws, "
+        "house rules, and amendments — HOAproxy aggregates those documents across condos, co-ops, and HOAs "
+        "and makes the full text searchable, so members can find the provisions that govern their building "
+        "or community."
+    ),
+    "ma": (
+        "Massachusetts community associations are governed by the Massachusetts Condominium Act "
+        "(M.G.L. Chapter 183A) for condominiums and by the general laws on nonprofit corporations and "
+        "homeowner organizations for HOAs and homestead associations. Chapter 183A sets requirements for "
+        "the master deed, declaration of trust, bylaws, unit-owner meetings, board elections, and access "
+        "to financial records. Each Massachusetts association also adopts its own rules and amendments. "
+        "HOAproxy collects those documents and makes them searchable so unit owners and prospective buyers "
+        "can find the provisions that actually govern a property without paging through hundreds of "
+        "recorded pages."
+    ),
+    "il": (
+        "Illinois community associations are governed by the Illinois Condominium Property Act "
+        "(765 ILCS 605) and the Common Interest Community Association Act (765 ILCS 160) for HOAs and "
+        "townhome associations. Both statutes give owners specific rights around access to governing "
+        "documents and financial records, open board meetings, elections, and proxy voting. On top of "
+        "state law, every Illinois association has its own declaration, bylaws, rules, and amendments — "
+        "HOAproxy aggregates those documents across condominiums and common-interest communities and "
+        "makes the full text searchable for members and prospective buyers."
+    ),
+    "oh": (
+        "Ohio community associations are governed by the Ohio Planned Community Law (Ohio Revised Code "
+        "Chapter 5312) for HOAs and the Ohio Condominium Act (Chapter 5311) for condominiums. State law "
+        "sets a baseline for member meetings, board elections, access to records, and proxy voting that "
+        "applies on top of each association's own declaration, bylaws, rules, and amendments. HOAproxy "
+        "collects those documents and makes them searchable across every Ohio community on the platform, "
+        "so owners can find the provisions that govern dues, architectural review, and use restrictions "
+        "without combing through county records."
+    ),
+    "or": (
+        "Oregon community associations are governed by the Oregon Planned Community Act "
+        "(ORS Chapter 94) for HOAs and the Oregon Condominium Act (ORS Chapter 100) for condominiums. "
+        "Both statutes require associations to record their declarations and bylaws and give owners rights "
+        "to inspect records, attend board meetings, vote in elections, and assign proxies. Each Oregon "
+        "association also adopts its own rules and amendments — HOAproxy collects those documents and "
+        "makes the full text searchable, so owners can find the provisions that actually govern a "
+        "property in Portland, Bend, Eugene, or anywhere else in the state."
+    ),
+    "ct": (
+        "Connecticut community associations are governed by the Connecticut Common Interest Ownership Act "
+        "(CIOA, Conn. Gen. Stat. §§47-200 et seq.) for HOAs, condominiums, and cooperatives created on or "
+        "after January 1, 1984, and by older statutes for pre-CIOA associations. CIOA sets detailed "
+        "requirements around the public offering statement, member meetings, board elections, access to "
+        "records, and proxy voting. Each Connecticut association also adopts its own declaration, bylaws, "
+        "rules, and amendments — HOAproxy aggregates those documents and makes the full text searchable "
+        "across every Connecticut community on the platform."
+    ),
+    "dc": (
+        "District of Columbia community associations are governed by the D.C. Condominium Act "
+        "(D.C. Official Code §§42-1901.01 et seq.) for condominiums and by D.C. nonprofit corporation law "
+        "for HOAs and cooperative housing corporations. The Condominium Act sets requirements for the "
+        "declaration, bylaws, unit-owner meetings, board elections, and access to records and financials. "
+        "Each D.C. association also adopts its own rules and amendments. HOAproxy collects those documents "
+        "and makes the full text searchable so owners across Capitol Hill, Logan Circle, Petworth, and the "
+        "rest of D.C. can find the provisions that actually govern a building or community."
+    ),
+    "hi": (
+        "Hawaii community associations are governed by the Hawaii Condominium Property Act "
+        "(Hawaii Revised Statutes Chapter 514B) for condominiums and by the Planned Community "
+        "Associations chapter (Chapter 421J) for HOAs and planned-community associations. Both statutes "
+        "give owners detailed rights around access to records, board meetings, elections, and proxy "
+        "voting, and Chapter 514B requires associations to register with the state. Each Hawaii association "
+        "also adopts its own declaration, bylaws, house rules, and amendments — HOAproxy aggregates those "
+        "documents and makes the full text searchable across every Hawaii community on the platform."
+    ),
+    "ri": (
+        "Rhode Island community associations are governed by the Rhode Island Condominium Act "
+        "(R.I. General Laws Chapter 34-36.1) for condominiums and by the general nonprofit corporation "
+        "statute for HOAs and homeowner associations. The Condominium Act sets requirements for the "
+        "declaration, bylaws, unit-owner meetings, board elections, and access to records. Each Rhode "
+        "Island association also adopts its own rules and amendments. HOAproxy collects those documents "
+        "and makes the full text searchable so owners and prospective buyers can find the provisions "
+        "that actually apply to a property without paging through recorded land records."
+    ),
+    "nj": (
+        "New Jersey community associations are governed by the New Jersey Condominium Act "
+        "(N.J.S.A. 46:8B) for condominiums, the Planned Real Estate Development Full Disclosure Act "
+        "(PREDFDA, N.J.S.A. 45:22A-21 et seq.) for HOAs and master associations, and the Cooperative "
+        "Recording Act for housing cooperatives. State law sets a baseline for member meetings, board "
+        "elections, access to records, and proxy voting that applies on top of each association's own "
+        "master deed, declaration, bylaws, and rules. HOAproxy aggregates those documents across condos, "
+        "co-ops, and HOAs and makes the full text searchable for every New Jersey community on the platform."
+    ),
+    "pa": (
+        "Pennsylvania community associations are governed by the Uniform Planned Community Act "
+        "(68 Pa. C.S. §§5101 et seq.) for HOAs, the Uniform Condominium Act (68 Pa. C.S. §§3101 et seq.) "
+        "for condominiums, and the Real Estate Cooperative Act for housing cooperatives. All three statutes "
+        "give owners detailed rights around access to records, member meetings, board elections, and proxy "
+        "voting. Each Pennsylvania association also adopts its own declaration, bylaws, rules, and "
+        "amendments — HOAproxy aggregates those documents and makes the full text searchable across every "
+        "Pennsylvania community on the platform."
+    ),
+    "md": (
+        "Maryland community associations are governed by the Maryland Homeowners Association Act "
+        "(Md. Code, Real Property §§11B-101 et seq.) for HOAs, the Maryland Condominium Act "
+        "(§§11-101 et seq.) for condominiums, and the Cooperative Housing Corporation Act for "
+        "cooperatives. Maryland law gives owners specific rights around access to governing documents, "
+        "member meetings, board elections, and proxy voting, and HOAs must record their declaration and "
+        "amendments with the county. Each Maryland association also adopts its own rules and amendments — "
+        "HOAproxy collects those documents and makes the full text searchable for every Maryland "
+        "community on the platform."
+    ),
+    "ga": (
+        "Georgia community associations are governed by the Georgia Property Owners' Association Act "
+        "(O.C.G.A. §§44-3-220 et seq.) for HOAs that elect to come under it and the Georgia Condominium "
+        "Act (§§44-3-70 et seq.) for condominiums. The Property Owners' Association Act gives covered "
+        "associations specific tools — automatic statutory liens, late-fee authority, and detailed "
+        "meeting and voting procedures — that non-electing HOAs lack. Each Georgia association also "
+        "adopts its own recorded declaration, bylaws, rules, and amendments. HOAproxy aggregates those "
+        "documents and makes the full text searchable across every Georgia community on the platform."
+    ),
+    "tn": (
+        "Tennessee community associations are governed by the Tennessee Condominium Act of 2008 "
+        "(Tenn. Code §§66-27-201 et seq.) for condominiums and by general nonprofit corporation law "
+        "for HOAs and homeowner associations. The Condominium Act sets requirements for the declaration, "
+        "bylaws, unit-owner meetings, board elections, and access to records. Each Tennessee association "
+        "also adopts its own rules and amendments — HOAproxy collects those documents and makes the "
+        "full text searchable so owners across Nashville, Knoxville, Memphis, Chattanooga, and the rest "
+        "of the state can find the provisions that actually govern a property."
+    ),
+    "wa": (
+        "Washington community associations are governed by the Washington Uniform Common Interest "
+        "Ownership Act (WUCIOA, RCW Chapter 64.90) for associations created on or after July 1, 2018, "
+        "by the Homeowners' Associations chapter (RCW 64.38) and Condominium Act (RCW 64.34) for older "
+        "associations. State law gives owners detailed rights around access to records, member meetings, "
+        "board elections, and proxy voting. Each Washington association also adopts its own declaration, "
+        "bylaws, rules, and amendments — HOAproxy aggregates those documents across the Seattle, Bellevue, "
+        "Tacoma, and Spokane metros and makes the full text searchable."
+    ),
+    "mi": (
+        "Michigan community associations are governed by the Michigan Condominium Act "
+        "(MCL §§559.101 et seq.) for condominiums and by general nonprofit corporation law for HOAs and "
+        "summer-resort homeowner associations. The Condominium Act sets requirements for the master deed, "
+        "bylaws, co-owner meetings, board elections, and access to records. Each Michigan association "
+        "also adopts its own rules and amendments. HOAproxy collects those documents and makes the full "
+        "text searchable so co-owners and homeowners across Detroit, Grand Rapids, Ann Arbor, and the "
+        "rest of Michigan can find the provisions that actually govern their property."
+    ),
+    "in": (
+        "Indiana community associations are governed by the Indiana Homeowners Associations chapter "
+        "(Ind. Code §§32-25.5) for HOAs and the Indiana Condominium Act (§§32-25) for condominiums. "
+        "State law gives owners specific rights around access to records, board meetings, elections, "
+        "and proxy voting. Each Indiana association also adopts its own declaration, bylaws, rules, and "
+        "amendments — HOAproxy aggregates those documents and makes the full text searchable so members "
+        "and prospective buyers across Indianapolis, Fort Wayne, Carmel, and the rest of the state can "
+        "find the rules that govern a property without filing a records request."
+    ),
+    "mn": (
+        "Minnesota community associations are governed by the Minnesota Common Interest Ownership Act "
+        "(MCIOA, Minn. Stat. Chapter 515B) for associations created on or after June 1, 1994, and by "
+        "older statutes for pre-MCIOA condominiums and planned communities. MCIOA sets detailed "
+        "requirements around the declaration, bylaws, member meetings, board elections, access to "
+        "records, and proxy voting. Each Minnesota association also adopts its own rules and amendments. "
+        "HOAproxy collects those documents and makes the full text searchable across the Twin Cities, "
+        "Rochester, Duluth, and every other Minnesota community on the platform."
+    ),
+    "wi": (
+        "Wisconsin community associations are governed by the Wisconsin Condominium Ownership Act "
+        "(Wis. Stat. Chapter 703) for condominiums and by general nonprofit corporation law for HOAs. "
+        "The Condominium Act sets requirements for the declaration, bylaws, unit-owner meetings, board "
+        "elections, and access to records. Each Wisconsin association also adopts its own rules and "
+        "amendments. HOAproxy collects those documents and makes the full text searchable so unit owners "
+        "and homeowners across Milwaukee, Madison, Green Bay, and the rest of Wisconsin can find the "
+        "provisions that actually govern a property."
+    ),
+    "mo": (
+        "Missouri community associations are governed by the Missouri Uniform Condominium Act "
+        "(Mo. Rev. Stat. §§448.005 et seq.) for condominiums created on or after September 28, 1983, "
+        "and by general nonprofit corporation law for HOAs. The Condominium Act sets requirements for "
+        "the declaration, bylaws, unit-owner meetings, board elections, and access to records. Each "
+        "Missouri association also adopts its own rules and amendments. HOAproxy collects those "
+        "documents and makes the full text searchable so owners across St. Louis, Kansas City, "
+        "Springfield, and the rest of Missouri can find the provisions that govern a property."
+    ),
+    "ks": (
+        "Kansas community associations are governed by the Kansas Apartment Ownership Act "
+        "(K.S.A. §§58-3101 et seq.) for older condominiums, the Kansas Uniform Common Interest Owners "
+        "Bill of Rights Act (K.S.A. §§58-4601 et seq.) for newer associations, and general nonprofit "
+        "corporation law for HOAs. State law gives owners rights around access to records, board "
+        "meetings, elections, and proxy voting. Each Kansas association also adopts its own declaration, "
+        "bylaws, rules, and amendments — HOAproxy aggregates those documents and makes the full text "
+        "searchable for every Kansas community on the platform."
+    ),
+    "ok": (
+        "Oklahoma community associations are governed by the Oklahoma Real Estate Development Act "
+        "(60 O.S. §§851 et seq.) for HOAs and the Oklahoma Unit Ownership Estate Act (60 O.S. §§501 et seq.) "
+        "for condominiums. State law gives owners specific rights around access to governing documents, "
+        "member meetings, board elections, and proxy voting. Each Oklahoma association also adopts its "
+        "own declaration, bylaws, rules, and amendments — HOAproxy collects those documents and makes "
+        "the full text searchable across Oklahoma City, Tulsa, Edmond, Norman, and the rest of the state."
+    ),
+    "ar": (
+        "Arkansas community associations are governed by the Arkansas Horizontal Property Act "
+        "(Ark. Code §§18-13-101 et seq.) for condominiums and by general nonprofit corporation law for "
+        "HOAs and property owners' associations. State law sets a baseline for the declaration, bylaws, "
+        "unit-owner meetings, board elections, and access to records. Each Arkansas association also "
+        "adopts its own rules and amendments. HOAproxy collects those documents and makes the full "
+        "text searchable so owners across Little Rock, Fayetteville, Bentonville, and the rest of "
+        "Arkansas can find the provisions that govern a property."
+    ),
+    "la": (
+        "Louisiana community associations are governed by the Louisiana Condominium Act "
+        "(La. R.S. §§9:1121.101 et seq.) for condominiums and by the Louisiana Homeowners Association "
+        "Act (La. R.S. §§9:1141.1 et seq.) for HOAs and property owners' associations. State law sets a "
+        "baseline for the declaration, bylaws, member meetings, board elections, and access to records. "
+        "Each Louisiana association also adopts its own rules and amendments. HOAproxy collects those "
+        "documents and makes the full text searchable so owners across New Orleans, Baton Rouge, "
+        "Lafayette, and the rest of Louisiana can find the provisions that govern a property."
+    ),
+    "ms": (
+        "Mississippi community associations are governed by the Mississippi Condominium Law "
+        "(Miss. Code §§89-9-1 et seq.) for condominiums and by general nonprofit corporation law for "
+        "HOAs and property owners' associations. The Condominium Law sets requirements for the "
+        "declaration, bylaws, unit-owner meetings, board elections, and access to records. Each "
+        "Mississippi association also adopts its own rules and amendments. HOAproxy collects those "
+        "documents and makes the full text searchable so owners across Jackson, Gulfport, Hattiesburg, "
+        "and the rest of Mississippi can find the provisions that actually govern a property."
+    ),
+    "al": (
+        "Alabama community associations are governed by the Alabama Uniform Condominium Act "
+        "(Ala. Code §§35-8A-101 et seq.) for condominiums created on or after January 1, 1991, and by "
+        "general nonprofit corporation law for HOAs and property owners' associations. State law sets "
+        "a baseline for the declaration, bylaws, unit-owner meetings, board elections, and access to "
+        "records. Each Alabama association also adopts its own rules and amendments. HOAproxy collects "
+        "those documents and makes the full text searchable so owners across Birmingham, Huntsville, "
+        "Montgomery, Mobile, and the rest of Alabama can find the provisions that govern a property."
+    ),
+    "ky": (
+        "Kentucky community associations are governed by the Kentucky Horizontal Property Law "
+        "(KRS §§381.805 et seq.) for condominiums and by general nonprofit corporation law for HOAs "
+        "and property owners' associations. State law sets a baseline for the declaration, bylaws, "
+        "unit-owner meetings, board elections, and access to records. Each Kentucky association also "
+        "adopts its own rules and amendments. HOAproxy collects those documents and makes the full "
+        "text searchable so owners across Louisville, Lexington, Bowling Green, and the rest of "
+        "Kentucky can find the provisions that govern a property."
+    ),
+    "wv": (
+        "West Virginia community associations are governed by the West Virginia Uniform Common Interest "
+        "Ownership Act (W. Va. Code Chapter 36B) for associations created on or after July 1, 1986. "
+        "Chapter 36B sets detailed requirements around the declaration, bylaws, member meetings, board "
+        "elections, access to records, and proxy voting. Each West Virginia association also adopts its "
+        "own rules and amendments. HOAproxy collects those documents and makes the full text searchable "
+        "so owners across Charleston, Huntington, Morgantown, and the rest of West Virginia can find "
+        "the provisions that govern a property without paging through hundreds of recorded pages."
+    ),
+    "ut": (
+        "Utah community associations are governed by the Utah Community Association Act "
+        "(Utah Code §§57-8a-101 et seq.) for HOAs and the Utah Condominium Ownership Act "
+        "(§§57-8-1 et seq.) for condominiums. State law gives owners detailed rights around access to "
+        "governing documents, member meetings, board elections, and proxy voting, and HOAs must register "
+        "with the Utah Department of Commerce. Each Utah association also adopts its own declaration, "
+        "bylaws, rules, and amendments — HOAproxy collects those documents and makes the full text "
+        "searchable across Salt Lake City, St. George, Park City, and every other Utah community."
+    ),
+    "nv": (
+        "Nevada community associations are governed by the Nevada Common Interest Communities chapter "
+        "(NRS Chapter 116), one of the most detailed common-interest statutes in the country. Chapter 116 "
+        "sets specific requirements around the declaration, bylaws, member meetings, board elections, "
+        "access to records, proxy voting, and the role of the Nevada Real Estate Division's Ombudsman "
+        "for Owners. Each Nevada association also adopts its own rules and amendments. HOAproxy "
+        "collects those documents and makes the full text searchable across Las Vegas, Henderson, Reno, "
+        "and every other Nevada community on the platform."
+    ),
+    "nm": (
+        "New Mexico community associations are governed by the New Mexico Homeowner Association Act "
+        "(N.M. Stat. §§47-16-1 et seq.) and the New Mexico Building Unit Ownership Act "
+        "(§§47-7-1 et seq.) for condominiums. State law sets a baseline for member meetings, board "
+        "elections, access to records, and proxy voting that applies on top of each association's own "
+        "declaration, bylaws, rules, and amendments. HOAproxy collects those documents and makes the "
+        "full text searchable so owners across Albuquerque, Santa Fe, Las Cruces, and the rest of "
+        "New Mexico can find the provisions that govern a property."
+    ),
+    "id": (
+        "Idaho community associations are governed by the Idaho Homeowner's Association Act "
+        "(Idaho Code §§55-3201 et seq.) for HOAs and the Idaho Condominium Property Act "
+        "(§§55-1501 et seq.) for condominiums. State law sets a baseline for member meetings, board "
+        "elections, access to records, and proxy voting. Each Idaho association also adopts its own "
+        "declaration, bylaws, rules, and amendments — HOAproxy collects those documents and makes the "
+        "full text searchable across Boise, Meridian, Coeur d'Alene, Idaho Falls, and the rest of the "
+        "state."
+    ),
+    "mt": (
+        "Montana community associations are governed by the Montana Unit Ownership Act "
+        "(Mont. Code §§70-23-101 et seq.) for condominiums and by general nonprofit corporation law for "
+        "HOAs and property owners' associations. State law sets requirements for the declaration, "
+        "bylaws, unit-owner meetings, board elections, and access to records. Each Montana association "
+        "also adopts its own rules and amendments. HOAproxy collects those documents and makes the full "
+        "text searchable so owners across Billings, Missoula, Bozeman, Great Falls, and the rest of "
+        "Montana can find the provisions that govern a property."
+    ),
+    "wy": (
+        "Wyoming community associations are governed by the Wyoming Real Estate Cooperative Act "
+        "(Wyo. Stat. §§34-20-101 et seq.) for cooperatives and by general nonprofit corporation law for "
+        "HOAs and condominium associations. State law sets a baseline for member meetings, board "
+        "elections, and access to records. Each Wyoming association also adopts its own declaration, "
+        "bylaws, rules, and amendments — HOAproxy collects those documents and makes the full text "
+        "searchable across Cheyenne, Casper, Jackson, Laramie, and the rest of Wyoming."
+    ),
+    "nd": (
+        "North Dakota community associations are governed by the North Dakota Condominium Ownership of "
+        "Real Property chapter (N.D. Cent. Code Chapter 47-04.1) for condominiums and by general "
+        "nonprofit corporation law for HOAs. State law sets requirements for the declaration, bylaws, "
+        "unit-owner meetings, board elections, and access to records. Each North Dakota association also "
+        "adopts its own rules and amendments. HOAproxy collects those documents and makes the full text "
+        "searchable across Fargo, Bismarck, Grand Forks, Minot, and the rest of North Dakota."
+    ),
+    "sd": (
+        "South Dakota community associations are governed by the South Dakota Condominium chapter "
+        "(SDCL Chapter 43-15A) for condominiums and by general nonprofit corporation law for HOAs and "
+        "townhome associations. State law sets a baseline for the declaration, bylaws, unit-owner "
+        "meetings, board elections, and access to records. Each South Dakota association also adopts "
+        "its own rules and amendments. HOAproxy collects those documents and makes the full text "
+        "searchable across Sioux Falls, Rapid City, Aberdeen, and the rest of South Dakota."
+    ),
+    "ne": (
+        "Nebraska community associations are governed by the Nebraska Condominium Act "
+        "(Neb. Rev. Stat. §§76-825 et seq.) for condominiums created on or after January 1, 1984, and "
+        "by general nonprofit corporation law for HOAs and property owners' associations. State law "
+        "sets a baseline for the declaration, bylaws, unit-owner meetings, board elections, and access "
+        "to records. Each Nebraska association also adopts its own rules and amendments. HOAproxy "
+        "collects those documents and makes the full text searchable across Omaha, Lincoln, Bellevue, "
+        "Grand Island, and the rest of Nebraska."
+    ),
+    "ia": (
+        "Iowa community associations are governed by the Iowa Horizontal Property Act "
+        "(Iowa Code Chapter 499B) for condominiums and by general nonprofit corporation law for HOAs "
+        "and property owners' associations. State law sets a baseline for the declaration, bylaws, "
+        "unit-owner meetings, board elections, and access to records. Each Iowa association also adopts "
+        "its own rules and amendments. HOAproxy collects those documents and makes the full text "
+        "searchable across Des Moines, Cedar Rapids, Davenport, Iowa City, and the rest of Iowa."
+    ),
+    "vt": (
+        "Vermont community associations are governed by the Vermont Common Interest Ownership Act "
+        "(VCIOA, 27A V.S.A.) for associations created on or after January 1, 1999, and by older statutes "
+        "for pre-VCIOA condominiums. VCIOA sets detailed requirements around the declaration, bylaws, "
+        "member meetings, board elections, access to records, and proxy voting. Each Vermont association "
+        "also adopts its own rules and amendments. HOAproxy collects those documents and makes the full "
+        "text searchable across Burlington, South Burlington, Stowe, Killington, and the rest of Vermont."
+    ),
+    "nh": (
+        "New Hampshire community associations are governed by the New Hampshire Condominium Act "
+        "(N.H. RSA Chapter 356-B) for condominiums and by general nonprofit corporation law for HOAs "
+        "and homeowner associations. The Condominium Act sets requirements for the declaration, bylaws, "
+        "unit-owner meetings, board elections, and access to records. Each New Hampshire association "
+        "also adopts its own rules and amendments. HOAproxy collects those documents and makes the "
+        "full text searchable across Manchester, Nashua, Concord, Portsmouth, and the rest of New "
+        "Hampshire."
+    ),
+    "me": (
+        "Maine community associations are governed by the Maine Condominium Act "
+        "(33 M.R.S. §§1601-101 et seq.) for condominiums created on or after January 1, 1983, and by "
+        "general nonprofit corporation law for HOAs. The Condominium Act sets detailed requirements "
+        "around the declaration, bylaws, unit-owner meetings, board elections, and access to records. "
+        "Each Maine association also adopts its own rules and amendments. HOAproxy collects those "
+        "documents and makes the full text searchable across Portland, Lewiston, Bangor, South Portland, "
+        "Bar Harbor, and the rest of Maine."
+    ),
+    "de": (
+        "Delaware community associations are governed by the Delaware Uniform Common Interest Ownership "
+        "Act (DUCIOA, 25 Del. C. Chapter 81) for associations created on or after September 30, 2009, "
+        "and by older statutes for pre-DUCIOA condominiums and HOAs. DUCIOA sets detailed requirements "
+        "around the declaration, bylaws, member meetings, board elections, access to records, and "
+        "proxy voting. Each Delaware association also adopts its own rules and amendments. HOAproxy "
+        "collects those documents and makes the full text searchable across Wilmington, Dover, "
+        "Newark, Rehoboth Beach, and the rest of Delaware."
+    ),
+    "ak": (
+        "Alaska community associations are governed by the Alaska Uniform Common Interest Ownership Act "
+        "(Alaska Stat. §§34.08.010 et seq.), which covers condominiums, planned communities, and "
+        "cooperatives created on or after January 1, 1986. The Act sets detailed requirements around "
+        "the declaration, bylaws, member meetings, board elections, access to records, and proxy "
+        "voting. Each Alaska association also adopts its own rules and amendments. HOAproxy collects "
+        "those documents and makes the full text searchable across Anchorage, Fairbanks, Juneau, and "
+        "the rest of Alaska."
     ),
 }
 
@@ -4557,6 +5055,108 @@ def admin_state_doc_coverage(request: Request):
             "with_docs": tot_with,
             "without_docs": tot_live - tot_with,
             "with_docs_pct": round(100.0 * tot_with / tot_live, 2) if tot_live else 0.0,
+        },
+    }
+
+
+@app.post("/admin/seo-name-cleanup")
+def admin_seo_name_cleanup(request: Request, body: dict | None = Body(default=None)):
+    """One-shot SEO data cleanup pass.
+
+    Two operations, executed in order:
+      1. Smart-titlecase any `hoas.name` that is currently fully uppercase
+         (uses `hoaware.name_utils.smart_titlecase` — same logic the bank
+         uses to fix "shouting_prefix" dirty names).
+      2. Delete `hoas` rows whose `hoa_locations.state` is not a real US
+         state code (artifacts like "IC", "LL", "NB", "PE" produced by
+         registry-stub backfills with junk values).
+
+    POST body: ``{"dry_run": true|false}`` (default true). Dry-run returns
+    counts and a small sample of what *would* change without modifying the DB.
+
+    Snapshot the DB with `POST /admin/backup-full` before running with
+    `dry_run: false`. The deletes cascade to `hoa_locations`, `documents`,
+    `chunks`, `membership_claims`, `proxy_assignments`, etc. — irreversible
+    without the backup.
+    """
+    _require_admin(request)
+    from hoaware.name_utils import smart_titlecase
+
+    dry_run = True if body is None else bool(body.get("dry_run", True))
+    settings = load_settings()
+
+    titlecase_changes: list[dict] = []
+    bogus_state_rows: list[dict] = []
+
+    with db.get_connection(settings.db_path) as conn:
+        # 1. ALL-CAPS names. We treat a name as ALL-CAPS when it has at
+        # least one alphabetic character and no lowercase letters.
+        rows = conn.execute("SELECT id, name FROM hoas WHERE name IS NOT NULL AND name != ''").fetchall()
+        for r in rows:
+            name = r["name"]
+            if not name or not any(c.isalpha() for c in name):
+                continue
+            if any(c.islower() for c in name):
+                continue
+            new_name = smart_titlecase(name)
+            if new_name and new_name != name:
+                titlecase_changes.append({"hoa_id": r["id"], "old": name, "new": new_name})
+
+        # 2. Bogus-state rows.
+        valid = sorted(_VALID_STATE_CODES)
+        placeholders = ",".join(["?"] * len(valid))
+        rows = conn.execute(
+            f"""
+            SELECT h.id AS hoa_id, h.name AS hoa_name, l.state, l.city
+            FROM hoas h
+            JOIN hoa_locations l ON l.hoa_id = h.id
+            WHERE LOWER(l.state) NOT IN ({placeholders})
+            """,
+            valid,
+        ).fetchall()
+        for r in rows:
+            bogus_state_rows.append({
+                "hoa_id": r["hoa_id"],
+                "hoa_name": r["hoa_name"],
+                "state": r["state"],
+                "city": r["city"],
+            })
+
+        if not dry_run:
+            for c in titlecase_changes:
+                conn.execute("UPDATE hoas SET name = ? WHERE id = ?", (c["new"], c["hoa_id"]))
+            # FK constraints on dependent tables vary across migrations;
+            # delete the dependent rows first to avoid integrity errors,
+            # mirroring the order used by other cleanup endpoints.
+            ids = [r["hoa_id"] for r in bogus_state_rows]
+            if ids:
+                qmarks = ",".join(["?"] * len(ids))
+                for tbl in (
+                    "documents", "chunks", "hoa_locations", "membership_claims",
+                    "proxy_assignments", "delegates", "hoa_aliases",
+                ):
+                    try:
+                        conn.execute(f"DELETE FROM {tbl} WHERE hoa_id IN ({qmarks})", ids)
+                    except Exception:
+                        # Some optional tables may not exist on every deploy;
+                        # ignore — the parent delete will fail loudly if a
+                        # required FK still has rows.
+                        pass
+                conn.execute(f"DELETE FROM hoas WHERE id IN ({qmarks})", ids)
+            conn.commit()
+            # Invalidate the sitemap cache so the next /sitemap.xml hit
+            # reflects the deleted rows immediately.
+            _sitemap_cache["ts"] = 0.0
+
+    return {
+        "dry_run": dry_run,
+        "titlecase": {
+            "count": len(titlecase_changes),
+            "sample": titlecase_changes[:10],
+        },
+        "bogus_state_delete": {
+            "count": len(bogus_state_rows),
+            "sample": bogus_state_rows[:10],
         },
     }
 

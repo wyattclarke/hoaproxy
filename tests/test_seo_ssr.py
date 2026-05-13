@@ -135,10 +135,34 @@ def test_profile_page_when_no_documents(client):
         )
     resp = client.get("/hoa/tx/austin/empty-hoa-test")
     assert resp.status_code == 200
-    assert "doesn't have any governing documents on file" in resp.text
+    # Invitation framing instead of zero-quantity admission
+    assert "No governing documents have been uploaded" in resp.text
+    assert "becomes searchable for everyone" in resp.text
+    # Docless pages must be noindex,follow so they stay out of SERPs but
+    # remain reachable for users coming in via the city index.
+    assert '<meta name="robots" content="noindex,follow">' in resp.text
     # FAQ + breadcrumb still emitted
     assert "BreadcrumbList" in resp.text
     assert "FAQPage" in resp.text
+
+
+def test_profile_page_with_documents_is_indexable(client):
+    """HOAs with at least one document must NOT carry the noindex meta."""
+    resp = client.get("/hoa/tx/san-marcos/blanco-vista-residential-owners-association-inc")
+    assert resp.status_code == 200
+    assert "noindex" not in resp.text
+
+
+def test_profile_title_omits_brand_suffix(client):
+    """Title is `{HOA} | {City}, {ST}` — no `| HOAproxy` tail to truncate."""
+    resp = client.get("/hoa/tx/san-marcos/blanco-vista-residential-owners-association-inc")
+    body = resp.text
+    # Extract the <title> contents
+    m = re.search(r"<title>([^<]+)</title>", body)
+    assert m is not None
+    title = m.group(1)
+    assert title.endswith(", TX"), f"unexpected title tail: {title!r}"
+    assert "HOAproxy" not in title
 
 
 def test_state_index_has_intro_and_metros_and_jsonld(client):
@@ -192,15 +216,64 @@ def test_city_index_has_intro_featured_and_jsonld(client):
     assert "/hoa/tx/houston/" in body
 
 
-def test_sitemap_emits_lastmod_per_url(client):
+def test_sitemap_index_lists_per_state_children(client):
+    """`/sitemap.xml` is now a sitemap-index pointing to per-state child sitemaps."""
+    # Bust the cache so seed data from this module is reflected
+    from api import main as api_main
+    api_main._sitemap_cache["ts"] = 0.0
+
     resp = client.get("/sitemap.xml")
     assert resp.status_code == 200
-    # Every <url> entry has a <lastmod>
+    body = resp.text
+    assert "<sitemapindex" in body
+    # Static sitemap pointer is always present
+    assert "https://hoaproxy.org/sitemap-static.xml" in body
+    # TX has seeded HOAs with documents, so the TX child sitemap must appear
+    assert "https://hoaproxy.org/sitemap-tx.xml" in body
     import re as _re
-    url_entries = _re.findall(r"<url>.*?</url>", resp.text, _re.DOTALL)
-    assert url_entries, "expected at least one URL in sitemap"
+    sitemap_entries = _re.findall(r"<sitemap>.*?</sitemap>", body, _re.DOTALL)
+    assert sitemap_entries, "expected at least one <sitemap> entry in index"
+    missing_lastmod = [s for s in sitemap_entries if "<lastmod>" not in s]
+    assert not missing_lastmod, f"{len(missing_lastmod)} sitemap(s) missing lastmod"
+
+
+def test_per_state_child_sitemap_includes_only_indexable_hoas(client):
+    """Child sitemap for a state lists state index, city indexes, and HOAs with docs.
+
+    Docless HOAs are excluded — they're noindex'd on render so listing them
+    in the sitemap would just waste crawl budget.
+    """
+    # Add a docless HOA in TX that should NOT appear
+    with db.get_connection(_TMP_PATH) as conn:
+        db.get_or_create_hoa(conn, "Sitemap Excluded Empty HOA")
+        db.upsert_hoa_location(
+            conn, "Sitemap Excluded Empty HOA", city="Austin", state="TX",
+        )
+
+    from api import main as api_main
+    api_main._sitemap_cache["ts"] = 0.0
+
+    resp = client.get("/sitemap-tx.xml")
+    assert resp.status_code == 200
+    body = resp.text
+    # State and city indexes are present
+    assert "<loc>https://hoaproxy.org/hoa/tx/</loc>" in body
+    assert "<loc>https://hoaproxy.org/hoa/tx/san-marcos/</loc>" in body
+    # The seeded HOA with documents is present
+    assert "blanco-vista-residential-owners-association-inc" in body
+    # The docless HOA is NOT
+    assert "sitemap-excluded-empty-hoa" not in body
+    # Every <url> still has a <lastmod>
+    import re as _re
+    url_entries = _re.findall(r"<url>.*?</url>", body, _re.DOTALL)
+    assert url_entries
     missing_lastmod = [u for u in url_entries if "<lastmod>" not in u]
-    assert not missing_lastmod, f"{len(missing_lastmod)} url(s) missing lastmod"
+    assert not missing_lastmod
+
+
+def test_sitemap_rejects_unknown_state(client):
+    resp = client.get("/sitemap-zz.xml")
+    assert resp.status_code == 404
 
 
 def test_og_tags_present_on_all_seo_pages(client):
