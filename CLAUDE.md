@@ -48,7 +48,7 @@ Key values:
 ```bash
 export OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES
 ```
-This is a local-only workaround; production (Render/Linux) is unaffected. Do not paper over it by switching to `multiprocessing` with `fork` — the fix is to keep using `subprocess`/spawn semantics.
+This is a local-only workaround; production (Hetzner/Linux) is unaffected. Do not paper over it by switching to `multiprocessing` with `fork` — the fix is to keep using `subprocess`/spawn semantics.
 
 ## Running & Testing
 ```bash
@@ -143,13 +143,33 @@ ETL pipeline in `scripts/legal/`:
 - Source registry: `data/legal/state_source_registry.json`
 - All 51 jurisdictions now have official source URLs in the registry (OK, PA, SD, WY were migrated from dead aggregator URLs to oscn.net, palegis.us, sdlegislature.gov/api, wyoleg.gov, oklegislature.gov)
 
+## Production Deployment (Hetzner)
+
+Production runs on a Hetzner Cloud CCX23 (Hillsboro, OR; IPv4 `5.78.221.146`) fronted by Cloudflare → Caddy → docker-compose → uvicorn (FastAPI + ingest worker in one container). The full migration runbook is `docs/migrate-to-hetzner.md`; the operational pieces you need day-to-day:
+
+- **Host paths:**
+  - Repo: `/home/hoaproxy/hoaproxy` (the `hoaproxy` user owns it)
+  - SQLite DB: `/var/lib/hoaproxy/data/hoa_index.db` (host NVMe; mounted into the container at `/app/data/hoa_index.db`)
+  - PDFs: `/var/lib/hoaproxy/hoa_docs` (200 GB Hetzner Cloud Volume; mounted into the container at `/app/hoa_docs`)
+  - Secrets: `/etc/hoaproxy/hoaproxy.env` and `/etc/hoaproxy/gcp-sa.json` (root:hoaproxy, mode 0640)
+  - Caddy config: `/etc/caddy/Caddyfile` (cert + IP allowlist for Cloudflare edge)
+  - Compose file: `~/hoaproxy/deploy/docker-compose.prod.yml`
+- **Deploy a change:**
+  ```bash
+  git push origin master
+  ssh hoaproxy@5.78.221.146 'cd hoaproxy && bash deploy/deploy.sh'
+  ```
+  `deploy/deploy.sh` does `git fetch && git reset --hard origin/master`, rebuilds the image, and recreates the `hoaproxy-app` container with a healthcheck wait. ~30s downtime; Cloudflare serves a brief 5xx during the swap.
+- **Restart / logs / shell:** `docker compose -f ~/hoaproxy/deploy/docker-compose.prod.yml restart app`, `docker compose ... logs -f app`, `docker exec -it hoaproxy-app bash`.
+- **Rollback DNS to Render** (if Hetzner is broken): `bash deploy/cutover-dns.sh --rollback` — but Render is suspended now, so don't rollback unless you've also un-suspended it.
+
 ## Database Backup
 - `POST /admin/backup` — snapshots SQLite DB via `VACUUM INTO`, uploads to GCS bucket `hoaproxy-backups`
 - Protected by admin auth (`Bearer {JWT_SECRET}`)
 - Triggered twice daily (6am/6pm ET) by cron-job.org
 - Blobs stored as `gs://hoaproxy-backups/db/hoa_index-{timestamp}.db`
 - GCS uses the `hoaware-ocr` service account (same as Document AI)
-- **Recovery:** download latest blob from bucket, upload to Render persistent disk at `/var/data/hoa_index.db`
+- **Recovery:** download the latest blob from `gs://hoaproxy-backups/db/`, then `bash ~/hoaproxy/deploy/restore-from-gcs.sh` on the Hetzner host (it moves the current `hoa_index.db` aside first). The DB lives at `/var/lib/hoaproxy/data/hoa_index.db` on the host, mounted into the container at `/app/data/hoa_index.db`.
 - Qdrant does NOT need backup — it's rebuildable by re-running the ingestion pipeline
 
 ## Data Directories (not in git)
