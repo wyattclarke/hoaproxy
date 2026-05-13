@@ -11,16 +11,37 @@ set -euo pipefail
 
 DATA_DIR="/var/lib/hoaproxy/data"
 DOCS_DIR="/var/lib/hoaproxy/hoa_docs"
+# VACUUM INTO writes the staging snapshot here. We use the cloud volume
+# rather than the local NVMe because the live DB grows past what the
+# 160 GB root partition can comfortably stage alongside it (a 78 GB DB
+# wants ~80 GB headroom for VACUUM INTO; the 200 GB cloud volume has it).
+STAGING_DIR="${DOCS_DIR}/_backup_staging"
 GCS_BUCKET="gs://hoaproxy-backups"
 LOG_DIR="/var/log/hoaproxy"
-mkdir -p "$LOG_DIR"
+mkdir -p "$LOG_DIR" "$STAGING_DIR"
 
 export GOOGLE_APPLICATION_CREDENTIALS=/etc/hoaproxy/gcp-sa.json
 
 TS=$(date -u +%Y%m%d-%H%M%S)
-SNAP="${DATA_DIR}/_snap-${TS}.db"
+SNAP="${STAGING_DIR}/_snap-${TS}.db"
 
 log() { echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] $*"; }
+
+# Bail loudly if the staging volume can't hold a snapshot the size of
+# the live DB — the prior failure mode was a silent disk-fill mid-VACUUM
+# that left a 53 GiB orphan and started returning 500s site-wide.
+DB_BYTES=$(stat -c%s "${DATA_DIR}/hoa_index.db")
+NEEDED_BYTES=$(( DB_BYTES + 5 * 1024 * 1024 * 1024 ))  # DB + 5 GB safety
+AVAIL_BYTES=$(df -B1 --output=avail "$STAGING_DIR" | tail -1 | tr -d ' ')
+if [ "$AVAIL_BYTES" -lt "$NEEDED_BYTES" ]; then
+    log "ABORT: only $(( AVAIL_BYTES / 1024 / 1024 / 1024 )) GiB free at $STAGING_DIR, need $(( NEEDED_BYTES / 1024 / 1024 / 1024 )) GiB"
+    log "       resize the cloud volume (Hetzner Console → Volumes → hoa-docs-1 → Resize)"
+    exit 1
+fi
+
+# Cleanup trap: drop the staging file even on failure so a crashed VACUUM
+# can't leave a half-written GB-scale file behind on the volume.
+trap 'rm -f "$SNAP" "${SNAP}-journal" 2>/dev/null || true' EXIT
 
 log "VACUUM INTO ${SNAP}"
 # VACUUM INTO writes a clean, defragmented copy with no WAL trailing.
@@ -34,6 +55,7 @@ gsutil -q cp "$SNAP" "${GCS_BUCKET}/db/hoa_index-${TS}.db"
 
 log "removing local snapshot"
 rm -f "$SNAP"
+trap - EXIT
 
 # Weekly hoa_docs sync (only on Sunday)
 if [ "$(date -u +%u)" = "7" ]; then
