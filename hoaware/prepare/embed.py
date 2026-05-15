@@ -12,10 +12,35 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from openai import OpenAI
+import time
+
+from openai import OpenAI, RateLimitError
 
 from ..chunker import PageContent, chunk_pages
 from ..embeddings import batch_embeddings
+
+
+def _embed_with_retry(
+    texts: list[str],
+    *,
+    client: OpenAI,
+    model: str,
+    max_retries: int = 5,
+) -> list[list[float]]:
+    """``batch_embeddings`` + exponential backoff on OpenAI 429s."""
+    delay = 2.0
+    last_err: Exception | None = None
+    for attempt in range(max_retries + 1):
+        try:
+            return batch_embeddings(texts, client=client, model=model)
+        except RateLimitError as e:
+            last_err = e
+            if attempt >= max_retries:
+                break
+            time.sleep(delay)
+            delay = min(delay * 2, 30.0)
+    assert last_err is not None
+    raise last_err
 
 
 def bake_chunks_sidecar(
@@ -47,7 +72,9 @@ def bake_chunks_sidecar(
         )
 
     texts = [c.text for c in chunks]
-    embeddings = batch_embeddings(texts, client=openai_client, model=embedding_model)
+    embeddings = _embed_with_retry(
+        texts, client=openai_client, model=embedding_model
+    )
     if len(embeddings) != len(chunks):
         raise ValueError(
             f"bake_chunks_sidecar: embeddings count {len(embeddings)} "
