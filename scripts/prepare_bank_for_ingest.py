@@ -540,10 +540,17 @@ def _write_prepared_bundle(
     pdfs_by_sha: dict[str, bytes],
     sidecars_by_sha: dict[str, dict[str, Any]],
     overwrite: bool,
+    chunks_sidecars_by_sha: dict[str, dict[str, Any]] | None = None,
 ) -> bool:
     """Write a prepared bundle. Returns True on write, False if skipped
     because the bundle already exists and overwrite=False.
+
+    ``chunks_sidecars_by_sha`` (v2): when present, each entry is uploaded
+    alongside the doc's text sidecar at ``chunks-{sha}.json``. The caller
+    must have also set ``chunks_gcs_path`` on the corresponding bundle
+    document for the server to find it.
     """
+    chunks_sidecars_by_sha = chunks_sidecars_by_sha or {}
     status_blob = prepared_bucket.blob(status_blob_name(prefix))
     status_uri = f"gs://{prepared_bucket.name}/{status_blob_name(prefix)}"
     if _with_gcs_retry(f"exists:{status_uri}", status_blob.exists) and not overwrite:
@@ -564,6 +571,14 @@ def _write_prepared_bundle(
             _json_dump(sidecars_by_sha[sha]),
             content_type="application/json",
         )
+        if sha in chunks_sidecars_by_sha:
+            chunks_name = f"{prefix.rstrip('/')}/chunks-{sha}.json"
+            _with_gcs_retry(
+                f"upload_chunks:gs://{prepared_bucket.name}/{chunks_name}",
+                prepared_bucket.blob(chunks_name).upload_from_string,
+                _json_dump(chunks_sidecars_by_sha[sha]),
+                content_type="application/json",
+            )
 
     validate_bundle(bundle_payload, expected_state=bundle_payload["state"])
     bundle_name = bundle_blob_name(prefix)
@@ -896,8 +911,64 @@ def prepare(args: argparse.Namespace) -> int:
             doc["pdf_gcs_path"] = gcs_uri(args.prepared_bucket, docs_blob_name(prefix, sha))
             doc["text_gcs_path"] = gcs_uri(args.prepared_bucket, text_blob_name(prefix, sha))
 
+        # v2: optionally bake chunks+embeddings sidecars and stamp the bundle
+        # at schema_version=2 so the live server takes the fast path. Failure
+        # to bake one doc downgrades the whole bundle to v1 (no chunks_gcs_path,
+        # server falls back to legacy chunk+embed). We never emit a half-baked
+        # v2 bundle.
+        bundle_schema = 1
+        chunks_sidecars_by_sha: dict[str, dict[str, Any]] = {}
+        if args.bake_chunks:
+            from hoaware.prepare.embed import bake_chunks_sidecar  # noqa: WPS433
+            from openai import OpenAI  # noqa: WPS433
+            _openai = OpenAI()
+            bake_ok = True
+            for doc in prepared_docs:
+                sha = doc["sha256"]
+                sidecar_payload = sidecars_by_sha.get(sha)
+                if not sidecar_payload:
+                    bake_ok = False
+                    break
+                from hoaware.chunker import PageContent  # noqa: WPS433
+                pages = [
+                    PageContent(number=int(p["number"]), text=str(p.get("text") or ""))
+                    for p in sidecar_payload.get("pages") or []
+                ]
+                if not pages:
+                    bake_ok = False
+                    break
+                try:
+                    chunks_sidecar = bake_chunks_sidecar(
+                        doc_sha256=sha,
+                        pages=pages,
+                        embedding_model=args.embedding_model,
+                        chunk_char_limit=args.chunk_char_limit,
+                        chunk_overlap=args.chunk_overlap,
+                        openai_client=_openai,
+                    )
+                except Exception as exc:
+                    print(
+                        f"  bake failed for {sha[:12]}…: {exc!r}; "
+                        f"falling back to v1 for this bundle",
+                        file=sys.stderr,
+                    )
+                    bake_ok = False
+                    break
+                chunks_sidecars_by_sha[sha] = chunks_sidecar
+                doc["chunks_gcs_path"] = gcs_uri(
+                    args.prepared_bucket,
+                    f"{prefix}/chunks-{sha}.json",
+                )
+            if bake_ok:
+                bundle_schema = 2
+            else:
+                # Roll back chunks_gcs_path on docs so we emit a clean v1.
+                for doc in prepared_docs:
+                    doc.pop("chunks_gcs_path", None)
+                chunks_sidecars_by_sha = {}
+
         bundle_payload = {
-            "schema_version": 1,
+            "schema_version": bundle_schema,
             "bundle_id": bundle_id,
             "source_manifest_uri": manifest_uri,
             "state": state,
@@ -924,6 +995,7 @@ def prepare(args: argparse.Namespace) -> int:
                     pdfs_by_sha=pdfs_by_sha,
                     sidecars_by_sha=sidecars_by_sha,
                     overwrite=args.overwrite,
+                    chunks_sidecars_by_sha=chunks_sidecars_by_sha,
                 )
                 if wrote:
                     written += 1
@@ -986,6 +1058,31 @@ def main() -> int:
         type=Path,
         default=Path("data/prepared_ingest_ledger.jsonl"),
         help="Local JSONL audit ledger path",
+    )
+    parser.add_argument(
+        "--bake-chunks",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "Bake per-doc chunks+embeddings sidecars (schema v2). "
+            "When on (default), each prepared doc gets a chunks-{sha}.json "
+            "sidecar in GCS and chunks_gcs_path set on the bundle, so the "
+            "live server skips chunk_pages() and batch_embeddings() on "
+            "ingest. Pass --no-bake-chunks to emit pure v1 bundles."
+        ),
+    )
+    parser.add_argument(
+        "--embedding-model",
+        default=os.environ.get("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small"),
+        help="Embedding model stamped into the v2 chunks sidecar",
+    )
+    parser.add_argument(
+        "--chunk-char-limit", type=int,
+        default=int(os.environ.get("HOA_CHUNK_CHAR_LIMIT", "1800")),
+    )
+    parser.add_argument(
+        "--chunk-overlap", type=int,
+        default=int(os.environ.get("HOA_CHUNK_OVERLAP", "200")),
     )
     args = parser.parse_args()
     if args.limit < 1:
