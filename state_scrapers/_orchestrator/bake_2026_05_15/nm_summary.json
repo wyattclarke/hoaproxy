@@ -1,0 +1,14 @@
+{
+  "state": "NM",
+  "run_date": "2026-05-15T14:58:51.350125+00:00",
+  "elapsed_sec": 235.6,
+  "bundles": 139,
+  "totals": {
+    "ok": 130,
+    "errors": 9,
+    "baked": 142,
+    "skipped": 0
+  },
+  "embedding_model": "text-embedding-3-small",
+  "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/nm_bake.jsonl"
+}

@@ -1,0 +1,14 @@
+{
+  "state": "AZ",
+  "run_date": "2026-05-15T11:26:48.857132+00:00",
+  "elapsed_sec": 1432.9,
+  "bundles": 1575,
+  "totals": {
+    "ok": 1517,
+    "errors": 58,
+    "baked": 2269,
+    "skipped": 0
+  },
+  "embedding_model": "text-embedding-3-small",
+  "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/az_bake.jsonl"
+}

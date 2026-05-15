@@ -1,0 +1,14 @@
+{
+  "state": "KS",
+  "run_date": "2026-05-15T13:38:19.751309+00:00",
+  "elapsed_sec": 757.8,
+  "bundles": 433,
+  "totals": {
+    "ok": 408,
+    "errors": 25,
+    "baked": 842,
+    "skipped": 0
+  },
+  "embedding_model": "text-embedding-3-small",
+  "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/ks_bake.jsonl"
+}

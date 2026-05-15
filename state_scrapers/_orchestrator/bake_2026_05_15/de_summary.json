@@ -1,0 +1,14 @@
+{
+  "state": "DE",
+  "run_date": "2026-05-15T15:43:36.029119+00:00",
+  "elapsed_sec": 74.5,
+  "bundles": 121,
+  "totals": {
+    "ok": 121,
+    "errors": 0,
+    "baked": 174,
+    "skipped": 0
+  },
+  "embedding_model": "text-embedding-3-small",
+  "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/de_bake.jsonl"
+}

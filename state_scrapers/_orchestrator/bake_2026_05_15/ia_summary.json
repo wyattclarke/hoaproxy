@@ -1,0 +1,14 @@
+{
+  "state": "IA",
+  "run_date": "2026-05-15T15:45:54.102112+00:00",
+  "elapsed_sec": 136.4,
+  "bundles": 86,
+  "totals": {
+    "ok": 84,
+    "errors": 2,
+    "baked": 95,
+    "skipped": 0
+  },
+  "embedding_model": "text-embedding-3-small",
+  "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/ia_bake.jsonl"
+}

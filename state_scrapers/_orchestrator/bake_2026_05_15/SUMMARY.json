@@ -1,0 +1,699 @@
+{
+  "run_id": "bake_2026_05_15",
+  "states": 49,
+  "totals": {
+    "bundles": 18525,
+    "ok": 17295,
+    "errors": 1230,
+    "docs_baked": 18481,
+    "docs_skipped": 4736
+  },
+  "per_state": {
+    "AK": {
+      "state": "AK",
+      "run_date": "2026-05-15T15:42:18.258552+00:00",
+      "elapsed_sec": 164.7,
+      "bundles": 76,
+      "totals": {
+        "ok": 70,
+        "errors": 6,
+        "baked": 72,
+        "skipped": 0
+      },
+      "embedding_model": "text-embedding-3-small",
+      "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/ak_bake.jsonl"
+    },
+    "AL": {
+      "state": "AL",
+      "run_date": "2026-05-15T15:39:31.789110+00:00",
+      "elapsed_sec": 128.7,
+      "bundles": 136,
+      "totals": {
+        "ok": 131,
+        "errors": 5,
+        "baked": 136,
+        "skipped": 0
+      },
+      "embedding_model": "text-embedding-3-small",
+      "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/al_bake.jsonl"
+    },
+    "AR": {
+      "state": "AR",
+      "run_date": "2026-05-15T04:38:43.064361+00:00",
+      "elapsed_sec": 137.7,
+      "bundles": 127,
+      "totals": {
+        "ok": 127,
+        "errors": 0,
+        "baked": 129,
+        "skipped": 1
+      },
+      "embedding_model": "text-embedding-3-small",
+      "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/ar_bake.jsonl"
+    },
+    "AZ": {
+      "state": "AZ",
+      "run_date": "2026-05-15T11:26:48.857132+00:00",
+      "elapsed_sec": 1432.9,
+      "bundles": 1575,
+      "totals": {
+        "ok": 1517,
+        "errors": 58,
+        "baked": 2269,
+        "skipped": 0
+      },
+      "embedding_model": "text-embedding-3-small",
+      "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/az_bake.jsonl"
+    },
+    "CA": {
+      "state": "CA",
+      "run_date": "2026-05-15T12:25:46.220854+00:00",
+      "elapsed_sec": 1541.2,
+      "bundles": 982,
+      "totals": {
+        "ok": 893,
+        "errors": 89,
+        "baked": 1217,
+        "skipped": 0
+      },
+      "embedding_model": "text-embedding-3-small",
+      "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/ca_bake.jsonl"
+    },
+    "CO": {
+      "state": "CO",
+      "run_date": "2026-05-15T15:42:19.880794+00:00",
+      "elapsed_sec": 0.0,
+      "bundles": 0,
+      "totals": {
+        "ok": 0,
+        "errors": 0,
+        "baked": 0,
+        "skipped": 0
+      },
+      "embedding_model": "text-embedding-3-small",
+      "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/co_bake.jsonl"
+    },
+    "CT": {
+      "state": "CT",
+      "run_date": "2026-05-15T15:27:15.985328+00:00",
+      "elapsed_sec": 535.8,
+      "bundles": 234,
+      "totals": {
+        "ok": 203,
+        "errors": 31,
+        "baked": 325,
+        "skipped": 0
+      },
+      "embedding_model": "text-embedding-3-small",
+      "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/ct_bake.jsonl"
+    },
+    "DC": {
+      "state": "DC",
+      "run_date": "2026-05-15T14:22:49.293052+00:00",
+      "elapsed_sec": 1610.2,
+      "bundles": 374,
+      "totals": {
+        "ok": 248,
+        "errors": 126,
+        "baked": 285,
+        "skipped": 0
+      },
+      "embedding_model": "text-embedding-3-small",
+      "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/dc_bake.jsonl"
+    },
+    "DE": {
+      "state": "DE",
+      "run_date": "2026-05-15T15:43:36.029119+00:00",
+      "elapsed_sec": 74.5,
+      "bundles": 121,
+      "totals": {
+        "ok": 121,
+        "errors": 0,
+        "baked": 174,
+        "skipped": 0
+      },
+      "embedding_model": "text-embedding-3-small",
+      "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/de_bake.jsonl"
+    },
+    "FL": {
+      "state": "FL",
+      "run_date": "2026-05-15T10:52:42.966904+00:00",
+      "elapsed_sec": 2016.4,
+      "bundles": 3778,
+      "totals": {
+        "ok": 3700,
+        "errors": 78,
+        "baked": 1975,
+        "skipped": 3406
+      },
+      "embedding_model": "text-embedding-3-small",
+      "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/fl_bake.jsonl"
+    },
+    "GA": {
+      "state": "GA",
+      "run_date": "2026-05-15T12:00:02.064815+00:00",
+      "elapsed_sec": 1990.0,
+      "bundles": 1340,
+      "totals": {
+        "ok": 1236,
+        "errors": 104,
+        "baked": 1890,
+        "skipped": 0
+      },
+      "embedding_model": "text-embedding-3-small",
+      "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/ga_bake.jsonl"
+    },
+    "HI": {
+      "state": "HI",
+      "run_date": "2026-05-15T12:36:16.050596+00:00",
+      "elapsed_sec": 627.4,
+      "bundles": 813,
+      "totals": {
+        "ok": 786,
+        "errors": 27,
+        "baked": 941,
+        "skipped": 0
+      },
+      "embedding_model": "text-embedding-3-small",
+      "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/hi_bake.jsonl"
+    },
+    "IA": {
+      "state": "IA",
+      "run_date": "2026-05-15T15:45:54.102112+00:00",
+      "elapsed_sec": 136.4,
+      "bundles": 86,
+      "totals": {
+        "ok": 84,
+        "errors": 2,
+        "baked": 95,
+        "skipped": 0
+      },
+      "embedding_model": "text-embedding-3-small",
+      "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/ia_bake.jsonl"
+    },
+    "ID": {
+      "state": "ID",
+      "run_date": "2026-05-15T15:49:13.779746+00:00",
+      "elapsed_sec": 197.8,
+      "bundles": 117,
+      "totals": {
+        "ok": 111,
+        "errors": 6,
+        "baked": 137,
+        "skipped": 0
+      },
+      "embedding_model": "text-embedding-3-small",
+      "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/id_bake.jsonl"
+    },
+    "IL": {
+      "state": "IL",
+      "run_date": "2026-05-15T13:02:26.105313+00:00",
+      "elapsed_sec": 1567.8,
+      "bundles": 724,
+      "totals": {
+        "ok": 622,
+        "errors": 102,
+        "baked": 788,
+        "skipped": 0
+      },
+      "embedding_model": "text-embedding-3-small",
+      "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/il_bake.jsonl"
+    },
+    "IN": {
+      "state": "IN",
+      "run_date": "2026-05-15T13:55:57.037532+00:00",
+      "elapsed_sec": 1055.1,
+      "bundles": 397,
+      "totals": {
+        "ok": 339,
+        "errors": 58,
+        "baked": 621,
+        "skipped": 0
+      },
+      "embedding_model": "text-embedding-3-small",
+      "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/in_bake.jsonl"
+    },
+    "KS": {
+      "state": "KS",
+      "run_date": "2026-05-15T13:38:19.751309+00:00",
+      "elapsed_sec": 757.8,
+      "bundles": 433,
+      "totals": {
+        "ok": 408,
+        "errors": 25,
+        "baked": 842,
+        "skipped": 0
+      },
+      "embedding_model": "text-embedding-3-small",
+      "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/ks_bake.jsonl"
+    },
+    "KY": {
+      "state": "KY",
+      "run_date": "2026-05-15T15:51:10.831861+00:00",
+      "elapsed_sec": 115.3,
+      "bundles": 80,
+      "totals": {
+        "ok": 79,
+        "errors": 1,
+        "baked": 85,
+        "skipped": 0
+      },
+      "embedding_model": "text-embedding-3-small",
+      "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/ky_bake.jsonl"
+    },
+    "LA": {
+      "state": "LA",
+      "run_date": "2026-05-15T15:54:04.391534+00:00",
+      "elapsed_sec": 171.7,
+      "bundles": 84,
+      "totals": {
+        "ok": 79,
+        "errors": 5,
+        "baked": 87,
+        "skipped": 0
+      },
+      "embedding_model": "text-embedding-3-small",
+      "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/la_bake.jsonl"
+    },
+    "MA": {
+      "state": "MA",
+      "run_date": "2026-05-15T15:58:26.687971+00:00",
+      "elapsed_sec": 260.7,
+      "bundles": 89,
+      "totals": {
+        "ok": 76,
+        "errors": 13,
+        "baked": 77,
+        "skipped": 0
+      },
+      "embedding_model": "text-embedding-3-small",
+      "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/ma_bake.jsonl"
+    },
+    "MD": {
+      "state": "MD",
+      "run_date": "2026-05-15T15:32:45.695329+00:00",
+      "elapsed_sec": 327.8,
+      "bundles": 162,
+      "totals": {
+        "ok": 145,
+        "errors": 17,
+        "baked": 147,
+        "skipped": 0
+      },
+      "embedding_model": "text-embedding-3-small",
+      "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/md_bake.jsonl"
+    },
+    "ME": {
+      "state": "ME",
+      "run_date": "2026-05-15T15:59:48.917066+00:00",
+      "elapsed_sec": 80.7,
+      "bundles": 20,
+      "totals": {
+        "ok": 20,
+        "errors": 0,
+        "baked": 24,
+        "skipped": 0
+      },
+      "embedding_model": "text-embedding-3-small",
+      "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/me_bake.jsonl"
+    },
+    "MI": {
+      "state": "MI",
+      "run_date": "2026-05-15T16:04:01.777570+00:00",
+      "elapsed_sec": 251.1,
+      "bundles": 166,
+      "totals": {
+        "ok": 156,
+        "errors": 10,
+        "baked": 157,
+        "skipped": 0
+      },
+      "embedding_model": "text-embedding-3-small",
+      "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/mi_bake.jsonl"
+    },
+    "MN": {
+      "state": "MN",
+      "run_date": "2026-05-15T15:37:21.286539+00:00",
+      "elapsed_sec": 273.3,
+      "bundles": 97,
+      "totals": {
+        "ok": 92,
+        "errors": 5,
+        "baked": 97,
+        "skipped": 0
+      },
+      "embedding_model": "text-embedding-3-small",
+      "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/mn_bake.jsonl"
+    },
+    "MO": {
+      "state": "MO",
+      "run_date": "2026-05-15T16:07:56.187618+00:00",
+      "elapsed_sec": 232.2,
+      "bundles": 203,
+      "totals": {
+        "ok": 193,
+        "errors": 10,
+        "baked": 196,
+        "skipped": 0
+      },
+      "embedding_model": "text-embedding-3-small",
+      "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/mo_bake.jsonl"
+    },
+    "MS": {
+      "state": "MS",
+      "run_date": "2026-05-15T15:03:26.480444+00:00",
+      "elapsed_sec": 273.4,
+      "bundles": 128,
+      "totals": {
+        "ok": 117,
+        "errors": 11,
+        "baked": 120,
+        "skipped": 0
+      },
+      "embedding_model": "text-embedding-3-small",
+      "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/ms_bake.jsonl"
+    },
+    "MT": {
+      "state": "MT",
+      "run_date": "2026-05-15T16:14:02.366378+00:00",
+      "elapsed_sec": 364.2,
+      "bundles": 199,
+      "totals": {
+        "ok": 182,
+        "errors": 17,
+        "baked": 190,
+        "skipped": 0
+      },
+      "embedding_model": "text-embedding-3-small",
+      "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/mt_bake.jsonl"
+    },
+    "NC": {
+      "state": "NC",
+      "run_date": "2026-05-15T14:49:32.189244+00:00",
+      "elapsed_sec": 0.0,
+      "bundles": 0,
+      "totals": {
+        "ok": 0,
+        "errors": 0,
+        "baked": 0,
+        "skipped": 0
+      },
+      "embedding_model": "text-embedding-3-small",
+      "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/nc_bake.jsonl"
+    },
+    "ND": {
+      "state": "ND",
+      "run_date": "2026-05-15T16:23:37.072753+00:00",
+      "elapsed_sec": 113.8,
+      "bundles": 53,
+      "totals": {
+        "ok": 53,
+        "errors": 0,
+        "baked": 55,
+        "skipped": 0
+      },
+      "embedding_model": "text-embedding-3-small",
+      "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/nd_bake.jsonl"
+    },
+    "NH": {
+      "state": "NH",
+      "run_date": "2026-05-15T16:21:40.484775+00:00",
+      "elapsed_sec": 336.1,
+      "bundles": 125,
+      "totals": {
+        "ok": 106,
+        "errors": 19,
+        "baked": 115,
+        "skipped": 0
+      },
+      "embedding_model": "text-embedding-3-small",
+      "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/nh_bake.jsonl"
+    },
+    "NJ": {
+      "state": "NJ",
+      "run_date": "2026-05-15T14:54:54.109280+00:00",
+      "elapsed_sec": 320.6,
+      "bundles": 112,
+      "totals": {
+        "ok": 93,
+        "errors": 19,
+        "baked": 95,
+        "skipped": 0
+      },
+      "embedding_model": "text-embedding-3-small",
+      "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/nj_bake.jsonl"
+    },
+    "NM": {
+      "state": "NM",
+      "run_date": "2026-05-15T14:58:51.350125+00:00",
+      "elapsed_sec": 235.6,
+      "bundles": 139,
+      "totals": {
+        "ok": 130,
+        "errors": 9,
+        "baked": 142,
+        "skipped": 0
+      },
+      "embedding_model": "text-embedding-3-small",
+      "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/nm_bake.jsonl"
+    },
+    "NV": {
+      "state": "NV",
+      "run_date": "2026-05-15T16:16:02.762503+00:00",
+      "elapsed_sec": 118.4,
+      "bundles": 54,
+      "totals": {
+        "ok": 50,
+        "errors": 4,
+        "baked": 50,
+        "skipped": 0
+      },
+      "embedding_model": "text-embedding-3-small",
+      "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/nv_bake.jsonl"
+    },
+    "NY": {
+      "state": "NY",
+      "run_date": "2026-05-15T11:00:25.642356+00:00",
+      "elapsed_sec": 459.4,
+      "bundles": 1611,
+      "totals": {
+        "ok": 1608,
+        "errors": 3,
+        "baked": 1848,
+        "skipped": 0
+      },
+      "embedding_model": "text-embedding-3-small",
+      "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/ny_bake.jsonl"
+    },
+    "OH": {
+      "state": "OH",
+      "run_date": "2026-05-15T14:43:29.761521+00:00",
+      "elapsed_sec": 629.1,
+      "bundles": 270,
+      "totals": {
+        "ok": 233,
+        "errors": 37,
+        "baked": 240,
+        "skipped": 0
+      },
+      "embedding_model": "text-embedding-3-small",
+      "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/oh_bake.jsonl"
+    },
+    "OK": {
+      "state": "OK",
+      "run_date": "2026-05-15T16:27:32.485780+00:00",
+      "elapsed_sec": 233.4,
+      "bundles": 166,
+      "totals": {
+        "ok": 155,
+        "errors": 11,
+        "baked": 158,
+        "skipped": 0
+      },
+      "embedding_model": "text-embedding-3-small",
+      "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/ok_bake.jsonl"
+    },
+    "OR": {
+      "state": "OR",
+      "run_date": "2026-05-15T15:08:29.546029+00:00",
+      "elapsed_sec": 301.3,
+      "bundles": 227,
+      "totals": {
+        "ok": 214,
+        "errors": 13,
+        "baked": 223,
+        "skipped": 0
+      },
+      "embedding_model": "text-embedding-3-small",
+      "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/or_bake.jsonl"
+    },
+    "PA": {
+      "state": "PA",
+      "run_date": "2026-05-15T15:15:43.567474+00:00",
+      "elapsed_sec": 432.2,
+      "bundles": 161,
+      "totals": {
+        "ok": 134,
+        "errors": 27,
+        "baked": 136,
+        "skipped": 0
+      },
+      "embedding_model": "text-embedding-3-small",
+      "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/pa_bake.jsonl"
+    },
+    "RI": {
+      "state": "RI",
+      "run_date": "2026-05-15T04:35:50.911540+00:00",
+      "elapsed_sec": 98.8,
+      "bundles": 309,
+      "totals": {
+        "ok": 309,
+        "errors": 0,
+        "baked": 123,
+        "skipped": 372
+      },
+      "embedding_model": "text-embedding-3-small",
+      "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/ri_bake.jsonl"
+    },
+    "SC": {
+      "state": "SC",
+      "run_date": "2026-05-15T16:27:34.185940+00:00",
+      "elapsed_sec": 0.0,
+      "bundles": 0,
+      "totals": {
+        "ok": 0,
+        "errors": 0,
+        "baked": 0,
+        "skipped": 0
+      },
+      "embedding_model": "text-embedding-3-small",
+      "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/sc_bake.jsonl"
+    },
+    "SD": {
+      "state": "SD",
+      "run_date": "2026-05-15T16:29:27.201436+00:00",
+      "elapsed_sec": 111.7,
+      "bundles": 45,
+      "totals": {
+        "ok": 42,
+        "errors": 3,
+        "baked": 44,
+        "skipped": 0
+      },
+      "embedding_model": "text-embedding-3-small",
+      "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/sd_bake.jsonl"
+    },
+    "TN": {
+      "state": "TN",
+      "run_date": "2026-05-15T13:25:39.425953+00:00",
+      "elapsed_sec": 1390.0,
+      "bundles": 708,
+      "totals": {
+        "ok": 637,
+        "errors": 71,
+        "baked": 861,
+        "skipped": 0
+      },
+      "embedding_model": "text-embedding-3-small",
+      "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/tn_bake.jsonl"
+    },
+    "UT": {
+      "state": "UT",
+      "run_date": "2026-05-15T17:02:31.663550+00:00",
+      "elapsed_sec": 1981.2,
+      "bundles": 1018,
+      "totals": {
+        "ok": 884,
+        "errors": 134,
+        "baked": 326,
+        "skipped": 957
+      },
+      "embedding_model": "text-embedding-3-small",
+      "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/ut_bake.jsonl"
+    },
+    "VA": {
+      "state": "VA",
+      "run_date": "2026-05-15T14:32:58.554800+00:00",
+      "elapsed_sec": 604.7,
+      "bundles": 327,
+      "totals": {
+        "ok": 294,
+        "errors": 33,
+        "baked": 345,
+        "skipped": 0
+      },
+      "embedding_model": "text-embedding-3-small",
+      "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/va_bake.jsonl"
+    },
+    "VT": {
+      "state": "VT",
+      "run_date": "2026-05-15T17:02:42.099444+00:00",
+      "elapsed_sec": 8.3,
+      "bundles": 16,
+      "totals": {
+        "ok": 16,
+        "errors": 0,
+        "baked": 20,
+        "skipped": 0
+      },
+      "embedding_model": "text-embedding-3-small",
+      "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/vt_bake.jsonl"
+    },
+    "WA": {
+      "state": "WA",
+      "run_date": "2026-05-15T14:49:30.498547+00:00",
+      "elapsed_sec": 358.1,
+      "bundles": 251,
+      "totals": {
+        "ok": 235,
+        "errors": 16,
+        "baked": 248,
+        "skipped": 0
+      },
+      "embedding_model": "text-embedding-3-small",
+      "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/wa_bake.jsonl"
+    },
+    "WI": {
+      "state": "WI",
+      "run_date": "2026-05-15T17:07:40.220895+00:00",
+      "elapsed_sec": 296.4,
+      "bundles": 199,
+      "totals": {
+        "ok": 189,
+        "errors": 10,
+        "baked": 191,
+        "skipped": 0
+      },
+      "embedding_model": "text-embedding-3-small",
+      "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/wi_bake.jsonl"
+    },
+    "WV": {
+      "state": "WV",
+      "run_date": "2026-05-15T15:18:17.557774+00:00",
+      "elapsed_sec": 152.2,
+      "bundles": 52,
+      "totals": {
+        "ok": 47,
+        "errors": 5,
+        "baked": 49,
+        "skipped": 0
+      },
+      "embedding_model": "text-embedding-3-small",
+      "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/wv_bake.jsonl"
+    },
+    "WY": {
+      "state": "WY",
+      "run_date": "2026-05-15T17:12:10.593700+00:00",
+      "elapsed_sec": 268.4,
+      "bundles": 141,
+      "totals": {
+        "ok": 131,
+        "errors": 10,
+        "baked": 136,
+        "skipped": 0
+      },
+      "embedding_model": "text-embedding-3-small",
+      "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/wy_bake.jsonl"
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "state": "UT",
+  "run_date": "2026-05-15T17:02:31.663550+00:00",
+  "elapsed_sec": 1981.2,
+  "bundles": 1018,
+  "totals": {
+    "ok": 884,
+    "errors": 134,
+    "baked": 326,
+    "skipped": 957
+  },
+  "embedding_model": "text-embedding-3-small",
+  "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/ut_bake.jsonl"
+}

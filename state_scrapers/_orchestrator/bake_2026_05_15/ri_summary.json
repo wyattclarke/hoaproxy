@@ -1,0 +1,14 @@
+{
+  "state": "RI",
+  "run_date": "2026-05-15T04:35:50.911540+00:00",
+  "elapsed_sec": 98.8,
+  "bundles": 309,
+  "totals": {
+    "ok": 309,
+    "errors": 0,
+    "baked": 123,
+    "skipped": 372
+  },
+  "embedding_model": "text-embedding-3-small",
+  "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/ri_bake.jsonl"
+}

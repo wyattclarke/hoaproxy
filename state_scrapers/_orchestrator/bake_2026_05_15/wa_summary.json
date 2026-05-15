@@ -1,0 +1,14 @@
+{
+  "state": "WA",
+  "run_date": "2026-05-15T14:49:30.498547+00:00",
+  "elapsed_sec": 358.1,
+  "bundles": 251,
+  "totals": {
+    "ok": 235,
+    "errors": 16,
+    "baked": 248,
+    "skipped": 0
+  },
+  "embedding_model": "text-embedding-3-small",
+  "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/wa_bake.jsonl"
+}

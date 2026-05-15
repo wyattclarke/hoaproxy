@@ -1,0 +1,14 @@
+{
+  "state": "MI",
+  "run_date": "2026-05-15T16:04:01.777570+00:00",
+  "elapsed_sec": 251.1,
+  "bundles": 166,
+  "totals": {
+    "ok": 156,
+    "errors": 10,
+    "baked": 157,
+    "skipped": 0
+  },
+  "embedding_model": "text-embedding-3-small",
+  "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/mi_bake.jsonl"
+}

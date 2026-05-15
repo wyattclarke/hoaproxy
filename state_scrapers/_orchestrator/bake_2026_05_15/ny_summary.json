@@ -1,0 +1,14 @@
+{
+  "state": "NY",
+  "run_date": "2026-05-15T11:00:25.642356+00:00",
+  "elapsed_sec": 459.4,
+  "bundles": 1611,
+  "totals": {
+    "ok": 1608,
+    "errors": 3,
+    "baked": 1848,
+    "skipped": 0
+  },
+  "embedding_model": "text-embedding-3-small",
+  "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/ny_bake.jsonl"
+}

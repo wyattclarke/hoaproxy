@@ -1,0 +1,14 @@
+{
+  "state": "ID",
+  "run_date": "2026-05-15T15:49:13.779746+00:00",
+  "elapsed_sec": 197.8,
+  "bundles": 117,
+  "totals": {
+    "ok": 111,
+    "errors": 6,
+    "baked": 137,
+    "skipped": 0
+  },
+  "embedding_model": "text-embedding-3-small",
+  "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/id_bake.jsonl"
+}

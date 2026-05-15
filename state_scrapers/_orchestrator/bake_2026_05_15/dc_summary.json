@@ -1,0 +1,14 @@
+{
+  "state": "DC",
+  "run_date": "2026-05-15T14:22:49.293052+00:00",
+  "elapsed_sec": 1610.2,
+  "bundles": 374,
+  "totals": {
+    "ok": 248,
+    "errors": 126,
+    "baked": 285,
+    "skipped": 0
+  },
+  "embedding_model": "text-embedding-3-small",
+  "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/dc_bake.jsonl"
+}

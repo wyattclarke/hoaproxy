@@ -1,0 +1,14 @@
+{
+  "state": "MT",
+  "run_date": "2026-05-15T16:14:02.366378+00:00",
+  "elapsed_sec": 364.2,
+  "bundles": 199,
+  "totals": {
+    "ok": 182,
+    "errors": 17,
+    "baked": 190,
+    "skipped": 0
+  },
+  "embedding_model": "text-embedding-3-small",
+  "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/mt_bake.jsonl"
+}

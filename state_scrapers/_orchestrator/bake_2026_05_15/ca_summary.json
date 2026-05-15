@@ -1,0 +1,14 @@
+{
+  "state": "CA",
+  "run_date": "2026-05-15T12:25:46.220854+00:00",
+  "elapsed_sec": 1541.2,
+  "bundles": 982,
+  "totals": {
+    "ok": 893,
+    "errors": 89,
+    "baked": 1217,
+    "skipped": 0
+  },
+  "embedding_model": "text-embedding-3-small",
+  "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/ca_bake.jsonl"
+}

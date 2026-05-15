@@ -1,0 +1,14 @@
+{
+  "state": "NJ",
+  "run_date": "2026-05-15T14:54:54.109280+00:00",
+  "elapsed_sec": 320.6,
+  "bundles": 112,
+  "totals": {
+    "ok": 93,
+    "errors": 19,
+    "baked": 95,
+    "skipped": 0
+  },
+  "embedding_model": "text-embedding-3-small",
+  "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/nj_bake.jsonl"
+}

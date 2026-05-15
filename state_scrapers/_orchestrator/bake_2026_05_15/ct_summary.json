@@ -1,0 +1,14 @@
+{
+  "state": "CT",
+  "run_date": "2026-05-15T15:27:15.985328+00:00",
+  "elapsed_sec": 535.8,
+  "bundles": 234,
+  "totals": {
+    "ok": 203,
+    "errors": 31,
+    "baked": 325,
+    "skipped": 0
+  },
+  "embedding_model": "text-embedding-3-small",
+  "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/ct_bake.jsonl"
+}

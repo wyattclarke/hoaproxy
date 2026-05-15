@@ -1,0 +1,14 @@
+{
+  "state": "WV",
+  "run_date": "2026-05-15T15:18:17.557774+00:00",
+  "elapsed_sec": 152.2,
+  "bundles": 52,
+  "totals": {
+    "ok": 47,
+    "errors": 5,
+    "baked": 49,
+    "skipped": 0
+  },
+  "embedding_model": "text-embedding-3-small",
+  "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/wv_bake.jsonl"
+}

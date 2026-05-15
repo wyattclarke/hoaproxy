@@ -1,0 +1,14 @@
+{
+  "state": "FL",
+  "run_date": "2026-05-15T10:52:42.966904+00:00",
+  "elapsed_sec": 2016.4,
+  "bundles": 3778,
+  "totals": {
+    "ok": 3700,
+    "errors": 78,
+    "baked": 1975,
+    "skipped": 3406
+  },
+  "embedding_model": "text-embedding-3-small",
+  "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/fl_bake.jsonl"
+}

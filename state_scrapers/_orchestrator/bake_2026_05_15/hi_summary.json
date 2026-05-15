@@ -1,0 +1,14 @@
+{
+  "state": "HI",
+  "run_date": "2026-05-15T12:36:16.050596+00:00",
+  "elapsed_sec": 627.4,
+  "bundles": 813,
+  "totals": {
+    "ok": 786,
+    "errors": 27,
+    "baked": 941,
+    "skipped": 0
+  },
+  "embedding_model": "text-embedding-3-small",
+  "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/hi_bake.jsonl"
+}

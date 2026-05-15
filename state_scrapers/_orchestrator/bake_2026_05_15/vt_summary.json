@@ -1,0 +1,14 @@
+{
+  "state": "VT",
+  "run_date": "2026-05-15T17:02:42.099444+00:00",
+  "elapsed_sec": 8.3,
+  "bundles": 16,
+  "totals": {
+    "ok": 16,
+    "errors": 0,
+    "baked": 20,
+    "skipped": 0
+  },
+  "embedding_model": "text-embedding-3-small",
+  "ledger_path": "state_scrapers/_orchestrator/bake_2026_05_15/vt_bake.jsonl"
+}
