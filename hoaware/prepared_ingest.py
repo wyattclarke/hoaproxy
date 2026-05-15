@@ -20,8 +20,16 @@ from google.cloud import storage as gcs
 from .chunker import PageContent
 from .doc_classifier import REJECT_PII
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+SUPPORTED_SCHEMA_VERSIONS = {1, 2}
 VERSION_PREFIX = "v1"
+
+# v2 adds a per-document chunks sidecar that carries pre-chunked text +
+# OpenAI embeddings, so the server skips chunk_pages() and batch_embeddings()
+# entirely. The sidecar stamps the embedder model + dimensions; the server
+# refuses to import a bundle whose stamped model doesn't match its
+# configured OPENAI_EMBEDDING_MODEL. See docs/upload-acceleration-plan.md.
+EMBEDDING_DIMENSIONS = 1536  # text-embedding-3-small dimension
 DEFAULT_PREPARED_BUCKET = os.environ.get(
     "HOA_PREPARED_GCS_BUCKET", "hoaproxy-ingest-ready"
 )
@@ -66,6 +74,35 @@ class PreparedDocument:
     page_count: int | None
     docai_pages: int
     filter_reason: str | None
+    # v2 addition: optional GCS path to a chunks-sidecar JSON containing
+    # pre-chunked text + 1536-dim embeddings. When set, the server skips
+    # chunk_pages() and batch_embeddings().
+    chunks_gcs_path: str | None = None
+
+
+@dataclass(frozen=True)
+class PreparedChunk:
+    """One pre-baked chunk + embedding from a v2 chunks sidecar."""
+    idx: int
+    text: str
+    page_start: int | None
+    page_end: int | None
+    embedding: list[float]  # length == EMBEDDING_DIMENSIONS
+
+
+@dataclass(frozen=True)
+class ChunksSidecar:
+    """A validated v2 chunks sidecar payload."""
+    schema_version: int
+    doc_sha256: str
+    chunker_max_chars: int
+    chunker_overlap_chars: int
+    embedder_provider: str
+    embedder_model: str
+    embedder_dimensions: int
+    chunks: list[PreparedChunk]
+    produced_at: str | None
+    raw: dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -186,8 +223,11 @@ def validate_bundle(payload: dict[str, Any], *, expected_state: str | None = Non
     if not isinstance(payload, dict):
         raise PreparedIngestError("bundle.json must be a JSON object")
     schema_version = payload.get("schema_version")
-    if schema_version != SCHEMA_VERSION:
-        raise PreparedIngestError(f"unsupported schema_version {schema_version!r}")
+    if schema_version not in SUPPORTED_SCHEMA_VERSIONS:
+        raise PreparedIngestError(
+            f"unsupported schema_version {schema_version!r}; "
+            f"supported: {sorted(SUPPORTED_SCHEMA_VERSIONS)}"
+        )
 
     state = _normalize_state(_require_string(payload, "state"))
     if expected_state and state != _normalize_state(expected_state):
@@ -239,6 +279,14 @@ def validate_bundle(payload: dict[str, Any], *, expected_state: str | None = Non
         if not isinstance(docai_pages, int) or docai_pages < 0:
             raise PreparedIngestError(f"documents[{idx}].docai_pages must be non-negative")
 
+        chunks_gcs_path = doc.get("chunks_gcs_path")
+        if chunks_gcs_path is not None:
+            if not isinstance(chunks_gcs_path, str):
+                raise PreparedIngestError(
+                    f"documents[{idx}].chunks_gcs_path must be a string"
+                )
+            parse_gcs_uri(chunks_gcs_path)
+
         documents.append(
             PreparedDocument(
                 sha256=sha256,
@@ -255,6 +303,7 @@ def validate_bundle(payload: dict[str, Any], *, expected_state: str | None = Non
                 filter_reason=doc.get("filter_reason")
                 if isinstance(doc.get("filter_reason"), str)
                 else None,
+                chunks_gcs_path=chunks_gcs_path,
             )
         )
 
@@ -390,4 +439,112 @@ def update_bundle_status(
         json.dumps(updated, indent=2, sort_keys=True),
         content_type="application/json",
         if_generation_match=generation,
+    )
+
+
+# ---------------------------------------------------------------- v2 chunks sidecar
+
+
+def chunks_sidecar_blob_name(bundle_prefix: str, sha256: str) -> str:
+    """Canonical GCS path inside a bundle prefix for a v2 chunks sidecar."""
+    return f"{bundle_prefix.rstrip('/')}/chunks-{sha256}.json"
+
+
+def validate_chunks_sidecar(
+    payload: dict[str, Any],
+    *,
+    expected_sha256: str | None = None,
+    expected_model: str | None = None,
+    expected_dimensions: int = EMBEDDING_DIMENSIONS,
+) -> ChunksSidecar:
+    """Validate a v2 chunks sidecar payload and return a typed view.
+
+    The server passes ``expected_model`` from ``Settings.embedding_model``;
+    a mismatch raises so we never silently mix vectors from different
+    embedding model families.
+    """
+    if not isinstance(payload, dict):
+        raise PreparedIngestError("chunks sidecar must be a JSON object")
+    schema_version = payload.get("schema_version")
+    if schema_version != 2:
+        raise PreparedIngestError(
+            f"chunks sidecar schema_version must be 2, got {schema_version!r}"
+        )
+
+    doc_sha256 = _require_string(payload, "doc_sha256").lower()
+    if len(doc_sha256) != 64 or any(c not in "0123456789abcdef" for c in doc_sha256):
+        raise PreparedIngestError("chunks sidecar doc_sha256 must be hex SHA-256")
+    if expected_sha256 and doc_sha256 != expected_sha256.lower():
+        raise PreparedIngestError(
+            f"chunks sidecar doc_sha256 {doc_sha256} != expected {expected_sha256}"
+        )
+
+    chunker = payload.get("chunker")
+    if not isinstance(chunker, dict):
+        raise PreparedIngestError("chunks sidecar.chunker must be an object")
+    max_chars = chunker.get("max_chars")
+    overlap = chunker.get("overlap_chars")
+    if not isinstance(max_chars, int) or max_chars < 1:
+        raise PreparedIngestError("chunker.max_chars must be a positive int")
+    if not isinstance(overlap, int) or overlap < 0:
+        raise PreparedIngestError("chunker.overlap_chars must be a non-negative int")
+
+    embedder = payload.get("embedder")
+    if not isinstance(embedder, dict):
+        raise PreparedIngestError("chunks sidecar.embedder must be an object")
+    provider = _require_string(embedder, "provider")
+    model = _require_string(embedder, "model")
+    dims = embedder.get("dimensions")
+    if not isinstance(dims, int) or dims < 1:
+        raise PreparedIngestError("embedder.dimensions must be a positive int")
+    if expected_model and model != expected_model:
+        raise PreparedIngestError(
+            f"chunks sidecar embedder.model {model!r} != server expected {expected_model!r}"
+        )
+    if dims != expected_dimensions:
+        raise PreparedIngestError(
+            f"chunks sidecar embedder.dimensions {dims} != expected {expected_dimensions}"
+        )
+
+    chunks_raw = payload.get("chunks")
+    if not isinstance(chunks_raw, list) or not chunks_raw:
+        raise PreparedIngestError("chunks sidecar.chunks must be a non-empty list")
+    chunks: list[PreparedChunk] = []
+    for i, c in enumerate(chunks_raw):
+        if not isinstance(c, dict):
+            raise PreparedIngestError(f"chunks[{i}] must be an object")
+        cidx = c.get("idx")
+        if not isinstance(cidx, int) or cidx < 0:
+            raise PreparedIngestError(f"chunks[{i}].idx must be a non-negative int")
+        text = c.get("text")
+        if not isinstance(text, str) or not text.strip():
+            raise PreparedIngestError(f"chunks[{i}].text must be a non-empty string")
+        ps = c.get("page_start")
+        pe = c.get("page_end")
+        if ps is not None and (not isinstance(ps, int) or ps < 1):
+            raise PreparedIngestError(f"chunks[{i}].page_start must be a positive int or null")
+        if pe is not None and (not isinstance(pe, int) or pe < 1):
+            raise PreparedIngestError(f"chunks[{i}].page_end must be a positive int or null")
+        emb = c.get("embedding")
+        if not isinstance(emb, list) or len(emb) != dims:
+            raise PreparedIngestError(
+                f"chunks[{i}].embedding must be a list of length {dims}"
+            )
+        if not all(isinstance(x, (int, float)) for x in emb):
+            raise PreparedIngestError(f"chunks[{i}].embedding values must be numeric")
+        chunks.append(PreparedChunk(
+            idx=cidx, text=text, page_start=ps, page_end=pe, embedding=emb,
+        ))
+
+    return ChunksSidecar(
+        schema_version=schema_version,
+        doc_sha256=doc_sha256,
+        chunker_max_chars=max_chars,
+        chunker_overlap_chars=overlap,
+        embedder_provider=provider,
+        embedder_model=model,
+        embedder_dimensions=dims,
+        chunks=chunks,
+        produced_at=payload.get("produced_at") if isinstance(payload.get("produced_at"), str) else None,
+        raw=payload,
     )

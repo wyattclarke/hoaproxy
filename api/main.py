@@ -4033,6 +4033,33 @@ def _process_prepared_bundle(
             pages, sidecar_docai_pages = prepared_ingest.validate_text_sidecar(sidecar_payload)
             imported_docai_pages += sidecar_docai_pages
 
+            # v2 fast path: fetch the per-doc chunks sidecar if the bundle
+            # advertises one. Refuse mismatched embedder model up front so
+            # we never silently mix vectors across model families.
+            pre_chunked = None
+            if doc.chunks_gcs_path:
+                chunks_uri = prepared_ingest.parse_gcs_uri(doc.chunks_gcs_path)
+                if chunks_uri.bucket != bucket.name:
+                    raise prepared_ingest.PreparedIngestError(
+                        "chunks sidecar bucket must match the prepared queue bucket"
+                    )
+                chunks_payload = prepared_ingest.load_json_blob(bucket, chunks_uri.blob)
+                sidecar = prepared_ingest.validate_chunks_sidecar(
+                    chunks_payload,
+                    expected_sha256=doc.sha256,
+                    expected_model=settings.embedding_model,
+                )
+                pre_chunked = [
+                    {
+                        "idx": c.idx,
+                        "text": c.text,
+                        "page_start": c.page_start,
+                        "page_end": c.page_end,
+                        "embedding": c.embedding,
+                    }
+                    for c in sidecar.chunks
+                ]
+
             if dry_run:
                 continue
 
@@ -4050,6 +4077,7 @@ def _process_prepared_bundle(
                 "text_extractable": doc.text_extractable,
                 "source_url": doc.source_url,
                 "pre_extracted_pages": pages,
+                "pre_chunked": pre_chunked,
                 "docai_pages": sidecar_docai_pages,
             }
 

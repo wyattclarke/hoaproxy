@@ -112,7 +112,19 @@ def _ingest_pdf(
     text_extractable: bool | None = None,
     source_url: str | None = None,
     pre_extracted_pages: list[PageContent] | None = None,
+    pre_chunked: list[dict] | None = None,
 ) -> bool:
+    """Ingest one PDF.
+
+    ``pre_chunked``: optional v2 fast path. When supplied, the caller has
+    already chunked + embedded the document upstream (typically via a baked
+    v2 prepared bundle). Each item is a dict with keys ``idx``, ``text``,
+    ``page_start``, ``page_end``, ``embedding`` (list[float] of length
+    ``EMBEDDING_DIMENSIONS``). The server skips ``chunk_pages`` and
+    ``batch_embeddings`` entirely. ``pre_chunked`` and ``pre_extracted_pages``
+    can both be supplied — the latter is still used for the documents
+    table's page_count.
+    """
     ingest_start = perf_counter()
     rel_path = pdf_path.relative_to(settings.docs_root).as_posix()
     logger.info("Ingest start for %s (hoa=%s)", rel_path, hoa_name)
@@ -187,34 +199,62 @@ def _ingest_pdf(
         return False
 
     old_point_ids = db.list_chunk_point_ids(conn, doc_id)
-    chunk_start = perf_counter()
-    chunks = chunk_pages(
-        pages,
-        max_chars=settings.chunk_char_limit,
-        overlap_chars=settings.chunk_overlap,
-    )
-    logger.info(
-        "Chunking complete for %s (chunks=%s, elapsed_s=%.2f)",
-        rel_path,
-        len(chunks),
-        perf_counter() - chunk_start,
-    )
-    if not chunks:
-        logger.warning("No chunks extracted from %s", rel_path)
-        delete_points(qdrant_client, collection, old_point_ids)
-        db.replace_chunks(conn, doc_id, [])
-        return True
-
-    _detect_proxy_rules(chunks, openai_client, hoa_id, conn)
-
     import numpy as np
 
-    embeddings = batch_embeddings(
-        [chunk.text for chunk in chunks],
-        client=openai_client,
-        model=settings.embedding_model,
-    )
-    logger.info("Embeddings complete for %s (chunks=%s)", rel_path, len(embeddings))
+    if pre_chunked is not None:
+        # v2 fast path: agent already chunked + embedded; skip both
+        # chunk_pages() and batch_embeddings(). Build local Chunk objects
+        # so the rest of the ingest flow (proxy-rule detection, qdrant,
+        # db.replace_chunks) stays unchanged.
+        from .chunker import Chunk as _Chunk
+        chunks = [
+            _Chunk(
+                index=int(c["idx"]),
+                text=str(c["text"]),
+                start_page=c.get("page_start"),
+                end_page=c.get("page_end"),
+            )
+            for c in pre_chunked
+        ]
+        embeddings = [list(c["embedding"]) for c in pre_chunked]
+        logger.info(
+            "Using pre-baked v2 sidecar for %s (chunks=%s, embeddings_skipped=true)",
+            rel_path,
+            len(chunks),
+        )
+        if not chunks:
+            logger.warning("No chunks supplied in v2 sidecar for %s", rel_path)
+            delete_points(qdrant_client, collection, old_point_ids)
+            db.replace_chunks(conn, doc_id, [])
+            return True
+        _detect_proxy_rules(chunks, openai_client, hoa_id, conn)
+    else:
+        chunk_start = perf_counter()
+        chunks = chunk_pages(
+            pages,
+            max_chars=settings.chunk_char_limit,
+            overlap_chars=settings.chunk_overlap,
+        )
+        logger.info(
+            "Chunking complete for %s (chunks=%s, elapsed_s=%.2f)",
+            rel_path,
+            len(chunks),
+            perf_counter() - chunk_start,
+        )
+        if not chunks:
+            logger.warning("No chunks extracted from %s", rel_path)
+            delete_points(qdrant_client, collection, old_point_ids)
+            db.replace_chunks(conn, doc_id, [])
+            return True
+
+        _detect_proxy_rules(chunks, openai_client, hoa_id, conn)
+
+        embeddings = batch_embeddings(
+            [chunk.text for chunk in chunks],
+            client=openai_client,
+            model=settings.embedding_model,
+        )
+        logger.info("Embeddings complete for %s (chunks=%s)", rel_path, len(embeddings))
 
     # Store embeddings as BLOBs in SQLite for inline vector search
     embedding_blobs = [np.array(vec, dtype=np.float32).tobytes() for vec in embeddings]
@@ -331,6 +371,7 @@ def ingest_pdf_paths(
                         text_extractable=meta.get("text_extractable"),
                         source_url=meta.get("source_url"),
                         pre_extracted_pages=meta.get("pre_extracted_pages"),
+                        pre_chunked=meta.get("pre_chunked"),
                     )
                     if changed:
                         stats.indexed += 1
