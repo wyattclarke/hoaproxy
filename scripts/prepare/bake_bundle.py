@@ -107,21 +107,49 @@ def bake_one_bundle(
         docs_baked += 1
 
     # Rewrite bundle.json to v2 with chunks_gcs_path set on each doc.
-    updated = dict(bundle_payload)
-    updated["schema_version"] = 2
-    docs_out = []
-    for doc_raw in updated.get("documents") or []:
-        sha = (doc_raw.get("sha256") or "").lower()
-        new_doc = dict(doc_raw)
-        if sha in new_chunks_paths:
-            new_doc["chunks_gcs_path"] = new_chunks_paths[sha]
-        docs_out.append(new_doc)
-    updated["documents"] = docs_out
+    # Concurrent bakers on the same prefix: the bundle.json upload uses
+    # generation-match CAS so the loser retries by re-reading the current
+    # bundle and unioning its chunks_gcs_paths with ours. This keeps the
+    # final bundle.json consistent with every sidecar on GCS.
+    from google.api_core import exceptions as gcs_exceptions  # noqa: WPS433
 
-    bucket.blob(bundle_blob_name).upload_from_string(
-        json.dumps(updated, indent=2, sort_keys=True),
-        content_type="application/json",
-    )
+    bundle_blob = bucket.blob(bundle_blob_name)
+    current_payload = bundle_payload
+    max_attempts = 5
+    for attempt in range(max_attempts):
+        bundle_blob.reload()
+        gen = bundle_blob.generation
+        if attempt > 0:
+            # Re-read on retry; union prior chunks_gcs_paths so we don't
+            # drop another writer's contribution.
+            current_payload = json.loads(bundle_blob.download_as_bytes())
+            for doc_raw in current_payload.get("documents") or []:
+                sha = (doc_raw.get("sha256") or "").lower()
+                if doc_raw.get("chunks_gcs_path") and sha not in new_chunks_paths:
+                    new_chunks_paths[sha] = doc_raw["chunks_gcs_path"]
+
+        updated = dict(current_payload)
+        updated["schema_version"] = 2
+        docs_out = []
+        for doc_raw in updated.get("documents") or []:
+            sha = (doc_raw.get("sha256") or "").lower()
+            new_doc = dict(doc_raw)
+            if sha in new_chunks_paths:
+                new_doc["chunks_gcs_path"] = new_chunks_paths[sha]
+            docs_out.append(new_doc)
+        updated["documents"] = docs_out
+
+        try:
+            bundle_blob.upload_from_string(
+                json.dumps(updated, indent=2, sort_keys=True),
+                content_type="application/json",
+                if_generation_match=gen,
+            )
+            break
+        except gcs_exceptions.PreconditionFailed:
+            if attempt == max_attempts - 1:
+                raise
+            continue
     return {
         "prefix": prefix,
         "documents": len(bundle.documents),

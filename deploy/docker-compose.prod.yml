@@ -20,6 +20,10 @@ services:
       - HOA_DOCS_ROOT=/app/hoa_docs
       - HOA_DB_PATH=/app/data/hoa_index.db
       - HOA_BANK_GCS_BUCKET=hoaproxy-bank
+      # N parallel ingest workers inside the container. Each gets a unique
+      # INGEST_WORKER_ID and a 0.25s staggered start. claim_next_pending_ingest
+      # is atomic; GCS-side claim uses if_generation_match. Safe under any N.
+      - INGEST_WORKER_COUNT=4
     volumes:
       # DB lives on the local NVMe (host /var/lib/hoaproxy/data).
       - /var/lib/hoaproxy/data:/app/data

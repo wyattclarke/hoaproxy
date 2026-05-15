@@ -123,8 +123,20 @@ def run_loop(*, poll_interval: float = _POLL_INTERVAL_SEC) -> None:
     processors = _import_processors()
     last_heartbeat = 0.0
 
+    worker_id = os.environ.get("INGEST_WORKER_ID", "1")
+    # Stagger poll start across workers so the SELECT/UPDATE bursts don't
+    # collide. claim_next_pending_ingest is atomic but staggering reduces
+    # wasted WAL-write contention when the queue is empty.
+    try:
+        offset = (int(worker_id) - 1) * 0.25
+    except ValueError:
+        offset = 0.0
+    if offset > 0:
+        time.sleep(offset)
+
     logger.info(
-        "ingest_worker starting (db=%s poll=%.1fs heartbeat=%.1fs max_attempts=%d)",
+        "ingest_worker #%s starting (db=%s poll=%.1fs heartbeat=%.1fs max_attempts=%d)",
+        worker_id,
         settings.db_path,
         poll_interval,
         _HEARTBEAT_INTERVAL_SEC,
