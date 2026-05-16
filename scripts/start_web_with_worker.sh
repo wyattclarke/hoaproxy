@@ -49,7 +49,14 @@ else
 fi
 
 echo "[start_web_with_worker] starting uvicorn on port ${PORT}"
-uvicorn api.main:app --host 0.0.0.0 --port "${PORT}" &
+# --proxy-headers + --forwarded-allow-ips makes uvicorn trust X-Forwarded-For
+# from Caddy on 127.0.0.1. Caddy rewrites X-Forwarded-For to the real
+# CF-Connecting-IP (see deploy/Caddyfile), so request.client.host ends up as
+# the actual visitor IP. Without these flags it stays 127.0.0.1 for every
+# request and the per-IP rate limiter in api/main.py treats the whole internet
+# as a single user, locking out random visitors with HTTP 429.
+uvicorn api.main:app --host 0.0.0.0 --port "${PORT}" \
+    --proxy-headers --forwarded-allow-ips="127.0.0.1" &
 WEB_PID=$!
 
 # If any child exits, propagate the exit code so docker-compose restarts.
