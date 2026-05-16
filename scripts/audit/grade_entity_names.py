@@ -102,18 +102,13 @@ def main() -> int:
     # need to filter by source, otherwise sample from /hoas/summary.
     state = args.state.upper()
     if args.source_filter:
-        # Use admin endpoint to get rows by source string
-        api_key = os.environ.get("RENDER_API_KEY")
-        sid = os.environ.get("RENDER_SERVICE_ID")
-        r = requests.get(
-            f"https://api.render.com/v1/services/{sid}/env-vars",
-            headers={"Authorization": f"Bearer {api_key}"}, timeout=30,
-        )
-        token = next(
-            e["value"] for env in r.json()
-            for e in [env.get("envVar", env)]
-            if e.get("key") == "JWT_SECRET" and e.get("value")
-        )
+        # Use admin endpoint to get rows by source string. Hetzner cutover
+        # made the Render env-var fetch path stale; JWT_SECRET in settings.env
+        # now matches prod directly.
+        token = os.environ.get("HOAPROXY_ADMIN_BEARER") or os.environ.get("JWT_SECRET")
+        if not token:
+            print("no admin token (set JWT_SECRET or HOAPROXY_ADMIN_BEARER)")
+            return 2
         r = requests.post("https://hoaproxy.org/admin/list-corruption-targets",
             headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
             json={"sources": [args.source_filter]}, timeout=120)

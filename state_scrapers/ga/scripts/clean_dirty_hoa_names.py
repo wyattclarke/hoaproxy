@@ -22,6 +22,7 @@ import html
 import json
 import os
 import re
+import signal
 import sys
 import time
 from pathlib import Path
@@ -42,6 +43,24 @@ DEFAULT_MODEL = "deepseek/deepseek-v4-flash"
 # OpenRouter API key is gateway-restricted to DEFAULT_MODEL. The historical
 # Kimi K2 fallback is no longer permitted, so retries re-hit the primary.
 FALLBACK_MODEL = DEFAULT_MODEL
+
+
+class OperationTimeout(BaseException):
+    """Raised by SIGALRM so broad HTTP exception handlers do not swallow it."""
+
+
+def _raise_timeout(signum: int, frame: Any) -> None:
+    raise OperationTimeout("phase10 row operation timed out")
+
+
+def _set_alarm(seconds: int) -> None:
+    if hasattr(signal, "SIGALRM"):
+        signal.alarm(seconds)
+
+
+def _clear_alarm() -> None:
+    if hasattr(signal, "SIGALRM"):
+        signal.alarm(0)
 
 # ---------------------------------------------------------------------------
 # Dirty-name detection
@@ -86,53 +105,11 @@ _DOUBLED_NAME_RE = re.compile(
 )
 
 
-def is_dirty(name: str) -> tuple[bool, str]:
-    n = name or ""
-    if " - " in n and len(n) > 50:
-        return True, "long_dashed_phrase"
-    if n[:1].islower():
-        return True, "starts_lowercase"
-    if re.match(r"^\d+\s*[-)]\s*", n):
-        return True, "numeric_prefix"
-    # Year prefix like "2018 Exhibit A …" or "1985 Amended Bylaws of …"
-    if re.match(r"^(?:19|20)\d{2}\s+[A-Za-z]", n):
-        return True, "year_prefix"
-    # Long digit run prefix like "5021942267194390towne park pooler"
-    if re.match(r"^\d{6,}", n):
-        return True, "longdigit_prefix"
-    # Street-address prefix like "6318 Suwanee Dam Rd HOA"
-    if re.match(
-        r"^\d+\s+[A-Z][a-z]+(?:\s+[A-Z][a-zA-Z]+){0,4}\s+"
-        r"(?:Rd|Road|St|Street|Ave|Avenue|Dr|Drive|Lane|Ln|Way|Cir|"
-        r"Ct|Court|Blvd|Boulevard|Place|Pl|Pkwy|Parkway|Trail|Tr|Hwy|Highway)\b",
-        n,
-        re.I,
-    ):
-        return True, "street_address_prefix"
-    if re.match(r"^[A-Z][A-Z &\-]{3,}\s+", n) and len(n) > 40:
-        return True, "shouting_prefix"
-    if len(n) <= 4 and not re.search(r"hoa|poa", n, re.I):
-        return True, "too_short"
-    if _BAD_PREFIX.match(n):
-        return True, "stopword_prefix"
-    if _COUNTY_PREFIX_RE.match(n):
-        return True, "county_prefix"
-    if _DOC_FRAGMENT_RE.search(n):
-        return True, "doc_fragment_anywhere"
-    if _TAIL_TRUNCATION_RE.search(n):
-        return True, "tail_truncation"
-    if _DOUBLED_NAME_RE.search(n):
-        return True, "doubled_name"
-    # Garbled hyphenated acronym like "GL-LB-BAR HOA"
-    if re.search(r"\b[A-Z]{2,}-[A-Z]{2,}-[A-Z]{2,}\b", n):
-        return True, "garbled_acronym"
-    if len(n) > 70:
-        return True, "very_long"
-    if re.search(r"\bbook \d|page \d|paragraph", n, re.I):
-        return True, "citation_in_name"
-    if re.search(r"\bcc&?rs?\b", n, re.I) and len(n) > 30:
-        return True, "ccr_in_name_long"
-    return False, ""
+# Use the canonical is_dirty from hoaware.name_utils so this script gets all
+# the same rules (leading_punctuation, leading_conjunction, project_code_prefix,
+# generic_single_stem, …) — not just the subset that was forked here.
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # repo root
+from hoaware.name_utils import is_dirty  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -141,25 +118,8 @@ def is_dirty(name: str) -> tuple[bool, str]:
 
 
 def _live_admin_token() -> str | None:
-    if os.environ.get("HOAPROXY_ADMIN_BEARER"):
-        return os.environ["HOAPROXY_ADMIN_BEARER"]
-    api_key = os.environ.get("RENDER_API_KEY")
-    service_id = os.environ.get("RENDER_SERVICE_ID")
-    if api_key and service_id:
-        try:
-            r = requests.get(
-                f"https://api.render.com/v1/services/{service_id}/env-vars",
-                headers={"Authorization": f"Bearer {api_key}"},
-                timeout=30,
-            )
-            r.raise_for_status()
-            for env in r.json():
-                e = env.get("envVar", env)
-                if e.get("key") == "JWT_SECRET" and e.get("value"):
-                    return e["value"]
-        except requests.RequestException:
-            pass
-    return os.environ.get("JWT_SECRET")
+    # Render env-vars fallback removed 2026-05-16 (Hetzner cutover).
+    return os.environ.get("HOAPROXY_ADMIN_BEARER") or os.environ.get("JWT_SECRET")
 
 
 def _fetch_summaries(base_url: str, state: str) -> list[dict[str, Any]]:
@@ -461,6 +421,9 @@ def main() -> int:
     )
     args = p.parse_args()
 
+    if hasattr(signal, "SIGALRM"):
+        signal.signal(signal.SIGALRM, _raise_timeout)
+
     client = _llm_client()
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -479,12 +442,51 @@ def main() -> int:
     print(f"HOAs to process: {len(dirty)} (no_dirty_filter={args.no_dirty_filter})", file=sys.stderr)
 
     decisions: list[dict[str, Any]] = []
+    processed_keys: set[tuple[int | None, str]] = set()
+    if out_path.exists():
+        for line in out_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                decision = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(decision, dict):
+                continue
+            decisions.append(decision)
+            processed_keys.add((decision.get("hoa_id"), decision.get("old_name") or ""))
+
     seen_names: set[str] = {(r.get("hoa") or "") for r in summaries}
     propose_renames: list[dict[str, Any]] = []
     skipped: list[dict[str, Any]] = []
 
+    for decision in decisions:
+        old = decision.get("old_name") or ""
+        canonical = decision.get("canonical_name")
+        try:
+            confidence = float(decision.get("confidence") or 0)
+        except (TypeError, ValueError):
+            confidence = 0.0
+        if (
+            decision.get("is_hoa") is not False
+            and _looks_canonical(canonical)
+            and confidence >= args.min_confidence
+            and _normalize_for_compare(canonical) != _normalize_for_compare(old)
+        ):
+            propose_renames.append(
+                {"hoa_id": decision.get("hoa_id"), "new_name": canonical.strip()}
+            )
+        else:
+            skipped.append(decision)
+
     for i, (row, why) in enumerate(dirty, 1):
         old = row.get("hoa") or ""
+        key = (row.get("hoa_id"), old)
+        if key in processed_keys:
+            if i % 10 == 0:
+                print(f"  processed {i}/{len(dirty)}", file=sys.stderr)
+            continue
         # Fast path: try a deterministic prefix-strip first. If we get a
         # name that already looks canonical we can skip the LLM call,
         # which both saves money and avoids the LLM's tendency to
@@ -513,7 +515,33 @@ def main() -> int:
                 print(f"  processed {i}/{len(dirty)}", file=sys.stderr)
                 out_path.write_text("\n".join(json.dumps(d, sort_keys=True) for d in decisions))
             continue
-        text = _fetch_doc_text(args.base_url, old, max_chars=args.max_text_chars)
+        try:
+            _set_alarm(int(os.environ.get("PHASE10_DOC_FETCH_TIMEOUT_SECONDS", "90")))
+            text = _fetch_doc_text(args.base_url, old, max_chars=args.max_text_chars)
+        except OperationTimeout:
+            decision = {
+                "hoa_id": row.get("hoa_id"),
+                "old_name": old,
+                "dirty_reason": why,
+                "is_hoa": True,
+                "canonical_name": None,
+                "city": None, "state": None, "county": None,
+                "confidence": 0.0,
+                "llm_reason": "skipped:doc_fetch_timeout",
+                "doc_count": row.get("doc_count"),
+                "chunk_count": row.get("chunk_count"),
+                "skip_delete": True,
+            }
+            decisions.append(decision)
+            processed_keys.add(key)
+            skipped.append(decision)
+            if i % 10 == 0:
+                print(f"  processed {i}/{len(dirty)}", file=sys.stderr)
+                out_path.write_text("\n".join(json.dumps(d, sort_keys=True) for d in decisions))
+            time.sleep(args.sleep_s)
+            continue
+        finally:
+            _clear_alarm()
         # If we couldn't fetch enough text to validate, skip the LLM entirely
         # and emit a decision that preserves the current entry. The OCR
         # validation pass should never delete an entry when we have no text
@@ -539,9 +567,15 @@ def main() -> int:
                 out_path.write_text("\n".join(json.dumps(d, sort_keys=True) for d in decisions))
             time.sleep(args.sleep_s)
             continue
-        ans = _ask_llm(client, args.model, old, text)
-        if ans is None or ans.get("_error"):
-            ans = _ask_llm(client, args.fallback_model, old, text) or {}
+        try:
+            _set_alarm(int(os.environ.get("PHASE10_LLM_TIMEOUT_SECONDS", "75")))
+            ans = _ask_llm(client, args.model, old, text)
+            if ans is None or ans.get("_error"):
+                ans = _ask_llm(client, args.fallback_model, old, text) or {}
+        except OperationTimeout:
+            ans = {"_error": "llm_timeout"}
+        finally:
+            _clear_alarm()
         canonical = (ans or {}).get("canonical_name")
         confidence = float((ans or {}).get("confidence") or 0)
         reason = (ans or {}).get("reason") or (ans or {}).get("_error") or ""

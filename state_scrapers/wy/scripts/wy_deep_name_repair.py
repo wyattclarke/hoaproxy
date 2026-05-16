@@ -195,23 +195,8 @@ def _build_context_window(text: str, head_chars: int = 4000, win_radius: int = 7
 
 
 def _live_admin_token() -> str | None:
-    if os.environ.get("HOAPROXY_ADMIN_BEARER"):
-        return os.environ["HOAPROXY_ADMIN_BEARER"]
-    api = os.environ.get("RENDER_API_KEY")
-    sid = os.environ.get("RENDER_SERVICE_ID")
-    if api and sid:
-        try:
-            r = requests.get(
-                f"https://api.render.com/v1/services/{sid}/env-vars",
-                headers={"Authorization": f"Bearer {api}"}, timeout=30,
-            )
-            for env in r.json():
-                e = env.get("envVar", env)
-                if e.get("key") == "JWT_SECRET" and e.get("value"):
-                    return e["value"]
-        except Exception:
-            pass
-    return os.environ.get("JWT_SECRET")
+    # Render env-vars fallback removed 2026-05-16 (Hetzner cutover).
+    return os.environ.get("HOAPROXY_ADMIN_BEARER") or os.environ.get("JWT_SECRET")
 
 
 def _post_with_retries(url: str, payload: dict, token: str, retries: int = 6,

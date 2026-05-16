@@ -170,33 +170,10 @@ run_prepare() {
 run_import_to_live() {
     log "=== Import prepared bundles to live ==="
     BASE_URL="${HOAPROXY_LIVE_BASE_URL:-https://hoaproxy.org}"
-    # Prefer explicit HOAPROXY_ADMIN_BEARER, then fetch live JWT_SECRET via the
-    # Render API (local settings.env JWT_SECRET differs from prod's), and only
-    # fall back to local JWT_SECRET if neither path works.
-    TOKEN="${HOAPROXY_ADMIN_BEARER:-}"
-    if [ -z "$TOKEN" ] && [ -n "${RENDER_API_KEY:-}" ] && [ -n "${RENDER_SERVICE_ID:-}" ]; then
-        log "  fetching prod JWT_SECRET via Render API..."
-        TOKEN=$(curl -sS -H "Authorization: Bearer $RENDER_API_KEY" \
-            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/env-vars" \
-            --max-time 30 | python3 -c "
-import json, sys
-try:
-    data = json.load(sys.stdin)
-    for env in data:
-        e = env.get('envVar', env)
-        if e.get('key') == 'JWT_SECRET':
-            print(e.get('value') or '')
-            break
-except Exception:
-    pass
-" 2>/dev/null || echo "")
-        if [ -n "$TOKEN" ]; then
-            log "  got prod JWT_SECRET (len=${#TOKEN})"
-        else
-            log "  Render API fetch failed; falling back to local JWT_SECRET"
-            TOKEN="${JWT_SECRET:-}"
-        fi
-    fi
+    # Prefer explicit HOAPROXY_ADMIN_BEARER, fall back to local JWT_SECRET.
+    # The Render env-vars fetch that used to sit between these was removed
+    # 2026-05-16 (Hetzner cutover).
+    TOKEN="${HOAPROXY_ADMIN_BEARER:-${JWT_SECRET:-}}"
     if [ -z "$TOKEN" ]; then
         log "  no admin token available; skipping import"
         return 0

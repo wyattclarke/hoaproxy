@@ -20,30 +20,12 @@ SETTINGS_PATH = Path(__file__).resolve().parents[3] / "settings.env"
 def _load_jwt_secret() -> str:
     """Resolve the live JWT_SECRET.
 
-    Order: HOAPROXY_ADMIN_BEARER, then Render API (RENDER_API_KEY +
-    RENDER_SERVICE_ID), then local JWT_SECRET as last resort.
+    Order: HOAPROXY_ADMIN_BEARER, then local JWT_SECRET. The Render API
+    fallback was removed 2026-05-16 (Hetzner cutover).
     """
     if os.environ.get("HOAPROXY_ADMIN_BEARER"):
         return os.environ["HOAPROXY_ADMIN_BEARER"]
-    api_key = os.environ.get("RENDER_API_KEY")
-    service_id = os.environ.get("RENDER_SERVICE_ID")
-    if api_key and service_id:
-        try:
-            r = requests.get(
-                f"https://api.render.com/v1/services/{service_id}/env-vars",
-                headers={"Authorization": f"Bearer {api_key}"},
-                timeout=30,
-            )
-            r.raise_for_status()
-            for env in r.json():
-                e = env.get("envVar", env)
-                if e.get("key") == "JWT_SECRET" and e.get("value"):
-                    return e["value"]
-            print("Render env-vars listing did not include JWT_SECRET", file=sys.stderr)
-        except requests.RequestException as exc:
-            print(f"Render API lookup failed: {exc}", file=sys.stderr)
-    if "JWT_SECRET" in os.environ and os.environ["JWT_SECRET"]:
-        print("Falling back to local JWT_SECRET", file=sys.stderr)
+    if os.environ.get("JWT_SECRET"):
         return os.environ["JWT_SECRET"]
     raise SystemExit("Could not resolve live JWT_SECRET")
 

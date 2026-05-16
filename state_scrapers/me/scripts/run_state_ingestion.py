@@ -208,26 +208,9 @@ def run_prepare(args: argparse.Namespace, run_dir: Path) -> dict[str, Any]:
 
 
 def _live_admin_token() -> str | None:
-    """Fetch the live admin JWT, preferring the Render API to avoid local drift."""
-    if os.environ.get("HOAPROXY_ADMIN_BEARER"):
-        return os.environ["HOAPROXY_ADMIN_BEARER"]
-    api_key    = os.environ.get("RENDER_API_KEY")
-    service_id = os.environ.get("RENDER_SERVICE_ID")
-    if api_key and service_id:
-        try:
-            r = requests.get(
-                f"https://api.render.com/v1/services/{service_id}/env-vars",
-                headers={"Authorization": f"Bearer {api_key}"},
-                timeout=30,
-            )
-            r.raise_for_status()
-            for env in r.json():
-                e = env.get("envVar", env)
-                if e.get("key") == "JWT_SECRET" and e.get("value"):
-                    return e["value"]
-        except Exception:
-            pass
-    return os.environ.get("JWT_SECRET")
+    # Explicit override wins; otherwise pull from settings.env.
+    # Render env-vars fallback removed 2026-05-16 (Hetzner cutover).
+    return os.environ.get("HOAPROXY_ADMIN_BEARER") or os.environ.get("JWT_SECRET")
 
 
 def import_ready(args: argparse.Namespace, run_dir: Path) -> dict[str, Any]:
@@ -365,10 +348,9 @@ def preflight(args: argparse.Namespace) -> dict[str, Any]:
             and os.environ.get("HOA_DOCAI_PROCESSOR_ID")
         ),
         "serper_ok": bool(os.environ.get("SERPER_API_KEY")),
-        "render_admin_ok": bool(
+        "admin_token_ok": bool(
             os.environ.get("HOAPROXY_ADMIN_BEARER")
             or os.environ.get("JWT_SECRET")
-            or (os.environ.get("RENDER_API_KEY") and os.environ.get("RENDER_SERVICE_ID"))
         ),
         "max_ocr_budget_usd": args.max_docai_cost_usd,
         "county_runs": [{"queries": q, "default_county": c} for q, c in COUNTY_RUNS],

@@ -75,23 +75,10 @@ STATE_FULL = {
 
 
 def live_admin_token() -> str | None:
-    if os.environ.get("HOAPROXY_ADMIN_BEARER"):
-        return os.environ["HOAPROXY_ADMIN_BEARER"]
-    api_key = os.environ.get("RENDER_API_KEY")
-    service_id = os.environ.get("RENDER_SERVICE_ID")
-    if api_key and service_id:
-        try:
-            r = requests.get(
-                f"https://api.render.com/v1/services/{service_id}/env-vars",
-                headers={"Authorization": f"Bearer {api_key}"}, timeout=30)
-            r.raise_for_status()
-            for env in r.json():
-                e = env.get("envVar", env)
-                if e.get("key") == "JWT_SECRET" and e.get("value"):
-                    return e["value"]
-        except Exception:
-            pass
-    return os.environ.get("JWT_SECRET")
+    # Explicit override wins; otherwise pull from settings.env (loaded by
+    # the caller via load_dotenv). The Render env-vars fallback that lived
+    # here was removed 2026-05-16 after the Hetzner cutover.
+    return os.environ.get("HOAPROXY_ADMIN_BEARER") or os.environ.get("JWT_SECRET")
 
 
 def load_state_bbox(state: str) -> dict[str, float] | None:
@@ -120,9 +107,47 @@ def fetch_unmapped_hoas(state: str, base_url: str, reupgrade: bool) -> list[dict
     in summary that isn't in map-points has either no coordinates or a
     map-hidden quality, both of which warrant a HERE upgrade attempt.
     """
-    r = requests.get(f"{base_url}/hoas/summary", params={"state": state}, timeout=60)
-    r.raise_for_status()
-    rows = r.json().get("results", [])
+    rows: list[dict] = []
+    offset = 0
+    page = 500
+    consecutive_short = 0
+    while offset < 50000:
+        # Retry on 429 (Hetzner rate-limit) with conservative backoff.
+        # Hetzner rate limits can persist 5-15 min when other sessions hammer
+        # the host; start at 180s and grow.
+        for attempt in range(30):
+            try:
+                r = requests.get(f"{base_url}/hoas/summary",
+                                 params={"state": state, "limit": page, "offset": offset},
+                                 timeout=60)
+                if r.status_code == 200:
+                    break
+                if r.status_code == 429:
+                    backoff = 180 + attempt * 60
+                    print(f"  rate-limited at offset={offset}; sleep {backoff}s and retry (attempt {attempt + 1}/30)", flush=True)
+                    time.sleep(backoff)
+                    continue
+                r.raise_for_status()
+            except requests.exceptions.RequestException as exc:
+                if attempt >= 29:
+                    raise
+                print(f"  fetch error {exc}; sleep 30s", flush=True)
+                time.sleep(30)
+        else:
+            r.raise_for_status()
+        batch = r.json().get("results", [])
+        if not batch:
+            break
+        rows.extend(batch)
+        # Guard against pagination quirks — only stop on two consecutive short pages
+        if len(batch) < page:
+            consecutive_short += 1
+            if consecutive_short >= 2:
+                break
+        else:
+            consecutive_short = 0
+        offset += len(batch)
+        time.sleep(1.0)  # gentle pacing — bump from 0.3 to 1.0
 
     # Pull set of hoa_ids currently shown on the map
     mr = requests.get(f"{base_url}/hoas/map-points", params={"state": state}, timeout=60)
@@ -366,18 +391,42 @@ def in_bbox(lat: float, lon: float, bbox: dict[str, float]) -> bool:
 
 
 def post_backfill(records: list[dict], base_url: str, token: str,
-                  apply: bool) -> dict:
-    payload = {"records": [
+                  apply: bool, batch_size: int = 5) -> dict:
+    cleaned = [
         {k: v for k, v in r.items() if not k.startswith("_")} for r in records
-    ]}
+    ]
     if not apply:
-        return {"would_apply": len(records), "samples": records[:3]}
-    r = requests.post(
-        f"{base_url}/admin/backfill-locations",
-        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-        json=payload, timeout=180,
-    )
-    return {"status": r.status_code, "body": r.json() if r.status_code == 200 else r.text[:500]}
+        return {"would_apply": len(cleaned), "samples": cleaned[:3]}
+    # Batch to avoid Cloudflare 524 origin-timeout on big bodies.
+    updated_total = 0
+    failures: list[dict] = []
+    for i in range(0, len(cleaned), batch_size):
+        chunk = cleaned[i: i + batch_size]
+        for attempt in range(3):
+            try:
+                r = requests.post(
+                    f"{base_url}/admin/backfill-locations",
+                    headers={"Authorization": f"Bearer {token}",
+                             "Content-Type": "application/json"},
+                    json={"records": chunk}, timeout=120,
+                )
+                if r.status_code == 200:
+                    body = r.json()
+                    n = body.get("updated", len(chunk))
+                    updated_total += n
+                    print(f"  backfill batch {i // batch_size + 1}/"
+                          f"{(len(cleaned) - 1) // batch_size + 1}: updated={n}",
+                          flush=True)
+                    break
+                err = f"http {r.status_code}: {r.text[:120]}"
+            except Exception as exc:
+                err = f"{type(exc).__name__}: {exc}"
+            time.sleep(8 + attempt * 6)
+        else:
+            failures.append({"batch": i // batch_size + 1, "ids": [c.get("hoa_id") for c in chunk], "error": err})
+            print(f"  backfill batch {i // batch_size + 1} FAIL: {err}", flush=True)
+        time.sleep(1.5)
+    return {"updated": updated_total, "failures": failures, "total_records": len(cleaned)}
 
 
 def main() -> int:
@@ -396,6 +445,11 @@ def main() -> int:
                         help="Cap unmapped HOAs processed (0=unlimited)")
     parser.add_argument("--rate-per-sec", type=float, default=4.0)
     parser.add_argument("--cache", default="data/here_geocode_cache.json")
+    parser.add_argument("--candidates-file",
+                        help="Local JSONL produced by "
+                             "scripts/audit/dump_geo_candidates_via_ssh.py — when set, "
+                             "skip /hoas/summary + /hoas/{name}/documents reads and "
+                             "use the file's hoa_id/hoa/city/ocr_text directly.")
     args = parser.parse_args()
 
     state = args.state.upper()
@@ -418,8 +472,28 @@ def main() -> int:
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     cache = json.loads(cache_path.read_text()) if cache_path.exists() else {}
 
-    print(f"Fetching unmapped HOAs for {state} ...")
-    hoas = fetch_unmapped_hoas(state, args.base_url, args.reupgrade)
+    if args.candidates_file:
+        print(f"Loading candidates from {args.candidates_file}")
+        hoas = []
+        with open(args.candidates_file) as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                r = json.loads(line)
+                hoas.append({
+                    "hoa_id": r.get("hoa_id"),
+                    "hoa": r.get("hoa"),
+                    "city": r.get("city"),
+                    "state": r.get("state"),
+                    "latitude": r.get("latitude"),
+                    "longitude": r.get("longitude"),
+                    "location_quality": r.get("location_quality"),
+                    "_ocr_text": r.get("ocr_text") or "",
+                })
+    else:
+        print(f"Fetching unmapped HOAs for {state} ...")
+        hoas = fetch_unmapped_hoas(state, args.base_url, args.reupgrade)
     if args.limit:
         hoas = hoas[: args.limit]
     print(f"  {len(hoas)} candidates to process")
@@ -434,7 +508,10 @@ def main() -> int:
         manifest_city = (h.get("city") or "").strip() or None
         # /hoas/summary doesn't expose county; we only have city if backfilled.
         manifest_county = None
-        ocr = fetch_hoa_ocr_text(name, args.base_url)
+        if "_ocr_text" in h:
+            ocr = h["_ocr_text"]
+        else:
+            ocr = fetch_hoa_ocr_text(name, args.base_url)
         candidates = extract_address_candidates(name, ocr, state, manifest_city, manifest_county)
         if not candidates:
             skipped.append({"hoa": name, "reason": "no_candidates"})

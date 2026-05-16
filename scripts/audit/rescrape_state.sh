@@ -51,18 +51,7 @@ from dotenv import load_dotenv
 load_dotenv('settings.env')
 import os, requests, time, json
 def token():
-    if os.environ.get('HOAPROXY_ADMIN_BEARER'):
-        return os.environ['HOAPROXY_ADMIN_BEARER']
-    api_key = os.environ.get('RENDER_API_KEY')
-    sid = os.environ.get('RENDER_SERVICE_ID')
-    if api_key and sid:
-        r = requests.get(f'https://api.render.com/v1/services/{sid}/env-vars',
-                         headers={'Authorization': f'Bearer {api_key}'}, timeout=30)
-        for env in r.json():
-            e = env.get('envVar', env)
-            if e.get('key') == 'JWT_SECRET' and e.get('value'):
-                return e['value']
-    return os.environ.get('JWT_SECRET')
+    return os.environ.get('HOAPROXY_ADMIN_BEARER') or os.environ.get('JWT_SECRET')
 t = token()
 total_imported = 0
 for i in range(60):

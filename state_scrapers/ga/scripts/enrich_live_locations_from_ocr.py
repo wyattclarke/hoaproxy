@@ -122,23 +122,14 @@ def _request_json(method: str, url: str, **kwargs: Any) -> Any:
 
 
 def _fetch_render_jwt() -> str:
-    if os.environ.get("HOAPROXY_ADMIN_BEARER"):
-        return os.environ["HOAPROXY_ADMIN_BEARER"].removeprefix("Bearer ").strip()
-    api_key = os.environ.get("RENDER_API_KEY")
-    service_id = os.environ.get("RENDER_SERVICE_ID")
-    if api_key and service_id:
-        rows = _request_json(
-            "GET",
-            f"https://api.render.com/v1/services/{service_id}/env-vars",
-            headers={"Authorization": f"Bearer {api_key}"},
-        )
-        for item in rows:
-            env = item.get("envVar") or item
-            if env.get("key") == "JWT_SECRET" and env.get("value"):
-                return str(env["value"])
+    # Name kept for grep compatibility; Render env-vars fallback removed
+    # 2026-05-16 (Hetzner cutover). Now just looks at local env / settings.env.
+    bearer = os.environ.get("HOAPROXY_ADMIN_BEARER")
+    if bearer:
+        return bearer.removeprefix("Bearer ").strip()
     if os.environ.get("JWT_SECRET"):
         return os.environ["JWT_SECRET"]
-    raise RuntimeError("HOAPROXY_ADMIN_BEARER, Render API credentials, or JWT_SECRET is required for --apply")
+    raise RuntimeError("HOAPROXY_ADMIN_BEARER or JWT_SECRET is required for --apply")
 
 
 def _compact_name(name: str) -> str:

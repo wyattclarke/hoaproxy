@@ -84,25 +84,9 @@ def write_status(status: dict[str, Any]) -> None:
 
 
 def live_admin_token() -> str | None:
-    if os.environ.get("HOAPROXY_ADMIN_BEARER"):
-        return os.environ["HOAPROXY_ADMIN_BEARER"]
-    api_key = os.environ.get("RENDER_API_KEY")
-    service_id = os.environ.get("RENDER_SERVICE_ID")
-    if api_key and service_id:
-        try:
-            r = requests.get(
-                f"https://api.render.com/v1/services/{service_id}/env-vars",
-                headers={"Authorization": f"Bearer {api_key}"},
-                timeout=30,
-            )
-            r.raise_for_status()
-            for env in r.json():
-                e = env.get("envVar", env)
-                if e.get("key") == "JWT_SECRET" and e.get("value"):
-                    return e["value"]
-        except Exception:
-            pass
-    return os.environ.get("JWT_SECRET")
+    # Explicit override wins; otherwise pull from settings.env.
+    # Render env-vars fallback removed 2026-05-16 (Hetzner cutover).
+    return os.environ.get("HOAPROXY_ADMIN_BEARER") or os.environ.get("JWT_SECRET")
 
 
 def fetch_cumulative_docai(base_url: str) -> float | None:
@@ -247,7 +231,7 @@ def main() -> int:
     # Preflight: admin auth
     token = live_admin_token()
     if not token:
-        log("HARD FAILURE: cannot obtain live admin token (HOAPROXY_ADMIN_BEARER / JWT_SECRET / RENDER_API_KEY all unavailable)")
+        log("HARD FAILURE: cannot obtain live admin token (HOAPROXY_ADMIN_BEARER / JWT_SECRET both unavailable)")
         write_status({"halted": True, "reason": "no_admin_token", "halted_at": datetime.now(timezone.utc).isoformat(timespec='seconds')})
         return 2
     log("Preflight: admin token obtained.")
