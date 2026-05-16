@@ -44,6 +44,60 @@ class TestIsDirty:
         dirty, reason = is_dirty('"OLD Town" Neighborhood Association, Inc.')
         assert reason != "leading_punctuation"
 
+    def test_leading_punctuation_ignores_leading_whitespace(self):
+        # Whitespace-prefixed punctuation should still trigger leading_punctuation
+        # after the implicit .strip() at the top of is_dirty.
+        dirty, reason = is_dirty("  & Foo HOA")
+        assert dirty is True
+        assert reason == "leading_punctuation"
+
+    def test_leading_conjunction_or(self):
+        dirty, reason = is_dirty("or Cinco Encanta Acres Homeowners Association")
+        assert dirty is True
+        assert reason == "leading_conjunction"
+
+    def test_leading_conjunction_and(self):
+        dirty, reason = is_dirty("and Wilson Estates HOA")
+        assert dirty is True
+        assert reason == "leading_conjunction"
+
+    def test_leading_conjunction_as(self):
+        dirty, reason = is_dirty("as part of Springwood Homeowners Association")
+        assert dirty is True
+        assert reason == "leading_conjunction"
+
+    def test_leading_conjunction_in(self):
+        dirty, reason = is_dirty("in the matter of Foo HOA")
+        assert dirty is True
+        assert reason == "leading_conjunction"
+
+    def test_leading_conjunction_does_not_flag_a_and_b(self):
+        # "A & B Estates HOA" — first token is "A", not a conjunction. The
+        # leading_conjunction rule must not fire here.
+        dirty, reason = is_dirty("A & B Estates HOA")
+        assert reason != "leading_conjunction"
+
+    def test_leading_conjunction_does_not_flag_orange(self):
+        # \b anchor prevents matching "or" as a prefix of "Orange".
+        dirty, reason = is_dirty("Orange Park HOA")
+        assert dirty is False
+        assert reason is None
+
+    def test_leading_conjunction_does_not_flag_andrew(self):
+        dirty, reason = is_dirty("Andrew Glen HOA")
+        assert dirty is False
+        assert reason is None
+
+    def test_leading_conjunction_does_not_flag_aspen(self):
+        dirty, reason = is_dirty("Aspen Trails HOA")
+        assert dirty is False
+        assert reason is None
+
+    def test_leading_conjunction_does_not_flag_ingles(self):
+        dirty, reason = is_dirty("Ingles Crossing HOA")
+        assert dirty is False
+        assert reason is None
+
     def test_numeric_prefix(self):
         dirty, reason = is_dirty("1) Pebble Creek HOA")
         assert dirty is True

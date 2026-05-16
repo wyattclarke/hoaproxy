@@ -144,9 +144,17 @@ def is_dirty(name: str) -> tuple[bool, str | None]:
     Reason codes are stable strings — downstream tooling (ledger entries,
     the post-hoc cleanup pass) depends on them.
     """
-    n = name or ""
+    n = (name or "").strip()
     if " - " in n and len(n) > 50:
         return True, "long_dashed_phrase"
+    # Leading standalone conjunction — names starting with "or", "and", "as",
+    # "in" as a first word. These are OCR fragments where doc text bled into
+    # the name. Checked before starts_lowercase so the ledger gets the more
+    # specific reason. \b prevents over-matching on real names like "Orange
+    # Park", "Andrew Glen", "Aspen Trails", "Ingles Crossing", or "A & B
+    # Estates HOA" (first token is "A", not one of the conjunctions).
+    if re.match(r"^(?:or|and|as|in)\b", n, re.I):
+        return True, "leading_conjunction"
     if n[:1].islower():
         return True, "starts_lowercase"
     # Leading punctuation — names starting with stray "&", ";", ":", ",", ".",
