@@ -372,19 +372,46 @@ def list_ready_bundle_prefixes(
     state: str,
     limit: int = 10,
 ) -> list[str]:
+    """Find up to ``limit`` bundle prefixes whose status.json says "ready".
+
+    Implementation note: at scale (thousands of bundles per state) the naive
+    sequential download of every status.json takes longer than Cloudflare's
+    100s edge timeout. We restrict the GCS listing to status.json blobs via
+    match_glob (10× fewer blobs returned) and fetch each blob's payload in
+    parallel via a small thread pool.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
     state_n = _normalize_state(state)
-    out: list[str] = []
-    for blob in bucket.list_blobs(prefix=f"{VERSION_PREFIX}/{state_n}/"):
+    status_blobs: list[gcs.Blob] = []
+    try:
+        list_iter = bucket.list_blobs(
+            prefix=f"{VERSION_PREFIX}/{state_n}/",
+            match_glob="**/status.json",
+        )
+    except TypeError:
+        # Older google-cloud-storage without match_glob support.
+        list_iter = bucket.list_blobs(prefix=f"{VERSION_PREFIX}/{state_n}/")
+    for blob in list_iter:
         if not blob.name.endswith("/status.json"):
             continue
+        status_blobs.append(blob)
+
+    def _load(blob: gcs.Blob) -> tuple[gcs.Blob, dict | None]:
         try:
-            status = json.loads(blob.download_as_bytes())
+            return blob, json.loads(blob.download_as_bytes())
         except Exception:
-            continue
-        if status.get("status") == "ready":
-            out.append(blob.name.removesuffix("/status.json"))
-            if len(out) >= limit:
-                break
+            return blob, None
+
+    out: list[str] = []
+    with ThreadPoolExecutor(max_workers=32) as ex:
+        for blob, status in ex.map(_load, status_blobs):
+            if status is None:
+                continue
+            if status.get("status") == "ready":
+                out.append(blob.name.removesuffix("/status.json"))
+                if len(out) >= limit:
+                    break
     return out
 
 
