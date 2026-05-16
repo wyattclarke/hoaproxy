@@ -44,42 +44,66 @@ def _setup_db():
 # Rate limiter tests
 # ---------------------------------------------------------------------------
 
-def test_rate_limiter_returns_429_after_limit():
-    """Rate limiter blocks requests after limit from a non-testclient IP."""
-    from api.main import _check_rate_limit, _RATE_LIMIT
+def _fake_request(host: str = "1.2.3.4", path: str = "/test-endpoint"):
+    """Minimal request stub with the bits _check_rate_limit reads.
 
-    # Create a mock request with a real-looking IP
+    Mirrors the FastAPI scope shape: `scope["path"]` is the literal URL
+    and `scope["route"]` is the matched route object (None if unmatched).
+    """
     class FakeClient:
-        host = "1.2.3.4"
+        pass
+    fc = FakeClient()
+    fc.host = host
 
     class FakeRequest:
-        client = FakeClient()
-
+        pass
     req = FakeRequest()
+    req.client = fc
+    req.scope = {"path": path, "route": None}
+    return req
 
-    # Fill up the bucket exactly to the limit
+
+def test_rate_limiter_returns_429_after_limit():
+    """Rate limiter blocks requests after the limit for one (IP, endpoint)."""
+    from api.main import _check_rate_limit, _RATE_LIMIT
+
+    req = _fake_request(host="1.2.3.4", path="/x")
+
     for _ in range(_RATE_LIMIT):
         _check_rate_limit(req, limit=_RATE_LIMIT)
 
-    # Next call should raise 429
     from fastapi import HTTPException
     with pytest.raises(HTTPException) as exc_info:
         _check_rate_limit(req, limit=_RATE_LIMIT)
     assert exc_info.value.status_code == 429
 
 
+def test_rate_limiter_buckets_per_endpoint():
+    """A near-full /search bucket must not block a separate /map-points call.
+
+    Regression test for the shared-bucket-per-IP bug that produced bogus 429s
+    during normal browsing — a single shared counter let one chatty endpoint
+    drain the budget of every other endpoint with a stricter limit.
+    """
+    from api.main import _check_rate_limit
+
+    req_search = _fake_request(host="9.9.9.9", path="/search")
+    req_map = _fake_request(host="9.9.9.9", path="/hoas/map-points")
+
+    # Burn the /search bucket up to but not past its own limit
+    for _ in range(30):
+        _check_rate_limit(req_search, limit=30)
+
+    # The map-points bucket should be untouched and accept calls freely
+    for _ in range(15):
+        _check_rate_limit(req_map, limit=15)
+
+
 def test_rate_limiter_skips_testclient():
     """TestClient requests are always allowed (skip rate limiting)."""
     from api.main import _check_rate_limit
 
-    class FakeClient:
-        host = "testclient"
-
-    class FakeRequest:
-        client = FakeClient()
-
-    req = FakeRequest()
-    # Should never raise, even called many times
+    req = _fake_request(host="testclient", path="/anything")
     for _ in range(100):
         _check_rate_limit(req, limit=5)
 

@@ -96,12 +96,24 @@ TOS_VERSION = "2026-05-10"
 
 
 # ---------------------------------------------------------------------------
-# Rate limiting (simple in-memory, per-IP sliding window)
+# Rate limiting (simple in-memory, per-(IP, endpoint) sliding window)
 # ---------------------------------------------------------------------------
+#
+# Buckets are keyed on (client_ip, endpoint_path) — *not* on IP alone. A
+# single shared bucket per IP would have each endpoint check the same
+# counter against its own `limit`, so a user hitting /search (limit=60) a
+# dozen times would then 429 on /auth/forgot-password (limit=5). That
+# produced bogus 429s for normal browsing: clicking around five state map
+# pages racked up 5+ hits to /hoas/map-points (limit=15) plus other JS-
+# driven calls, tripping the lowest threshold first.
+#
+# With per-(IP, endpoint) buckets each limit is enforced independently —
+# read-heavy public endpoints don't drain the budget of write endpoints
+# and vice versa.
 
-_rate_buckets: dict[str, list[float]] = defaultdict(list)
+_rate_buckets: dict[tuple[str, str], list[float]] = defaultdict(list)
 _RATE_WINDOW = 60.0   # seconds
-_RATE_LIMIT   = 20    # max requests per window per IP
+_RATE_LIMIT   = 20    # default max requests per window per (IP, endpoint)
 
 
 def _check_rate_limit(request: Request, limit: int = _RATE_LIMIT) -> None:
@@ -109,11 +121,25 @@ def _check_rate_limit(request: Request, limit: int = _RATE_LIMIT) -> None:
     # TestClient uses "testclient" as host — skip rate limiting in tests
     if ip == "testclient":
         return
+    # Use the matched route template (e.g. "/hoas/{hoa_id}/participation")
+    # rather than the literal URL path so all calls to a parameterised
+    # endpoint share one bucket per IP instead of each `{hoa_id}` getting
+    # its own. Falls back to the raw path if the route hasn't been matched
+    # yet (early middlewares) or if the request object is a test mock
+    # without a real scope.
+    endpoint = "?"
+    scope = getattr(request, "scope", None)
+    if isinstance(scope, dict):
+        route = scope.get("route")
+        endpoint = getattr(route, "path", None) or scope.get("path") or "?"
+    elif getattr(request, "url", None) is not None:
+        endpoint = request.url.path
+    key = (ip, endpoint)
     now = time.monotonic()
-    _rate_buckets[ip] = [t for t in _rate_buckets[ip] if now - t < _RATE_WINDOW]
-    if len(_rate_buckets[ip]) >= limit:
+    _rate_buckets[key] = [t for t in _rate_buckets[key] if now - t < _RATE_WINDOW]
+    if len(_rate_buckets[key]) >= limit:
         raise HTTPException(status_code=429, detail="Too many requests — try again in a minute")
-    _rate_buckets[ip].append(now)
+    _rate_buckets[key].append(now)
 
 
 def _new_job_id() -> str:
