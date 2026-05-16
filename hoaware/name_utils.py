@@ -149,6 +149,14 @@ def is_dirty(name: str) -> tuple[bool, str | None]:
         return True, "long_dashed_phrase"
     if n[:1].islower():
         return True, "starts_lowercase"
+    # Leading punctuation — names starting with stray "&", ";", ":", ",", ".",
+    # "!", "?", "/", "\\" are always OCR/parsing artifacts. Observed in
+    # production on FL: "& , Articles of Incorporation and Homeowners
+    # Association", "& of The Meadows South Association". Quotes (") are
+    # intentionally excluded — '"OLD Town" Neighborhood Association, Inc.' is
+    # a valid (if quoted) name pattern from Sunbiz exports.
+    if re.match(r"^[&;:!?/\\,.]", n):
+        return True, "leading_punctuation"
     if re.match(r"^\d+\s*[-)]\s*", n):
         return True, "numeric_prefix"
     # Year prefix like "2018 Exhibit A …" or "1985 Amended Bylaws of …"

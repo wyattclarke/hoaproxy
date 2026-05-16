@@ -32,6 +32,18 @@ class TestIsDirty:
         assert dirty is True
         assert reason == "starts_lowercase"
 
+    def test_leading_punctuation_ampersand(self):
+        dirty, reason = is_dirty("& , Articles of Incorporation and Homeowners Association")
+        assert dirty is True
+        assert reason == "leading_punctuation"
+
+    def test_leading_punctuation_does_not_flag_quoted_names(self):
+        # Sunbiz exports quote stylized words: '"OLD Town" Neighborhood
+        # Association, Inc.' — this should NOT be flagged by the leading-
+        # punctuation rule (quotes are excluded from the bad-leading set).
+        dirty, reason = is_dirty('"OLD Town" Neighborhood Association, Inc.')
+        assert reason != "leading_punctuation"
+
     def test_numeric_prefix(self):
         dirty, reason = is_dirty("1) Pebble Creek HOA")
         assert dirty is True
